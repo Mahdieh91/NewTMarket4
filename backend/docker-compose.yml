@@ -1,0 +1,31 @@
+
+version: '3.8'
+services:
+  db:
+    image: postgres:15
+    container_name: tmarket_db
+    environment:
+      POSTGRES_DB: tmarket_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 12369875
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tmarket_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+  redis:
+    image: redis:7-alpine
+    container_name: tmarket_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+volumes:
+  postgres_data:
+  redis_data:

@@ -1,0 +1,711 @@
+'use client';
+
+import { useRef, useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Upload,
+  ShieldCheck,
+  AlertCircle,
+  Sparkles,
+  Package,
+  Tag,
+  Layers,
+  MapPin,
+  Cpu,
+  DollarSign,
+  Hash,
+  Image as ImageIcon,
+} from 'lucide-react';
+
+// ==================== Types ====================
+
+type SupplyFormData = {
+  title: string;
+  category: string;
+  industry: string;
+  technology: string;
+  city: string;
+  description: string;
+  quantity: string;
+  unit: string;
+  price: string;
+  trl: string;
+  images: File[];
+  documents: File[];
+};
+
+// ==================== Constants ====================
+
+const BRAND = {
+  primary: '#1E3A8A',
+  secondary: '#14B8A6',
+};
+
+const unitOptions = [
+  'عدد',
+  'کیلوگرم',
+  'تن',
+  'متر',
+  'لیتر',
+  'مگاوات',
+  'ساعت',
+  'نفر-ساعت',
+  'دستگاه',
+  'سرویس',
+  'ماژول',
+  'بسته',
+  'پروژه',
+  'سفارش',
+  'سایر',
+];
+
+const categoryOptions = [
+  'نرم‌افزار',
+  'سخت‌افزار',
+  'خدمات مشاوره',
+  'خدمات فنی و مهندسی',
+  'محصولات شیمیایی',
+  'تجهیزات صنعتی',
+  'اتوماسیون و کنترل',
+  'انرژی',
+  'مواد اولیه',
+  'محصولات دانش‌بنیان',
+  'سایر',
+];
+
+// ============================================================
+// لیست صنایع (هماهنگ با بک‌اند)
+// ============================================================
+const industryOptions = [
+  'نفت و گاز',
+  'پالایش و پتروشیمی',
+  'فولاد و معدن',
+  'سلامت',
+  'کشاورزی',
+  'حمل‌ونقل',
+  'خودروسازی',
+  'انرژی',
+  'فناوری اطلاعات',
+  'محیط زیست',
+  'سایر',
+];
+
+// ============================================================
+// لیست شهرهای ایران
+// ============================================================
+const cityOptions = [
+  'تهران',
+  'اصفهان',
+  'شیراز',
+  'تبریز',
+  'مشهد',
+  'یزد',
+  'کرج',
+  'اهواز',
+  'رشت',
+  'کرمان',
+  'ارومیه',
+  'اردبیل',
+  'بندرعباس',
+  'بوشهر',
+  'زاهدان',
+  'سنندج',
+  'قزوین',
+  'قم',
+  'لرستان',
+  'گرگان',
+  'همدان',
+  'سایر',
+];
+
+const wizardSteps = ['اطلاعات پایه', 'جزئیات عرضه', 'مستندات', 'تأیید و ارسال'];
+
+const initialForm: SupplyFormData = {
+  title: '',
+  category: '',
+  industry: '',
+  technology: '',
+  city: '',
+  description: '',
+  quantity: '',
+  unit: '',
+  price: '',
+  trl: '',
+  images: [],
+  documents: [],
+};
+
+// ==================== Main Component ====================
+
+export default function SupplyRegisterPage() {
+  const router = useRouter();
+  const [step, setStep] = useState<number>(0);
+  const [mounted, setMounted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [submitMessage, setSubmitMessage] = useState('');
+  const [errors, setErrors] = useState<string[]>([]);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [form, setForm] = useState<SupplyFormData>(initialForm);
+  const [logoFailed, setLogoFailed] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const updateForm = (key: keyof SupplyFormData, value: any) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    setFieldErrors((prev) => ({ ...prev, [key]: '' }));
+  };
+
+  const handleFileChange = (field: 'images' | 'documents', files: FileList | null) => {
+    if (!files) return;
+    const newFiles = Array.from(files);
+    setForm((prev) => ({
+      ...prev,
+      [field]: [...prev[field], ...newFiles],
+    }));
+  };
+
+  const removeFile = (field: 'images' | 'documents', index: number) => {
+    setForm((prev) => ({
+      ...prev,
+      [field]: prev[field].filter((_, i) => i !== index),
+    }));
+  };
+
+  const validateStep = (): boolean => {
+    const newErrors: string[] = [];
+    const newFieldErrors: Record<string, string> = {};
+
+    if (step === 0) {
+      if (!form.title.trim()) newFieldErrors.title = 'عنوان الزامی است.';
+      if (!form.category) newFieldErrors.category = 'دسته‌بندی الزامی است.';
+    }
+
+    if (step === 1) {
+      if (!form.description.trim()) newFieldErrors.description = 'توضیحات الزامی است.';
+      if (!form.quantity.trim()) newFieldErrors.quantity = 'مقدار الزامی است.';
+      else if (!/^\d+(\.\d+)?$/.test(form.quantity)) newFieldErrors.quantity = 'فقط عدد وارد کنید.';
+      if (!form.unit) newFieldErrors.unit = 'واحد الزامی است.';
+      if (!form.price.trim()) newFieldErrors.price = 'قیمت الزامی است.';
+      else if (!/^\d+(\.\d+)?$/.test(form.price)) newFieldErrors.price = 'فقط عدد وارد کنید.';
+    }
+
+    setErrors(newErrors);
+    setFieldErrors(newFieldErrors);
+    return Object.keys(newFieldErrors).length === 0 && newErrors.length === 0;
+  };
+
+  const goToStep = (targetStep: number) => {
+    if (targetStep > step && !validateStep()) return;
+    setErrors([]);
+    setFieldErrors({});
+    setStep(targetStep);
+  };
+
+  const nextStep = () => {
+    if (!validateStep()) return;
+    setErrors([]);
+    setFieldErrors({});
+    setStep((prev) => Math.min(prev + 1, 3));
+  };
+
+  const prevStep = () => {
+    setErrors([]);
+    setFieldErrors({});
+    setStep((prev) => Math.max(prev - 1, 0));
+  };
+
+  // ============================================================
+  // تابع ارسال واقعی به بک‌اند
+  // ============================================================
+  const handleSubmit = async () => {
+    if (!validateStep()) return;
+    setLoading(true);
+    setSubmitMessage('');
+    setErrors([]);
+
+    try {
+      const formData = new FormData();
+
+      // فیلدهای متنی
+      const textFields: (keyof SupplyFormData)[] = [
+        'title', 'category', 'industry', 'technology', 'city',
+        'description', 'quantity', 'unit', 'price', 'trl'
+      ];
+      textFields.forEach(field => {
+        const value = form[field];
+        if (value) {
+          formData.append(field, String(value));
+        }
+      });
+
+      // تصاویر و مستندات
+      form.images.forEach(file => formData.append('images', file));
+      form.documents.forEach(file => formData.append('documents', file));
+
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+      const response = await fetch(`${API_URL}/products/supplies/`, {
+        method: 'POST',
+        body: formData,
+        // هدر Content-Type را تنظیم نکنید تا fetch خودش boundary را اضافه کند
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        let errorMsg = 'خطا در ثبت عرضه.';
+        if (data?.title) errorMsg = 'عنوان تکراری است.';
+        else if (data?.detail) errorMsg = data.detail;
+        throw new Error(errorMsg);
+      }
+
+      setSubmitMessage('✅ عرضه شما با موفقیت ثبت شد و برای بررسی کارشناس ارسال گردید.');
+      // بعد از ۲ ثانیه به داشبورد هدایت می‌کنیم
+      setTimeout(() => {
+        router.push('/dashboard');
+      }, 2000);
+    } catch (error: any) {
+      console.error('❌ خطا در ثبت عرضه:', error);
+      setErrors([error.message || 'خطا در ثبت عرضه. لطفاً دوباره تلاش کنید.']);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!mounted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${BRAND.primary}10, ${BRAND.secondary}10, #ffffff)` }}>
+        <div className="w-full max-w-4xl rounded-[28px] border border-white/60 bg-white/90 p-8 shadow-[0_20px_70px_rgba(30,58,138,0.12)] backdrop-blur-sm text-center">
+          <img src="/logo.png" alt="بازار تحول" className="h-16 w-auto mx-auto mb-4" />
+          <h1 className="text-2xl font-black text-slate-900 sm:text-3xl">ثبت عرضه</h1>
+          <p className="mt-4 text-sm text-slate-500">در حال بارگذاری...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6" style={{ background: `linear-gradient(135deg, ${BRAND.primary}10, ${BRAND.secondary}10, #ffffff)` }}>
+      <div className="w-full max-w-4xl rounded-[28px] border border-white/60 bg-white/90 p-5 shadow-[0_20px_70px_rgba(30,58,138,0.12)] backdrop-blur-sm sm:p-8">
+
+        {/* ===== Header ===== */}
+        <div className="mb-8 flex flex-col items-center text-center">
+          {!logoFailed ? (
+            <img
+              src="/logo.png"
+              alt="بازار تحول"
+              className="h-16 w-auto mb-4 object-contain"
+              onError={() => setLogoFailed(true)}
+            />
+          ) : (
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#1E3A8A] to-[#14B8A6] text-white font-black text-xl">
+              ب ت
+            </div>
+          )}
+          <h1 className="text-2xl font-black text-slate-900 sm:text-3xl">ثبت عرضه محصول / خدمت</h1>
+          <p className="mt-2 text-sm leading-7 text-slate-500 sm:text-base">
+            محصول، خدمت یا راهکار فناورانه خود را برای عرضه در بازار تحول ثبت کنید.
+          </p>
+        </div>
+
+        {/* ===== Stepper (بدون اسکرول) ===== */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between gap-1 sm:gap-2">
+            {wizardSteps.map((label, index) => {
+              const isActive = step === index;
+              const isDone = step > index;
+              return (
+                <div key={label} className="flex items-center gap-1 sm:gap-2">
+                  <button
+                    type="button"
+                    onClick={() => goToStep(index)}
+                    className="flex flex-col items-center transition-all cursor-pointer hover:scale-105"
+                    title={`رفتن به ${label}`}
+                  >
+                    <div
+                      className={`flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-full text-xs sm:text-sm font-bold transition-all ${
+                        isActive ? 'scale-110 text-white shadow-lg' :
+                        isDone ? 'text-white' : 'bg-slate-200 text-slate-500'
+                      }`}
+                      style={{
+                        background: (isActive || isDone)
+                          ? `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})`
+                          : undefined,
+                      }}
+                    >
+                      {isDone ? <Check size={14} /> : index + 1}
+                    </div>
+                    <span className={`mt-1 text-[10px] sm:text-xs font-medium whitespace-nowrap ${
+                      isActive ? 'text-slate-900 font-extrabold' :
+                      isDone ? 'text-teal-700' : 'text-slate-400'
+                    }`}>
+                      {label}
+                    </span>
+                  </button>
+                  {index < wizardSteps.length - 1 && (
+                    <div className={`h-0.5 w-4 sm:w-6 ${step > index ? 'bg-teal-500' : 'bg-slate-200'}`} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ===== Error Box ===== */}
+        {errors.length > 0 && (
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">
+            <div className="mb-2 flex items-center gap-2 font-bold"><AlertCircle size={18} /> خطاهای فرم</div>
+            <ul className="list-inside list-disc space-y-1 text-sm">
+              {errors.map((err, i) => <li key={i}>{err}</li>)}
+            </ul>
+          </div>
+        )}
+
+        {/* ===== Success Box ===== */}
+        {submitMessage && (
+          <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-700">
+            <div className="mb-1 flex items-center gap-2 font-bold"><ShieldCheck size={18} /> عملیات موفق</div>
+            <p className="text-sm">{submitMessage}</p>
+          </div>
+        )}
+
+        {/* ===== Step 0 - Basic Info ===== */}
+        {step === 0 && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-extrabold text-slate-900">اطلاعات پایه</h2>
+              <p className="mt-1 text-sm text-slate-500">عنوان، دسته‌بندی، صنعت، فناوری و شهر را مشخص کنید.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <InputField
+                label="عنوان محصول / خدمت"
+                value={form.title}
+                onChange={(v) => updateForm('title', v)}
+                error={fieldErrors.title}
+                icon={<Tag size={18} />}
+                placeholder="مثال: سامانه مدیریت انرژی"
+              />
+              <SelectField
+                label="دسته‌بندی"
+                value={form.category}
+                onChange={(v) => updateForm('category', v)}
+                options={categoryOptions}
+                error={fieldErrors.category}
+                icon={<Layers size={18} />}
+              />
+              <SelectField
+                label="صنعت"
+                value={form.industry}
+                onChange={(v) => updateForm('industry', v)}
+                options={industryOptions}
+                icon={<Package size={18} />}
+                placeholder="انتخاب صنعت"
+              />
+              <InputField
+                label="فناوری"
+                value={form.technology}
+                onChange={(v) => updateForm('technology', v)}
+                icon={<Cpu size={18} />}
+                placeholder="مثال: هوش مصنوعی، اینترنت اشیاء"
+              />
+              <SelectField
+                label="شهر"
+                value={form.city}
+                onChange={(v) => updateForm('city', v)}
+                options={cityOptions}
+                icon={<MapPin size={18} />}
+                placeholder="انتخاب شهر"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ===== Step 1 - Supply Details ===== */}
+        {step === 1 && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-extrabold text-slate-900">جزئیات عرضه</h2>
+              <p className="mt-1 text-sm text-slate-500">توضیحات، مقدار، قیمت و سطح آمادگی فناوری را وارد کنید.</p>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-bold text-slate-700">توضیحات</label>
+              <textarea
+                value={form.description}
+                onChange={(e) => updateForm('description', e.target.value)}
+                rows={5}
+                className={`w-full rounded-2xl border bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:ring-2 ${
+                  fieldErrors.description ? 'border-red-400 focus:ring-red-400' : 'border-slate-200 focus:border-transparent focus:ring-[#1E3A8A]'
+                }`}
+                placeholder="توضیحات کامل محصول یا خدمت، کاربردها و مزایا..."
+              />
+              {fieldErrors.description && <p className="mt-1 text-xs text-red-500">{fieldErrors.description}</p>}
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <InputField
+                label="مقدار"
+                value={form.quantity}
+                onChange={(v) => updateForm('quantity', v)}
+                error={fieldErrors.quantity}
+                icon={<Hash size={18} />}
+                inputMode="numeric"
+                placeholder="مثلاً ۱۰۰"
+              />
+              <SelectField
+                label="واحد"
+                value={form.unit}
+                onChange={(v) => updateForm('unit', v)}
+                options={unitOptions}
+                error={fieldErrors.unit}
+              />
+              <InputField
+                label="قیمت (تومان)"
+                value={form.price}
+                onChange={(v) => updateForm('price', v)}
+                error={fieldErrors.price}
+                icon={<DollarSign size={18} />}
+                inputMode="numeric"
+                placeholder="مثلاً ۵۰۰۰۰۰۰۰"
+              />
+              <InputField
+                label="سطح آمادگی فناوری (TRL)"
+                value={form.trl}
+                onChange={(v) => updateForm('trl', v)}
+                icon={<Cpu size={18} />}
+                inputMode="numeric"
+                placeholder="۱ تا ۹"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ===== Step 2 - Documents ===== */}
+        {step === 2 && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-extrabold text-slate-900">مستندات و رسانه</h2>
+              <p className="mt-1 text-sm text-slate-500">تصاویر، کاتالوگ، گواهی‌نامه‌ها و مستندات فنی را بارگذاری کنید (اختیاری).</p>
+            </div>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <FileUploadCard
+                title="تصاویر محصول"
+                description="فرمت‌های jpg, png, webp"
+                files={form.images}
+                onAdd={(files) => handleFileChange('images', files)}
+                onRemove={(index) => removeFile('images', index)}
+                accept="image/*"
+              />
+              <FileUploadCard
+                title="مستندات فنی"
+                description="PDF, Word, Excel"
+                files={form.documents}
+                onAdd={(files) => handleFileChange('documents', files)}
+                onRemove={(index) => removeFile('documents', index)}
+                accept=".pdf,.doc,.docx,.xls,.xlsx"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ===== Step 3 - Review & Submit ===== */}
+        {step === 3 && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-extrabold text-slate-900">تأیید و ارسال</h2>
+              <p className="mt-1 text-sm text-slate-500">اطلاعات وارد شده را مرور کرده و عرضه را نهایی کنید.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <SummaryCard title="اطلاعات پایه">
+                <SummaryRow label="عنوان" value={form.title} />
+                <SummaryRow label="دسته‌بندی" value={form.category} />
+                <SummaryRow label="صنعت" value={form.industry || '-'} />
+                <SummaryRow label="فناوری" value={form.technology || '-'} />
+                <SummaryRow label="شهر" value={form.city || '-'} />
+              </SummaryCard>
+              <SummaryCard title="جزئیات عرضه">
+                <SummaryRow label="توضیحات" value={form.description} />
+                <SummaryRow label="مقدار" value={form.quantity} />
+                <SummaryRow label="واحد" value={form.unit} />
+                <SummaryRow label="قیمت" value={`${form.price} تومان`} />
+                <SummaryRow label="TRL" value={form.trl || '-'} />
+              </SummaryCard>
+              <SummaryCard title="مستندات">
+                <SummaryRow label="تصاویر" value={form.images.length ? `${form.images.length} فایل` : 'بدون تصویر'} />
+                <SummaryRow label="مستندات" value={form.documents.length ? `${form.documents.length} فایل` : 'بدون مستندات'} />
+              </SummaryCard>
+            </div>
+          </div>
+        )}
+
+        {/* ===== Footer Navigation ===== */}
+        <div className="mt-10 flex flex-col gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <button
+            type="button"
+            onClick={prevStep}
+            disabled={step === 0 || loading}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <ChevronRight size={18} /> مرحله قبل
+          </button>
+
+          <div className="flex items-center gap-2 text-xs text-slate-400">
+            <Sparkles size={14} /> مرحله {step + 1} از {wizardSteps.length}
+          </div>
+
+          {step < 3 ? (
+            <button
+              type="button"
+              onClick={nextStep}
+              disabled={loading}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})` }}
+            >
+              مرحله بعد <ChevronLeft size={18} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={loading}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})` }}
+            >
+              {loading ? 'در حال ثبت...' : 'ثبت عرضه'} <ShieldCheck size={18} />
+            </button>
+          )}
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+// ==================== Sub-components ====================
+
+function InputField({ label, value, onChange, type = 'text', error, icon, inputMode, placeholder }: {
+  label: string; value: string; onChange: (v: string) => void; type?: string; error?: string; icon?: React.ReactNode; inputMode?: 'numeric' | 'text'; placeholder?: string;
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-bold text-slate-700">{label}</label>
+      <div className="relative">
+        {icon && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+            {icon}
+          </div>
+        )}
+        <input
+          type={type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          inputMode={inputMode}
+          placeholder={placeholder}
+          className={`w-full rounded-2xl border bg-white py-3 text-sm text-slate-700 outline-none transition focus:ring-2 ${
+            icon ? 'pr-10 pl-4' : 'px-4'
+          } ${
+            error ? 'border-red-400 focus:ring-red-400' : 'border-slate-200 focus:border-transparent focus:ring-[#1E3A8A]'
+          }`}
+        />
+      </div>
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+    </div>
+  );
+}
+
+function SelectField({ label, value, onChange, options, error, icon, placeholder }: {
+  label: string; value: string; onChange: (v: string) => void; options: string[]; error?: string; icon?: React.ReactNode; placeholder?: string;
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-bold text-slate-700">{label}</label>
+      <div className="relative">
+        {icon && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+            {icon}
+          </div>
+        )}
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={`w-full rounded-2xl border bg-white py-3 text-sm text-slate-700 outline-none transition focus:ring-2 ${
+            icon ? 'pr-10 pl-4' : 'px-4'
+          } ${
+            error ? 'border-red-400 focus:ring-red-400' : 'border-slate-200 focus:border-transparent focus:ring-[#1E3A8A]'
+          }`}
+        >
+          <option value="">{placeholder || 'انتخاب کنید...'}</option>
+          {options.map((opt) => (
+            <option key={opt} value={opt}>{opt}</option>
+          ))}
+        </select>
+      </div>
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+    </div>
+  );
+}
+
+function FileUploadCard({ title, description, files, onAdd, onRemove, accept }: {
+  title: string; description: string; files: File[]; onAdd: (files: FileList | null) => void; onRemove: (index: number) => void; accept: string;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md">
+      <div className="mb-4 flex items-start gap-3">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+          <ImageIcon size={20} />
+        </div>
+        <div>
+          <h3 className="text-sm font-extrabold text-slate-800">{title}</h3>
+          <p className="mt-1 text-xs leading-6 text-slate-500">{description}</p>
+        </div>
+      </div>
+      {files.length > 0 && (
+        <ul className="mb-4 space-y-2">
+          {files.map((file, i) => (
+            <li key={i} className="flex items-center justify-between rounded-xl bg-slate-50 p-2 text-xs">
+              <span className="truncate max-w-[180px]">{file.name}</span>
+              <button type="button" onClick={() => onRemove(i)} className="text-red-500 hover:text-red-700 font-medium">حذف</button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        className="inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white shadow-md"
+        style={{ background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})` }}
+      >
+        <Upload size={16} /> بارگذاری
+      </button>
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={(e) => onAdd(e.target.files)}
+        className="hidden"
+        accept={accept}
+        multiple
+      />
+    </div>
+  );
+}
+
+function SummaryCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+      <h3 className="mb-4 text-sm font-black text-slate-800">{title}</h3>
+      <div className="space-y-3">{children}</div>
+    </div>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-1 border-b border-slate-200 pb-2 last:border-b-0 last:pb-0">
+      <span className="text-xs font-bold text-slate-500">{label}</span>
+      <span className="text-sm text-slate-800">{value || '-'}</span>
+    </div>
+  );
+}

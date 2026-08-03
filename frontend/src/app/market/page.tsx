@@ -1,0 +1,1417 @@
+'use client';
+
+import { useState, useEffect, useMemo } from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
+import {
+  Search,
+  Filter,
+  SlidersHorizontal,
+  Grid3X3,
+  List,
+  Star,
+  Eye,
+  ShoppingCart,
+  MessageCircle,
+  Heart,
+  Scale,
+  X,
+  MapPin,
+  Shield,
+  Package,
+  Wrench,
+  Clock,
+  CheckCircle,
+} from 'lucide-react';
+
+import {
+  mockProducts,
+  formatPrice,
+  getTRLColor,
+  getRiskColor,
+  getRiskLabel,
+  Product,
+} from '@/app/data/products';
+
+// ==================== Constants ====================
+
+const industries = [
+  'نفت و گاز',
+  'پتروشیمی',
+  'فولاد و معدن',
+  'سلامت',
+  'کشاورزی',
+  'حمل‌ونقل',
+  'خودروسازی',
+  'انرژی',
+  'فناوری اطلاعات',
+  'محیط زیست',
+];
+
+const technologies = [
+  'هوش مصنوعی',
+  'اینترنت اشیاء',
+  'دوقلوی دیجیتال',
+  'رباتیک',
+  'بلاکچین',
+  'داده‌کاوی',
+];
+
+const trlLevels = [
+  { value: 1, label: 'TRL 1 - اصول پایه' },
+  { value: 2, label: 'TRL 2 - فرمول‌بندی مفهوم' },
+  { value: 3, label: 'TRL 3 - اثبات مفهوم' },
+  { value: 4, label: 'TRL 4 - اعتبارسنجی آزمایشگاهی' },
+  { value: 5, label: 'TRL 5 - اعتبارسنجی در محیط واقعی' },
+  { value: 6, label: 'TRL 6 - نمونه اولیه' },
+  { value: 7, label: 'TRL 7 - نمونه عملیاتی' },
+  { value: 8, label: 'TRL 8 - تکمیل و تأیید نهایی' },
+  { value: 9, label: 'TRL 9 - عملیاتی شده' },
+];
+
+const mrlLevels = [
+  { value: 1, label: 'MRL 1 - نیازسنجی بازار' },
+  { value: 2, label: 'MRL 2 - تحلیل بازار اولیه' },
+  { value: 3, label: 'MRL 3 - تأیید بازار هدف' },
+  { value: 4, label: 'MRL 4 - توسعه استراتژی بازار' },
+  { value: 5, label: 'MRL 5 - تست بازار' },
+  { value: 6, label: 'MRL 6 - ورود اولیه به بازار' },
+  { value: 7, label: 'MRL 7 - رشد در بازار' },
+  { value: 8, label: 'MRL 8 - بلوغ بازار' },
+  { value: 9, label: 'MRL 9 - رهبری بازار' },
+];
+
+const provinces = [
+  'تهران',
+  'اصفهان',
+  'شیراز',
+  'تبریز',
+  'مشهد',
+  'یزد',
+  'کرج',
+  'اهواز',
+  'رشت',
+  'کرمان',
+];
+
+// ==================== Main Component ====================
+
+export default function MarketplacePage() {
+  const [mounted, setMounted] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [showFilters, setShowFilters] = useState(true);
+  const [showCompare, setShowCompare] = useState(false);
+  const [compareList, setCompareList] = useState<string[]>([]);
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [toast, setToast] = useState<string | null>(null);
+
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIndustry, setSelectedIndustry] = useState('all');
+  const [selectedTechnology, setSelectedTechnology] = useState('all');
+
+  const [selectedCategory, setSelectedCategory] = useState<
+    'all' | 'product' | 'service'
+  >('all');
+
+  const [selectedTRL, setSelectedTRL] = useState<number>(0);
+  const [selectedMRL, setSelectedMRL] = useState<number>(0);
+  const [maxPrice, setMaxPrice] = useState<number>(5000);
+  const [selectedProvince, setSelectedProvince] = useState('all');
+  const [selectedCertification, setSelectedCertification] = useState('all');
+  const [minRating, setMinRating] = useState(0);
+
+  const [sortBy, setSortBy] = useState<
+    'newest' | 'popular' | 'price-asc' | 'price-desc' | 'rating'
+  >('newest');
+
+  const [selectedRisk, setSelectedRisk] = useState<
+    'all' | 'low' | 'medium' | 'high'
+  >('all');
+
+  useEffect(() => {
+    setMounted(true);
+
+    const savedFavorites = localStorage.getItem('marketplace_favorites');
+
+    if (savedFavorites) {
+      try {
+        setFavorites(JSON.parse(savedFavorites));
+      } catch {
+        setFavorites([]);
+      }
+    }
+  }, []);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  };
+
+  // ==================== Filtered & Sorted Products ====================
+
+  const filteredProducts = useMemo(() => {
+    let result = [...mockProducts];
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+
+      result = result.filter(
+        (p) =>
+          p.title.toLowerCase().includes(q) ||
+          p.shortDescription.toLowerCase().includes(q) ||
+          p.tags.some((t) => t.toLowerCase().includes(q)) ||
+          p.seller.name.toLowerCase().includes(q)
+      );
+    }
+
+    if (selectedIndustry !== 'all') {
+      result = result.filter((p) => p.industry === selectedIndustry);
+    }
+
+    if (selectedTechnology !== 'all') {
+      result = result.filter((p) => p.technology === selectedTechnology);
+    }
+
+    if (selectedCategory !== 'all') {
+      result = result.filter((p) => p.category === selectedCategory);
+    }
+
+    if (selectedTRL > 0) {
+      result = result.filter((p) => p.trl >= selectedTRL);
+    }
+
+    if (selectedMRL > 0) {
+      result = result.filter((p) => p.mrl >= selectedMRL);
+    }
+
+    result = result.filter((p) => {
+      const effectivePrice =
+        p.priceType === 'range' && p.priceRange
+          ? p.priceRange.min
+          : p.price;
+
+      return effectivePrice <= maxPrice;
+    });
+
+    if (selectedProvince !== 'all') {
+      result = result.filter(
+        (p) => p.seller.location === selectedProvince
+      );
+    }
+
+    if (selectedCertification !== 'all') {
+      if (selectedCertification === 'has') {
+        result = result.filter((p) => p.certifications.length > 0);
+      }
+
+      if (selectedCertification === 'none') {
+        result = result.filter((p) => p.certifications.length === 0);
+      }
+    }
+
+    if (minRating > 0) {
+      result = result.filter((p) => p.seller.rating >= minRating);
+    }
+
+    if (selectedRisk !== 'all') {
+      result = result.filter((p) => p.riskLevel === selectedRisk);
+    }
+
+    switch (sortBy) {
+      case 'newest':
+        result.sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() -
+            new Date(a.createdAt).getTime()
+        );
+        break;
+
+      case 'popular':
+        result.sort((a, b) => b.viewCount - a.viewCount);
+        break;
+
+      case 'price-asc':
+        result.sort((a, b) => {
+          const priceA =
+            a.priceType === 'range' && a.priceRange
+              ? a.priceRange.min
+              : a.price;
+
+          const priceB =
+            b.priceType === 'range' && b.priceRange
+              ? b.priceRange.min
+              : b.price;
+
+          return priceA - priceB;
+        });
+        break;
+
+      case 'price-desc':
+        result.sort((a, b) => {
+          const priceA =
+            a.priceType === 'range' && a.priceRange
+              ? a.priceRange.min
+              : a.price;
+
+          const priceB =
+            b.priceType === 'range' && b.priceRange
+              ? b.priceRange.min
+              : b.price;
+
+          return priceB - priceA;
+        });
+        break;
+
+      case 'rating':
+        result.sort((a, b) => b.seller.rating - a.seller.rating);
+        break;
+    }
+
+    return result;
+  }, [
+    searchQuery,
+    selectedIndustry,
+    selectedTechnology,
+    selectedCategory,
+    selectedTRL,
+    selectedMRL,
+    maxPrice,
+    selectedProvince,
+    selectedCertification,
+    minRating,
+    sortBy,
+    selectedRisk,
+  ]);
+
+  // ==================== Actions ====================
+
+  const toggleFavorite = (id: string) => {
+    setFavorites((prev) => {
+      const next = prev.includes(id)
+        ? prev.filter((f) => f !== id)
+        : [...prev, id];
+
+      localStorage.setItem('marketplace_favorites', JSON.stringify(next));
+
+      showToast(
+        prev.includes(id)
+          ? 'از علاقه‌مندی‌ها حذف شد'
+          : 'به علاقه‌مندی‌ها اضافه شد'
+      );
+
+      return next;
+    });
+  };
+
+  const toggleCompare = (id: string) => {
+    setCompareList((prev) => {
+      if (prev.includes(id)) {
+        showToast('از لیست مقایسه حذف شد');
+        return prev.filter((c) => c !== id);
+      }
+
+      if (prev.length >= 4) {
+        showToast('حداکثر ۴ محصول قابل مقایسه است');
+        return prev;
+      }
+
+      showToast('به لیست مقایسه اضافه شد');
+      return [...prev, id];
+    });
+  };
+
+  const clearAllFilters = () => {
+    setSearchQuery('');
+    setSelectedIndustry('all');
+    setSelectedTechnology('all');
+    setSelectedCategory('all');
+    setSelectedTRL(0);
+    setSelectedMRL(0);
+    setMaxPrice(5000);
+    setSelectedProvince('all');
+    setSelectedCertification('all');
+    setMinRating(0);
+    setSortBy('newest');
+    setSelectedRisk('all');
+  };
+
+  const activeFilterCount = [
+    selectedIndustry !== 'all',
+    selectedTechnology !== 'all',
+    selectedCategory !== 'all',
+    selectedTRL > 0,
+    selectedMRL > 0,
+    maxPrice < 5000,
+    selectedProvince !== 'all',
+    selectedCertification !== 'all',
+    minRating > 0,
+    selectedRisk !== 'all',
+  ].filter(Boolean).length;
+
+  if (!mounted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-white">
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] flex items-center justify-center animate-pulse">
+            <ShoppingCart className="w-8 h-8 text-white" />
+          </div>
+
+          <p className="text-slate-500">در حال بارگذاری بازار...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#f0fdfa]"
+      style={{
+        fontFamily: "'Vazir', 'Vazirmatn', 'Iran Sans', Tahoma, sans-serif",
+      }}
+      dir="rtl"
+    >
+      {/* Toast */}
+      {toast && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-[#1E3A8A] text-white px-6 py-3 rounded-2xl shadow-lg flex items-center gap-2 animate-bounce">
+          <CheckCircle size={16} />
+          <span className="text-sm font-bold">{toast}</span>
+        </div>
+      )}
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="flex gap-6">
+          {/* ==================== Sidebar Filters ==================== */}
+
+          {showFilters && (
+            <aside className="hidden lg:block w-72 flex-shrink-0">
+              <div className="sticky top-24 space-y-4">
+                <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                      <SlidersHorizontal
+                        size={16}
+                        className="text-[#1E3A8A]"
+                      />
+                      فیلترها
+                    </h3>
+
+                    {activeFilterCount > 0 && (
+                      <button
+                        onClick={clearAllFilters}
+                        className="text-xs text-red-500 hover:text-red-700 font-medium"
+                      >
+                        حذف همه
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Search */}
+                  <div className="mb-4">
+                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">
+                      جستجو
+                    </label>
+
+                    <div className="relative">
+                      <Search
+                        size={14}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                      />
+
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="عنوان، برچسب، فروشنده..."
+                        className="w-full pl-3 pr-9 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none focus:border-[#1E3A8A] focus:ring-1 focus:ring-[#1E3A8A20]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Category */}
+                  <div className="mb-4">
+                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">
+                      نوع
+                    </label>
+
+                    <div className="flex gap-1">
+                      {[
+                        { value: 'all', label: 'همه' },
+                        { value: 'product', label: 'محصول' },
+                        { value: 'service', label: 'خدمت' },
+                      ].map((opt) => (
+                        <button
+                          key={opt.value}
+                          onClick={() =>
+                            setSelectedCategory(opt.value as any)
+                          }
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${
+                            selectedCategory === opt.value
+                              ? 'bg-[#1E3A8A] text-white'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Industry */}
+                  <div className="mb-4">
+                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">
+                      صنعت
+                    </label>
+
+                    <select
+                      value={selectedIndustry}
+                      onChange={(e) => setSelectedIndustry(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
+                    >
+                      <option value="all">همه صنایع</option>
+
+                      {industries.map((ind) => (
+                        <option key={ind} value={ind}>
+                          {ind}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Technology */}
+                  <div className="mb-4">
+                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">
+                      فناوری
+                    </label>
+
+                    <select
+                      value={selectedTechnology}
+                      onChange={(e) =>
+                        setSelectedTechnology(e.target.value)
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
+                    >
+                      <option value="all">همه فناوری‌ها</option>
+
+                      {technologies.map((tech) => (
+                        <option key={tech} value={tech}>
+                          {tech}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* TRL */}
+                  <div className="mb-4">
+                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">
+                      حداقل TRL
+                    </label>
+
+                    <select
+                      value={selectedTRL}
+                      onChange={(e) =>
+                        setSelectedTRL(Number(e.target.value))
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
+                    >
+                      <option value={0}>همه</option>
+
+                      {trlLevels.map((t) => (
+                        <option key={t.value} value={t.value}>
+                          {t.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* MRL */}
+                  <div className="mb-4">
+                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">
+                      حداقل MRL
+                    </label>
+
+                    <select
+                      value={selectedMRL}
+                      onChange={(e) =>
+                        setSelectedMRL(Number(e.target.value))
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
+                    >
+                      <option value={0}>همه</option>
+
+                      {mrlLevels.map((m) => (
+                        <option key={m.value} value={m.value}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Max Price */}
+                  <div className="mb-4">
+                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">
+                      حداکثر قیمت (میلیون تومان):{' '}
+                      {maxPrice.toLocaleString('fa-IR')}
+                    </label>
+
+                    <input
+                      type="range"
+                      min={0}
+                      max={5000}
+                      step={100}
+                      value={maxPrice}
+                      onChange={(e) =>
+                        setMaxPrice(Math.max(0, Number(e.target.value)))
+                      }
+                      className="w-full accent-[#1E3A8A]"
+                    />
+                  </div>
+
+                  {/* Province */}
+                  <div className="mb-4">
+                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">
+                      استان فروشنده
+                    </label>
+
+                    <select
+                      value={selectedProvince}
+                      onChange={(e) =>
+                        setSelectedProvince(e.target.value)
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
+                    >
+                      <option value="all">همه استان‌ها</option>
+
+                      {provinces.map((prov) => (
+                        <option key={prov} value={prov}>
+                          {prov}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Certification */}
+                  <div className="mb-4">
+                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">
+                      گواهینامه
+                    </label>
+
+                    <select
+                      value={selectedCertification}
+                      onChange={(e) =>
+                        setSelectedCertification(e.target.value)
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
+                    >
+                      <option value="all">همه</option>
+                      <option value="has">دارای گواهینامه</option>
+                      <option value="none">بدون گواهینامه</option>
+                    </select>
+                  </div>
+
+                  {/* Min Rating */}
+                  <div className="mb-4">
+                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">
+                      حداقل امتیاز فروشنده: {minRating}
+                    </label>
+
+                    <input
+                      type="range"
+                      min={0}
+                      max={5}
+                      step={0.5}
+                      value={minRating}
+                      onChange={(e) =>
+                        setMinRating(Number(e.target.value))
+                      }
+                      className="w-full accent-[#D4A547]"
+                    />
+                  </div>
+
+                  {/* Risk */}
+                  <div className="mb-4">
+                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">
+                      سطح ریسک
+                    </label>
+
+                    <div className="flex gap-1">
+                      {[
+                        { value: 'all', label: 'همه' },
+                        { value: 'low', label: 'کم' },
+                        { value: 'medium', label: 'متوسط' },
+                        { value: 'high', label: 'زیاد' },
+                      ].map((opt) => (
+                        <button
+                          key={opt.value}
+                          onClick={() =>
+                            setSelectedRisk(opt.value as any)
+                          }
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${
+                            selectedRisk === opt.value
+                              ? 'bg-[#1E3A8A] text-white'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+          )}
+
+          {/* ==================== Main Content ==================== */}
+
+          <div className="flex-1 min-w-0">
+            {/* Header */}
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#1E3A8A] via-[#1E3A8A] to-[#14B8A6] p-6 sm:p-8 text-white mb-6">
+              <div className="absolute inset-0 opacity-10">
+                <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+
+                <div className="absolute bottom-0 left-0 w-64 h-64 bg-[#D4A547] rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
+              </div>
+
+              <div className="relative">
+                <h1 className="text-2xl sm:text-3xl font-black">
+                  بازار محصولات و خدمات فناورانه
+                </h1>
+
+                <p className="mt-2 text-white/80 text-sm">
+                  جستجو، کشف و مقایسهٔ هوشمند محصولات و خدمات نوآورانه
+                </p>
+              </div>
+            </div>
+
+            {/* Toolbar */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="lg:hidden inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  <Filter size={14} />
+                  فیلترها
+
+                  {activeFilterCount > 0 && (
+                    <span className="w-5 h-5 rounded-full bg-[#1E3A8A] text-white text-xs flex items-center justify-center">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </button>
+
+                <select
+                  value={sortBy}
+                  onChange={(e) =>
+                    setSortBy(e.target.value as any)
+                  }
+                  className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 bg-white outline-none cursor-pointer"
+                >
+                  <option value="newest">جدیدترین</option>
+                  <option value="popular">پربازدیدترین</option>
+                  <option value="price-asc">قیمت: کم به زیاد</option>
+                  <option value="price-desc">قیمت: زیاد به کم</option>
+                  <option value="rating">بالاترین امتیاز</option>
+                </select>
+
+                <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
+                  <button
+                    onClick={() => setViewMode('grid')}
+                    className={`p-1.5 rounded-lg transition ${
+                      viewMode === 'grid'
+                        ? 'bg-white shadow text-[#1E3A8A]'
+                        : 'text-slate-400'
+                    }`}
+                  >
+                    <Grid3X3 size={16} />
+                  </button>
+
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={`p-1.5 rounded-lg transition ${
+                      viewMode === 'list'
+                        ? 'bg-white shadow text-[#1E3A8A]'
+                        : 'text-slate-400'
+                    }`}
+                  >
+                    <List size={16} />
+                  </button>
+                </div>
+
+                {compareList.length > 0 && (
+                  <button
+                    onClick={() => setShowCompare(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#14B8A6] text-white text-xs font-bold hover:bg-[#14B8A6]/90 transition"
+                  >
+                    <Scale size={14} />
+                    مقایسه ({compareList.length})
+                  </button>
+                )}
+              </div>
+
+              <span className="text-xs text-slate-500">
+                {filteredProducts.length} مورد یافت شد
+              </span>
+            </div>
+
+            {/* Mobile Filters */}
+            {showFilters && (
+              <div className="lg:hidden mb-4 rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-extrabold text-slate-900">
+                    فیلترها
+                  </h3>
+
+                  {activeFilterCount > 0 && (
+                    <button
+                      onClick={clearAllFilters}
+                      className="text-xs text-red-500 font-medium"
+                    >
+                      حذف همه
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="جستجو..."
+                    className="col-span-2 px-3 py-2 rounded-xl border border-slate-200 text-xs outline-none"
+                  />
+
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) =>
+                      setSelectedCategory(e.target.value as any)
+                    }
+                    className="px-2 py-2 rounded-xl border border-slate-200 text-xs outline-none"
+                  >
+                    <option value="all">نوع: همه</option>
+                    <option value="product">محصول</option>
+                    <option value="service">خدمت</option>
+                  </select>
+
+                  <select
+                    value={selectedIndustry}
+                    onChange={(e) =>
+                      setSelectedIndustry(e.target.value)
+                    }
+                    className="px-2 py-2 rounded-xl border border-slate-200 text-xs outline-none"
+                  >
+                    <option value="all">صنعت: همه</option>
+
+                    {industries.map((ind) => (
+                      <option key={ind} value={ind}>
+                        {ind}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={selectedTechnology}
+                    onChange={(e) =>
+                      setSelectedTechnology(e.target.value)
+                    }
+                    className="px-2 py-2 rounded-xl border border-slate-200 text-xs outline-none"
+                  >
+                    <option value="all">فناوری: همه</option>
+
+                    {technologies.map((tech) => (
+                      <option key={tech} value={tech}>
+                        {tech}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={selectedProvince}
+                    onChange={(e) =>
+                      setSelectedProvince(e.target.value)
+                    }
+                    className="px-2 py-2 rounded-xl border border-slate-200 text-xs outline-none"
+                  >
+                    <option value="all">استان: همه</option>
+
+                    {provinces.map((prov) => (
+                      <option key={prov} value={prov}>
+                        {prov}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {/* Product Grid/List */}
+            {filteredProducts.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-slate-100 flex items-center justify-center">
+                  <Package size={32} className="text-slate-400" />
+                </div>
+
+                <h3 className="text-lg font-bold text-slate-700 mb-2">
+                  محصولی یافت نشد
+                </h3>
+
+                <p className="text-sm text-slate-500 mb-4">
+                  با تغییر فیلترها دوباره جستجو کنید
+                </p>
+
+                <button
+                  onClick={clearAllFilters}
+                  className="px-4 py-2 rounded-xl bg-[#1E3A8A] text-white text-sm font-bold hover:bg-[#1E3A8A]/90"
+                >
+                  حذف همه فیلترها
+                </button>
+              </div>
+            ) : viewMode === 'grid' ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                {filteredProducts.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    isFavorite={favorites.includes(product.id)}
+                    isCompared={compareList.includes(product.id)}
+                    onToggleFavorite={() =>
+                      toggleFavorite(product.id)
+                    }
+                    onToggleCompare={() =>
+                      toggleCompare(product.id)
+                    }
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredProducts.map((product) => (
+                  <ProductListItem
+                    key={product.id}
+                    product={product}
+                    isFavorite={favorites.includes(product.id)}
+                    isCompared={compareList.includes(product.id)}
+                    onToggleFavorite={() =>
+                      toggleFavorite(product.id)
+                    }
+                    onToggleCompare={() =>
+                      toggleCompare(product.id)
+                    }
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ==================== Compare Modal ==================== */}
+
+        {showCompare && compareList.length >= 2 && (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[85vh] overflow-y-auto p-6 shadow-2xl">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                  <Scale size={20} className="text-[#1E3A8A]" />
+                  مقایسه محصولات
+                </h2>
+
+                <button
+                  onClick={() => setShowCompare(false)}
+                  className="p-2 rounded-xl hover:bg-slate-100"
+                >
+                  <X size={20} className="text-slate-500" />
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200">
+                      <th className="py-3 px-4 text-right text-slate-500 font-medium min-w-[120px]">
+                        معیار
+                      </th>
+
+                      {compareList.map((id) => {
+                        const p = mockProducts.find(
+                          (pp) => pp.id === id
+                        );
+
+                        if (!p) return null;
+
+                        return (
+                          <th
+                            key={id}
+                            className="py-3 px-4 text-center min-w-[180px]"
+                          >
+                            <p className="font-bold text-slate-800 text-xs">
+                              {p.title}
+                            </p>
+
+                            <button
+                              onClick={() => toggleCompare(id)}
+                              className="mt-1 text-xs text-red-500"
+                            >
+                              حذف
+                            </button>
+                          </th>
+                        );
+                      })}
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {[
+                      {
+                        label: 'قیمت',
+                        render: (p: Product) => formatPrice(p),
+                      },
+                      {
+                        label: 'TRL',
+                        render: (p: Product) => `${p.trl}/۹`,
+                      },
+                      {
+                        label: 'MRL',
+                        render: (p: Product) => `${p.mrl}/۹`,
+                      },
+                      {
+                        label: 'زمان تحویل',
+                        render: (p: Product) => p.deliveryTime,
+                      },
+                      {
+                        label: 'فروشنده',
+                        render: (p: Product) => p.seller.name,
+                      },
+                      {
+                        label: 'امتیاز فروشنده',
+                        render: (p: Product) =>
+                          `${p.seller.rating}/۵`,
+                      },
+                      {
+                        label: 'تعداد فروش',
+                        render: (p: Product) =>
+                          `${p.seller.totalSales} عدد`,
+                      },
+                      {
+                        label: 'ریسک اجرا',
+                        render: (p: Product) =>
+                          getRiskLabel(p.riskLevel),
+                      },
+                      {
+                        label: 'خدمات پس از فروش',
+                        render: (p: Product) =>
+                          p.afterSalesService
+                            ? '✅ دارد'
+                            : '❌ ندارد',
+                      },
+                      {
+                        label: 'وضعیت مالکیت فکری',
+                        render: (p: Product) =>
+                          p.ipStatus === 'registered'
+                            ? 'ثبت شده'
+                            : p.ipStatus === 'pending'
+                            ? 'در حال ثبت'
+                            : 'ندارد',
+                      },
+                      {
+                        label: 'گواهینامه‌ها',
+                        render: (p: Product) =>
+                          p.certifications.length > 0
+                            ? p.certifications.join('، ')
+                            : 'ندارد',
+                      },
+                    ].map((row, i) => (
+                      <tr
+                        key={i}
+                        className="border-b border-slate-100"
+                      >
+                        <td className="py-3 px-4 font-medium text-slate-700">
+                          {row.label}
+                        </td>
+
+                        {compareList.map((id) => {
+                          const p = mockProducts.find(
+                            (pp) => pp.id === id
+                          );
+
+                          if (!p) {
+                            return (
+                              <td
+                                key={id}
+                                className="py-3 px-4 text-center"
+                              >
+                                -
+                              </td>
+                            );
+                          }
+
+                          return (
+                            <td
+                              key={id}
+                              className="py-3 px-4 text-center text-slate-600"
+                            >
+                              {row.render(p)}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      <footer className="border-t border-slate-200 bg-white py-6 mt-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <p className="text-xs text-slate-400">
+            بازار محصولات و خدمات فناورانه — بازار تحول
+          </p>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+// ==================== Product Card ====================
+
+function ProductCard({
+  product,
+  isFavorite,
+  isCompared,
+  onToggleFavorite,
+  onToggleCompare,
+}: {
+  product: Product;
+  isFavorite: boolean;
+  isCompared: boolean;
+  onToggleFavorite: () => void;
+  onToggleCompare: () => void;
+}) {
+  const productImage = product.images?.[0];
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white hover:shadow-lg hover:border-[#1E3A8A20] transition-all group overflow-hidden">
+      {/* Product Image */}
+      <div className="h-40 bg-gradient-to-br from-[#1E3A8A10] to-[#14B8A610] flex items-center justify-center relative overflow-hidden">
+        {productImage ? (
+          <Image
+            src={productImage}
+            alt={product.title}
+            fill
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
+            sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
+          />
+        ) : (
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] flex items-center justify-center opacity-80">
+            {product.category === 'service' ? (
+              <Wrench size={28} className="text-white" />
+            ) : (
+              <Package size={28} className="text-white" />
+            )}
+          </div>
+        )}
+
+        {productImage && (
+          <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/10 pointer-events-none" />
+        )}
+
+        {/* Favorite and Compare Buttons */}
+        <div className="absolute top-2 left-2 flex gap-1 z-10">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onToggleFavorite();
+            }}
+            className={`p-1.5 rounded-lg transition ${
+              isFavorite
+                ? 'bg-red-50 text-red-500'
+                : 'bg-white/90 text-slate-400 hover:text-red-400'
+            }`}
+            aria-label="افزودن به علاقه‌مندی‌ها"
+          >
+            <Heart
+              size={14}
+              fill={isFavorite ? 'currentColor' : 'none'}
+            />
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onToggleCompare();
+            }}
+            className={`p-1.5 rounded-lg transition ${
+              isCompared
+                ? 'bg-[#14B8A6]/20 text-[#14B8A6]'
+                : 'bg-white/90 text-slate-400 hover:text-[#14B8A6]'
+            }`}
+            aria-label="افزودن به مقایسه"
+          >
+            <Scale size={14} />
+          </button>
+        </div>
+
+        {/* Category Badge */}
+        <div className="absolute top-2 right-2 flex gap-1 z-10">
+          <span
+            className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+              product.category === 'service'
+                ? 'bg-purple-100 text-purple-700'
+                : 'bg-blue-100 text-blue-700'
+            }`}
+          >
+            {product.category === 'service' ? 'خدمت' : 'محصول'}
+          </span>
+        </div>
+      </div>
+
+      {/* Product Details */}
+      <div className="p-4">
+        <h3 className="text-sm font-extrabold text-slate-900 mb-1 line-clamp-2 group-hover:text-[#1E3A8A] transition">
+          {product.title}
+        </h3>
+
+        <p className="text-xs text-slate-500 line-clamp-2 mb-3">
+          {product.shortDescription}
+        </p>
+
+        <div className="flex flex-wrap gap-1 mb-3">
+          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">
+            {product.industry}
+          </span>
+
+          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">
+            {product.technology}
+          </span>
+
+          <span
+            className={`px-2 py-0.5 rounded-full text-xs font-medium ${getTRLColor(
+              product.trl
+            )}`}
+          >
+            TRL {product.trl}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-extrabold text-[#1E3A8A]">
+            {formatPrice(product)}
+          </span>
+
+          <div className="flex items-center gap-1">
+            <Star
+              size={14}
+              className="text-[#D4A547] fill-[#D4A547]"
+            />
+
+            <span className="text-xs font-bold text-slate-600">
+              {product.seller.rating}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between text-xs text-slate-500 mb-3">
+          <span className="flex items-center gap-1">
+            <MapPin size={12} />
+            {product.seller.location}
+          </span>
+
+          <span className="flex items-center gap-1">
+            <Eye size={12} />
+            {product.viewCount}
+          </span>
+        </div>
+
+        <div className="flex gap-2">
+          <Link
+            href={`/market/${product.id}`}
+            className="flex-1 py-2 rounded-xl bg-[#1E3A8A] text-white text-xs font-bold text-center hover:bg-[#1E3A8A]/90 transition"
+          >
+            مشاهده و درخواست
+          </Link>
+
+          <Link
+            href={`/negotiation/${product.id}`}
+            className="p-2 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-[#1E3A8A] transition"
+            title="ارسال پیام"
+          >
+            <MessageCircle size={14} />
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==================== Product List Item ====================
+
+function ProductListItem({
+  product,
+  isFavorite,
+  isCompared,
+  onToggleFavorite,
+  onToggleCompare,
+}: {
+  product: Product;
+  isFavorite: boolean;
+  isCompared: boolean;
+  onToggleFavorite: () => void;
+  onToggleCompare: () => void;
+}) {
+  const productImage = product.images?.[0];
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white hover:shadow-md hover:border-[#1E3A8A20] transition-all group p-4">
+      <div className="flex items-start gap-4">
+        {/* Product Image */}
+        <div className="relative w-20 h-20 rounded-xl bg-gradient-to-br from-[#1E3A8A10] to-[#14B8A610] overflow-hidden flex-shrink-0">
+          {productImage ? (
+            <Image
+              src={productImage}
+              alt={product.title}
+              fill
+              className="object-cover transition-transform duration-300 group-hover:scale-105"
+              sizes="80px"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              {product.category === 'service' ? (
+                <Wrench size={22} className="text-[#1E3A8A]" />
+              ) : (
+                <Package size={22} className="text-[#1E3A8A]" />
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-900 group-hover:text-[#1E3A8A] transition">
+                {product.title}
+              </h3>
+
+              <p className="text-xs text-slate-500 mt-0.5">
+                {product.shortDescription}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button
+                type="button"
+                onClick={onToggleFavorite}
+                className={`p-1.5 rounded-lg transition ${
+                  isFavorite
+                    ? 'text-red-500'
+                    : 'text-slate-400 hover:text-red-400'
+                }`}
+                aria-label="افزودن به علاقه‌مندی‌ها"
+              >
+                <Heart
+                  size={14}
+                  fill={isFavorite ? 'currentColor' : 'none'}
+                />
+              </button>
+
+              <button
+                type="button"
+                onClick={onToggleCompare}
+                className={`p-1.5 rounded-lg transition ${
+                  isCompared
+                    ? 'text-[#14B8A6]'
+                    : 'text-slate-400 hover:text-[#14B8A6]'
+                }`}
+                aria-label="افزودن به مقایسه"
+              >
+                <Scale size={14} />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 mt-2">
+            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">
+              {product.industry}
+            </span>
+
+            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">
+              {product.technology}
+            </span>
+
+            <span
+              className={`px-2 py-0.5 rounded-full text-xs font-medium ${getTRLColor(
+                product.trl
+              )}`}
+            >
+              TRL {product.trl}
+            </span>
+
+            <span
+              className={`px-2 py-0.5 rounded-full text-xs font-medium ${getRiskColor(
+                product.riskLevel
+              )}`}
+            >
+              {getRiskLabel(product.riskLevel)}
+            </span>
+
+            {product.seller.verified && (
+              <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                <Shield size={12} />
+                تأیید شده
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between mt-3">
+            <div className="flex items-center gap-4 text-xs text-slate-500">
+              <span className="flex items-center gap-1">
+                <MapPin size={12} />
+                {product.seller.location}
+              </span>
+
+              <span className="flex items-center gap-1">
+                <Eye size={12} />
+                {product.viewCount}
+              </span>
+
+              <span className="flex items-center gap-1">
+                <Clock size={12} />
+                {product.deliveryTime}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1">
+                <Star
+                  size={14}
+                  className="text-[#D4A547] fill-[#D4A547]"
+                />
+
+                <span className="text-xs font-bold text-slate-600">
+                  {product.seller.rating}
+                </span>
+              </div>
+
+              <span className="text-sm font-extrabold text-[#1E3A8A]">
+                {formatPrice(product)}
+              </span>
+
+              <Link
+                href={`/market/${product.id}`}
+                className="px-3 py-1.5 rounded-lg bg-[#1E3A8A] text-white text-xs font-bold hover:bg-[#1E3A8A]/90 transition"
+              >
+                مشاهده
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
