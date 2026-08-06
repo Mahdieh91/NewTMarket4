@@ -9,9 +9,14 @@ from .models import User
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'role', 'phone', 'kyc_status',
-                  'company_name', 'expertise', 'address', 'website', 'bio',
-                  'first_name', 'last_name', 'national_id', 'is_legal')
+        fields = (
+            'id', 'username', 'email', 'role', 'phone', 'kyc_status',
+            'company_name', 'expertise', 'address', 'website',
+            'first_name', 'last_name', 'national_id', 'is_legal',
+            # bio در مدل وجود ندارد – به جای آن experience_summary و سایر فیلدهای واقعی
+            'experience_summary', 'activity_domain', 'registration_number',
+            'economic_code', 'representative_name'
+        )
         extra_kwargs = {'password': {'write_only': True}}
 
 # ============================================================
@@ -59,6 +64,14 @@ class RegisterSerializer(serializers.ModelSerializer):
             role=validated_data.get('role', 'buyer'),
             expertise=validated_data.get('expertise', ''),
             activity_domain=validated_data.get('activity_domain', ''),
-            bio=validated_data.get('experience_summary', ''),
+            experience_summary=validated_data.get('experience_summary', ''),
         )
         return user
+
+# ============================================================
+# کلاس UserBasicSerializer (برای نمایش خلاصه کاربر)
+# ============================================================
+class UserBasicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'first_name', 'last_name', 'email']

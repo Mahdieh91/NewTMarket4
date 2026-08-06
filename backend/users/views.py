@@ -19,7 +19,7 @@ class UserViewSet(viewsets.ModelViewSet):
     ordering_fields = '__all__'
 
 # ============================================================
-# دریافت اطلاعات کاربر جاری (لاگین‌شده)
+# دریافت اطلاعات کاربر جاری (لاگین‌شده) - فقط خواندنی
 # ============================================================
 class MeView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -49,3 +49,17 @@ class RegisterView(generics.CreateAPIView):
                 }
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# ============================================================
+# دریافت و بروزرسانی پروفایل کاربر جاری (خواندن + ویرایش)
+# ============================================================
+class ProfileView(generics.RetrieveUpdateAPIView):
+    """
+    این ویو هم اطلاعات کاربر را برمی‌گرداند (GET) و هم اجازه ویرایش (PUT/PATCH) می‌دهد.
+    برخلاف MeView که فقط خواندنی است.
+    """
+    serializer_class = UserSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user

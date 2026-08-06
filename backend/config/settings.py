@@ -28,7 +28,7 @@ INSTALLED_APPS = [
     'drf_yasg',
     'ckeditor',
     'ckeditor_uploader',
-    'import_export',
+    'import_export',          # ← فقط یک بار
     'crispy_forms',
     'crispy_bootstrap5',
     'django_extensions',
@@ -42,6 +42,8 @@ INSTALLED_APPS = [
     'readiness', 'matching', 'search', 'negotiations', 'proposals',
     'contracts', 'execution', 'payments', 'support', 'reviews',
     'crm', 'marketing', 'analytics', 'governance', 'core'
+    ,'user_messages',
+    'wallet'
 ]
 
 # ============================================================
@@ -116,7 +118,7 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
-    'EXCEPTION_HANDLER': 'core.exceptions.custom_exception_handler',
+    #'EXCEPTION_HANDLER': 'core.exceptions.custom_exception_handler',
 }
 
 SIMPLE_JWT = {
@@ -192,6 +194,8 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # CKEditor
 # ============================================================
 CKEDITOR_UPLOAD_PATH = 'uploads/'
+CKEDITOR_IMAGE_BACKEND = "pillow"
+
 CKEDITOR_CONFIGS = {
     'default': {
         'toolbar': 'full',

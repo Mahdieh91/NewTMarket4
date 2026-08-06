@@ -2,6 +2,7 @@
 
 import { useRef, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   Check,
   ChevronLeft,
@@ -19,6 +20,7 @@ import {
   Hash,
   Image as ImageIcon,
 } from 'lucide-react';
+import { useAuthStore } from '@/store/auth-store';
 
 // ==================== Types ====================
 
@@ -76,9 +78,6 @@ const categoryOptions = [
   'سایر',
 ];
 
-// ============================================================
-// لیست صنایع (هماهنگ با بک‌اند)
-// ============================================================
 const industryOptions = [
   'نفت و گاز',
   'پالایش و پتروشیمی',
@@ -93,9 +92,6 @@ const industryOptions = [
   'سایر',
 ];
 
-// ============================================================
-// لیست شهرهای ایران
-// ============================================================
 const cityOptions = [
   'تهران',
   'اصفهان',
@@ -138,6 +134,8 @@ const initialForm: SupplyFormData = {
   documents: [],
 };
 
+const MAX_IMAGES = 3;
+
 // ==================== Main Component ====================
 
 export default function SupplyRegisterPage() {
@@ -151,6 +149,8 @@ export default function SupplyRegisterPage() {
   const [form, setForm] = useState<SupplyFormData>(initialForm);
   const [logoFailed, setLogoFailed] = useState(false);
 
+  const { accessToken, isAuthenticated, logout } = useAuthStore();
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -162,7 +162,22 @@ export default function SupplyRegisterPage() {
 
   const handleFileChange = (field: 'images' | 'documents', files: FileList | null) => {
     if (!files) return;
-    const newFiles = Array.from(files);
+
+    let newFiles = Array.from(files);
+
+    if (field === 'images') {
+      const total = form.images.length + newFiles.length;
+      if (total > MAX_IMAGES) {
+        setErrors([`حداکثر ${MAX_IMAGES} تصویر می‌توانید آپلود کنید.`]);
+        const remaining = MAX_IMAGES - form.images.length;
+        if (remaining > 0) {
+          newFiles = newFiles.slice(0, remaining);
+        } else {
+          return;
+        }
+      }
+    }
+
     setForm((prev) => ({
       ...prev,
       [field]: [...prev[field], ...newFiles],
@@ -220,10 +235,16 @@ export default function SupplyRegisterPage() {
   };
 
   // ============================================================
-  // تابع ارسال واقعی به بک‌اند
+  // تابع ارسال با نام صحیح فیلد تصاویر = 'uploaded_images'
   // ============================================================
   const handleSubmit = async () => {
     if (!validateStep()) return;
+
+    if (!isAuthenticated || !accessToken) {
+      setErrors(['لطفاً ابتدا وارد حساب کاربری خود شوید.']);
+      return;
+    }
+
     setLoading(true);
     setSubmitMessage('');
     setErrors([]);
@@ -231,7 +252,6 @@ export default function SupplyRegisterPage() {
     try {
       const formData = new FormData();
 
-      // فیلدهای متنی
       const textFields: (keyof SupplyFormData)[] = [
         'title', 'category', 'industry', 'technology', 'city',
         'description', 'quantity', 'unit', 'price', 'trl'
@@ -243,31 +263,70 @@ export default function SupplyRegisterPage() {
         }
       });
 
-      // تصاویر و مستندات
-      form.images.forEach(file => formData.append('images', file));
-      form.documents.forEach(file => formData.append('documents', file));
+      // ===== تغییر کلید از 'images' به 'uploaded_images' =====
+      form.images.forEach(file => {
+        formData.append('uploaded_images', file);
+      });
+
+      form.documents.forEach(file => {
+        formData.append('documents', file);
+      });
 
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+
       const response = await fetch(`${API_URL}/products/supplies/`, {
         method: 'POST',
         body: formData,
-        // هدر Content-Type را تنظیم نکنید تا fetch خودش boundary را اضافه کند
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
       });
 
-      const data = await response.json();
+      const textResponse = await response.text();
+      let data: any = null;
+      let parseError = false;
+      try {
+        data = JSON.parse(textResponse);
+      } catch {
+        parseError = true;
+      }
 
       if (!response.ok) {
+        if (response.status === 401) {
+          logout();
+          router.push('/login?session_expired=true');
+          throw new Error('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.');
+        }
+
         let errorMsg = 'خطا در ثبت عرضه.';
-        if (data?.title) errorMsg = 'عنوان تکراری است.';
-        else if (data?.detail) errorMsg = data.detail;
+
+        if (!parseError && data) {
+          if (data?.errors && typeof data.errors === 'object') {
+            const fieldErrors = Object.entries(data.errors)
+              .map(([f, msgs]) => `${f}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
+              .join('; ');
+            errorMsg = `خطاهای اعتبارسنجی: ${fieldErrors}`;
+          } else if (data?.detail) {
+            errorMsg = data.detail;
+          } else if (data?.non_field_errors) {
+            errorMsg = data.non_field_errors.join(', ');
+          } else if (typeof data === 'string') {
+            errorMsg = data;
+          } else if (data?.message) {
+            errorMsg = data.message;
+          } else {
+            errorMsg = JSON.stringify(data);
+          }
+        } else {
+          errorMsg = `خطای سرور (کد ${response.status})`;
+        }
+
         throw new Error(errorMsg);
       }
 
+      if (parseError) throw new Error('پاسخ سرور نامعتبر است.');
+
       setSubmitMessage('✅ عرضه شما با موفقیت ثبت شد و برای بررسی کارشناس ارسال گردید.');
-      // بعد از ۲ ثانیه به داشبورد هدایت می‌کنیم
-      setTimeout(() => {
-        router.push('/dashboard');
-      }, 2000);
     } catch (error: any) {
       console.error('❌ خطا در ثبت عرضه:', error);
       setErrors([error.message || 'خطا در ثبت عرضه. لطفاً دوباره تلاش کنید.']);
@@ -275,6 +334,40 @@ export default function SupplyRegisterPage() {
       setLoading(false);
     }
   };
+
+  // ============================================================
+  // نمایش پیام لاگین در صورت عدم احراز هویت
+  // ============================================================
+  if (mounted && !isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1E3A8A10] to-[#14B8A610] p-4">
+        <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center">
+          <div className="w-32 h-32 mx-auto mb-6 rounded-full bg-gradient-to-br from-[#1E3A8A] to-[#14B8A6] p-1 shadow-lg">
+            <div className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden">
+              {!logoFailed ? (
+                <img
+                  src="/logo.png"
+                  alt="بازار تحول"
+                  className="w-full h-full object-contain p-2"
+                  onError={() => setLogoFailed(true)}
+                />
+              ) : (
+                <span className="text-[#1E3A8A] font-black text-5xl">ب ت</span>
+              )}
+            </div>
+          </div>
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">لطفاً وارد شوید</h2>
+          <p className="text-slate-500 text-sm mb-6">برای ثبت محصول، باید وارد حساب کاربری خود شوید.</p>
+          <Link
+            href="/login?next=/supply/register"
+            className="inline-flex items-center justify-center w-full py-3 px-6 rounded-xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] text-white font-bold shadow-lg hover:shadow-xl transition"
+          >
+            ورود به حساب کاربری
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   if (!mounted) {
     return (
@@ -312,7 +405,7 @@ export default function SupplyRegisterPage() {
           </p>
         </div>
 
-        {/* ===== Stepper (بدون اسکرول) ===== */}
+        {/* ===== Stepper ===== */}
         <div className="mb-8">
           <div className="flex items-center justify-between gap-1 sm:gap-2">
             {wizardSteps.map((label, index) => {
@@ -365,218 +458,236 @@ export default function SupplyRegisterPage() {
           </div>
         )}
 
-        {/* ===== Success Box ===== */}
+        {/* ===== Success Message ===== */}
         {submitMessage && (
-          <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-700">
-            <div className="mb-1 flex items-center gap-2 font-bold"><ShieldCheck size={18} /> عملیات موفق</div>
-            <p className="text-sm">{submitMessage}</p>
-          </div>
-        )}
-
-        {/* ===== Step 0 - Basic Info ===== */}
-        {step === 0 && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-xl font-extrabold text-slate-900">اطلاعات پایه</h2>
-              <p className="mt-1 text-sm text-slate-500">عنوان، دسته‌بندی، صنعت، فناوری و شهر را مشخص کنید.</p>
-            </div>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <InputField
-                label="عنوان محصول / خدمت"
-                value={form.title}
-                onChange={(v) => updateForm('title', v)}
-                error={fieldErrors.title}
-                icon={<Tag size={18} />}
-                placeholder="مثال: سامانه مدیریت انرژی"
-              />
-              <SelectField
-                label="دسته‌بندی"
-                value={form.category}
-                onChange={(v) => updateForm('category', v)}
-                options={categoryOptions}
-                error={fieldErrors.category}
-                icon={<Layers size={18} />}
-              />
-              <SelectField
-                label="صنعت"
-                value={form.industry}
-                onChange={(v) => updateForm('industry', v)}
-                options={industryOptions}
-                icon={<Package size={18} />}
-                placeholder="انتخاب صنعت"
-              />
-              <InputField
-                label="فناوری"
-                value={form.technology}
-                onChange={(v) => updateForm('technology', v)}
-                icon={<Cpu size={18} />}
-                placeholder="مثال: هوش مصنوعی، اینترنت اشیاء"
-              />
-              <SelectField
-                label="شهر"
-                value={form.city}
-                onChange={(v) => updateForm('city', v)}
-                options={cityOptions}
-                icon={<MapPin size={18} />}
-                placeholder="انتخاب شهر"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* ===== Step 1 - Supply Details ===== */}
-        {step === 1 && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-xl font-extrabold text-slate-900">جزئیات عرضه</h2>
-              <p className="mt-1 text-sm text-slate-500">توضیحات، مقدار، قیمت و سطح آمادگی فناوری را وارد کنید.</p>
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-bold text-slate-700">توضیحات</label>
-              <textarea
-                value={form.description}
-                onChange={(e) => updateForm('description', e.target.value)}
-                rows={5}
-                className={`w-full rounded-2xl border bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:ring-2 ${
-                  fieldErrors.description ? 'border-red-400 focus:ring-red-400' : 'border-slate-200 focus:border-transparent focus:ring-[#1E3A8A]'
-                }`}
-                placeholder="توضیحات کامل محصول یا خدمت، کاربردها و مزایا..."
-              />
-              {fieldErrors.description && <p className="mt-1 text-xs text-red-500">{fieldErrors.description}</p>}
-            </div>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <InputField
-                label="مقدار"
-                value={form.quantity}
-                onChange={(v) => updateForm('quantity', v)}
-                error={fieldErrors.quantity}
-                icon={<Hash size={18} />}
-                inputMode="numeric"
-                placeholder="مثلاً ۱۰۰"
-              />
-              <SelectField
-                label="واحد"
-                value={form.unit}
-                onChange={(v) => updateForm('unit', v)}
-                options={unitOptions}
-                error={fieldErrors.unit}
-              />
-              <InputField
-                label="قیمت (تومان)"
-                value={form.price}
-                onChange={(v) => updateForm('price', v)}
-                error={fieldErrors.price}
-                icon={<DollarSign size={18} />}
-                inputMode="numeric"
-                placeholder="مثلاً ۵۰۰۰۰۰۰۰"
-              />
-              <InputField
-                label="سطح آمادگی فناوری (TRL)"
-                value={form.trl}
-                onChange={(v) => updateForm('trl', v)}
-                icon={<Cpu size={18} />}
-                inputMode="numeric"
-                placeholder="۱ تا ۹"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* ===== Step 2 - Documents ===== */}
-        {step === 2 && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-xl font-extrabold text-slate-900">مستندات و رسانه</h2>
-              <p className="mt-1 text-sm text-slate-500">تصاویر، کاتالوگ، گواهی‌نامه‌ها و مستندات فنی را بارگذاری کنید (اختیاری).</p>
-            </div>
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <FileUploadCard
-                title="تصاویر محصول"
-                description="فرمت‌های jpg, png, webp"
-                files={form.images}
-                onAdd={(files) => handleFileChange('images', files)}
-                onRemove={(index) => removeFile('images', index)}
-                accept="image/*"
-              />
-              <FileUploadCard
-                title="مستندات فنی"
-                description="PDF, Word, Excel"
-                files={form.documents}
-                onAdd={(files) => handleFileChange('documents', files)}
-                onRemove={(index) => removeFile('documents', index)}
-                accept=".pdf,.doc,.docx,.xls,.xlsx"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* ===== Step 3 - Review & Submit ===== */}
-        {step === 3 && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-xl font-extrabold text-slate-900">تأیید و ارسال</h2>
-              <p className="mt-1 text-sm text-slate-500">اطلاعات وارد شده را مرور کرده و عرضه را نهایی کنید.</p>
-            </div>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <SummaryCard title="اطلاعات پایه">
-                <SummaryRow label="عنوان" value={form.title} />
-                <SummaryRow label="دسته‌بندی" value={form.category} />
-                <SummaryRow label="صنعت" value={form.industry || '-'} />
-                <SummaryRow label="فناوری" value={form.technology || '-'} />
-                <SummaryRow label="شهر" value={form.city || '-'} />
-              </SummaryCard>
-              <SummaryCard title="جزئیات عرضه">
-                <SummaryRow label="توضیحات" value={form.description} />
-                <SummaryRow label="مقدار" value={form.quantity} />
-                <SummaryRow label="واحد" value={form.unit} />
-                <SummaryRow label="قیمت" value={`${form.price} تومان`} />
-                <SummaryRow label="TRL" value={form.trl || '-'} />
-              </SummaryCard>
-              <SummaryCard title="مستندات">
-                <SummaryRow label="تصاویر" value={form.images.length ? `${form.images.length} فایل` : 'بدون تصویر'} />
-                <SummaryRow label="مستندات" value={form.documents.length ? `${form.documents.length} فایل` : 'بدون مستندات'} />
-              </SummaryCard>
-            </div>
-          </div>
-        )}
-
-        {/* ===== Footer Navigation ===== */}
-        <div className="mt-10 flex flex-col gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:items-center sm:justify-between">
-          <button
-            type="button"
-            onClick={prevStep}
-            disabled={step === 0 || loading}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <ChevronRight size={18} /> مرحله قبل
-          </button>
-
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <Sparkles size={14} /> مرحله {step + 1} از {wizardSteps.length}
-          </div>
-
-          {step < 3 ? (
+          <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center">
+            <ShieldCheck className="h-14 w-14 text-emerald-600 mx-auto mb-3" strokeWidth={1.5} />
+            <h3 className="text-lg font-bold text-emerald-800">{submitMessage}</h3>
+            <p className="text-sm text-emerald-600 mt-1">عرضه شما با موفقیت در سامانه ثبت شد.</p>
             <button
-              type="button"
-              onClick={nextStep}
-              disabled={loading}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})` }}
+              onClick={() => router.push('/dashboard')}
+              className="mt-5 px-8 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition shadow-md"
             >
-              مرحله بعد <ChevronLeft size={18} />
+              رفتن به داشبورد
             </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={loading}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})` }}
-            >
-              {loading ? 'در حال ثبت...' : 'ثبت عرضه'} <ShieldCheck size={18} />
-            </button>
-          )}
-        </div>
+          </div>
+        )}
+
+        {/* ===== اگر submitMessage وجود دارد، بقیه محتوا را مخفی می‌کنیم ===== */}
+        {!submitMessage && (
+          <>
+            {/* ===== Step 0 - Basic Info ===== */}
+            {step === 0 && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-xl font-extrabold text-slate-900">اطلاعات پایه</h2>
+                  <p className="mt-1 text-sm text-slate-500">عنوان، دسته‌بندی، صنعت، فناوری و شهر را مشخص کنید.</p>
+                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <InputField
+                    label="عنوان محصول / خدمت"
+                    value={form.title}
+                    onChange={(v) => updateForm('title', v)}
+                    error={fieldErrors.title}
+                    icon={<Tag size={18} />}
+                    placeholder="مثال: سامانه مدیریت انرژی"
+                  />
+                  <SelectField
+                    label="دسته‌بندی"
+                    value={form.category}
+                    onChange={(v) => updateForm('category', v)}
+                    options={categoryOptions}
+                    error={fieldErrors.category}
+                    icon={<Layers size={18} />}
+                  />
+                  <SelectField
+                    label="صنعت"
+                    value={form.industry}
+                    onChange={(v) => updateForm('industry', v)}
+                    options={industryOptions}
+                    icon={<Package size={18} />}
+                    placeholder="انتخاب صنعت"
+                  />
+                  <InputField
+                    label="فناوری"
+                    value={form.technology}
+                    onChange={(v) => updateForm('technology', v)}
+                    icon={<Cpu size={18} />}
+                    placeholder="مثال: هوش مصنوعی، اینترنت اشیاء"
+                  />
+                  <SelectField
+                    label="شهر"
+                    value={form.city}
+                    onChange={(v) => updateForm('city', v)}
+                    options={cityOptions}
+                    icon={<MapPin size={18} />}
+                    placeholder="انتخاب شهر"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* ===== Step 1 - Supply Details ===== */}
+            {step === 1 && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-xl font-extrabold text-slate-900">جزئیات عرضه</h2>
+                  <p className="mt-1 text-sm text-slate-500">توضیحات، مقدار، قیمت و سطح آمادگی فناوری را وارد کنید.</p>
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-bold text-slate-700">توضیحات</label>
+                  <textarea
+                    value={form.description}
+                    onChange={(e) => updateForm('description', e.target.value)}
+                    rows={5}
+                    className={`w-full rounded-2xl border bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:ring-2 ${
+                      fieldErrors.description ? 'border-red-400 focus:ring-red-400' : 'border-slate-200 focus:border-transparent focus:ring-[#1E3A8A]'
+                    }`}
+                    placeholder="توضیحات کامل محصول یا خدمت، کاربردها و مزایا..."
+                  />
+                  {fieldErrors.description && <p className="mt-1 text-xs text-red-500">{fieldErrors.description}</p>}
+                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <InputField
+                    label="مقدار"
+                    value={form.quantity}
+                    onChange={(v) => updateForm('quantity', v)}
+                    error={fieldErrors.quantity}
+                    icon={<Hash size={18} />}
+                    inputMode="numeric"
+                    placeholder="مثلاً ۱۰۰"
+                  />
+                  <SelectField
+                    label="واحد"
+                    value={form.unit}
+                    onChange={(v) => updateForm('unit', v)}
+                    options={unitOptions}
+                    error={fieldErrors.unit}
+                  />
+                  <InputField
+                    label="قیمت (تومان)"
+                    value={form.price}
+                    onChange={(v) => updateForm('price', v)}
+                    error={fieldErrors.price}
+                    icon={<DollarSign size={18} />}
+                    inputMode="numeric"
+                    placeholder="مثلاً ۵۰۰۰۰۰۰۰"
+                  />
+                  <InputField
+                    label="سطح آمادگی فناوری (TRL)"
+                    value={form.trl}
+                    onChange={(v) => updateForm('trl', v)}
+                    icon={<Cpu size={18} />}
+                    inputMode="numeric"
+                    placeholder="۱ تا ۹"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* ===== Step 2 - Documents (با محدودیت ۳ تصویر) ===== */}
+            {step === 2 && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-xl font-extrabold text-slate-900">مستندات و رسانه</h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    تصاویر (حداکثر {MAX_IMAGES} عدد)، کاتالوگ، گواهی‌نامه‌ها و مستندات فنی را بارگذاری کنید (اختیاری).
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <FileUploadCard
+                    title="تصاویر محصول"
+                    description={`فرمت‌های jpg, png, webp (حداکثر ${MAX_IMAGES} عدد)`}
+                    files={form.images}
+                    onAdd={(files) => handleFileChange('images', files)}
+                    onRemove={(index) => removeFile('images', index)}
+                    accept="image/*"
+                    maxFiles={MAX_IMAGES}
+                    currentCount={form.images.length}
+                  />
+                  <FileUploadCard
+                    title="مستندات فنی"
+                    description="PDF, Word, Excel"
+                    files={form.documents}
+                    onAdd={(files) => handleFileChange('documents', files)}
+                    onRemove={(index) => removeFile('documents', index)}
+                    accept=".pdf,.doc,.docx,.xls,.xlsx"
+                    maxFiles={10}
+                    currentCount={form.documents.length}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* ===== Step 3 - Review & Submit ===== */}
+            {step === 3 && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-xl font-extrabold text-slate-900">تأیید و ارسال</h2>
+                  <p className="mt-1 text-sm text-slate-500">اطلاعات وارد شده را مرور کرده و عرضه را نهایی کنید.</p>
+                </div>
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <SummaryCard title="اطلاعات پایه">
+                    <SummaryRow label="عنوان" value={form.title} />
+                    <SummaryRow label="دسته‌بندی" value={form.category} />
+                    <SummaryRow label="صنعت" value={form.industry || '-'} />
+                    <SummaryRow label="فناوری" value={form.technology || '-'} />
+                    <SummaryRow label="شهر" value={form.city || '-'} />
+                  </SummaryCard>
+                  <SummaryCard title="جزئیات عرضه">
+                    <SummaryRow label="توضیحات" value={form.description} />
+                    <SummaryRow label="مقدار" value={form.quantity} />
+                    <SummaryRow label="واحد" value={form.unit} />
+                    <SummaryRow label="قیمت" value={`${form.price} تومان`} />
+                    <SummaryRow label="TRL" value={form.trl || '-'} />
+                  </SummaryCard>
+                  <SummaryCard title="مستندات">
+                    <SummaryRow label="تصاویر" value={form.images.length ? `${form.images.length} فایل` : 'بدون تصویر'} />
+                    <SummaryRow label="مستندات" value={form.documents.length ? `${form.documents.length} فایل` : 'بدون مستندات'} />
+                  </SummaryCard>
+                </div>
+              </div>
+            )}
+
+            {/* ===== Footer Navigation ===== */}
+            <div className="mt-10 flex flex-col gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:items-center sm:justify-between">
+              <button
+                type="button"
+                onClick={prevStep}
+                disabled={step === 0 || loading}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <ChevronRight size={18} /> مرحله قبل
+              </button>
+
+              <div className="flex items-center gap-2 text-xs text-slate-400">
+                <Sparkles size={14} /> مرحله {step + 1} از {wizardSteps.length}
+              </div>
+
+              {step < 3 ? (
+                <button
+                  type="button"
+                  onClick={nextStep}
+                  disabled={loading}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{ background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})` }}
+                >
+                  مرحله بعد <ChevronLeft size={18} />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={loading}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{ background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})` }}
+                >
+                  {loading ? 'در حال ثبت...' : 'ثبت عرضه'} <ShieldCheck size={18} />
+                </button>
+              )}
+            </div>
+          </>
+        )}
 
       </div>
     </div>
@@ -647,10 +758,19 @@ function SelectField({ label, value, onChange, options, error, icon, placeholder
   );
 }
 
-function FileUploadCard({ title, description, files, onAdd, onRemove, accept }: {
-  title: string; description: string; files: File[]; onAdd: (files: FileList | null) => void; onRemove: (index: number) => void; accept: string;
+function FileUploadCard({ title, description, files, onAdd, onRemove, accept, maxFiles, currentCount }: {
+  title: string;
+  description: string;
+  files: File[];
+  onAdd: (files: FileList | null) => void;
+  onRemove: (index: number) => void;
+  accept: string;
+  maxFiles?: number;
+  currentCount?: number;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isFull = maxFiles !== undefined && currentCount !== undefined && currentCount >= maxFiles;
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md">
       <div className="mb-4 flex items-start gap-3">
@@ -660,6 +780,7 @@ function FileUploadCard({ title, description, files, onAdd, onRemove, accept }: 
         <div>
           <h3 className="text-sm font-extrabold text-slate-800">{title}</h3>
           <p className="mt-1 text-xs leading-6 text-slate-500">{description}</p>
+          {isFull && <p className="text-xs text-red-500">تعداد مجاز تکمیل شده است.</p>}
         </div>
       </div>
       {files.length > 0 && (
@@ -675,8 +796,13 @@ function FileUploadCard({ title, description, files, onAdd, onRemove, accept }: 
       <button
         type="button"
         onClick={() => fileInputRef.current?.click()}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white shadow-md"
-        style={{ background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})` }}
+        className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white shadow-md transition ${
+          isFull ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.01]'
+        }`}
+        style={{
+          background: isFull ? '#9CA3AF' : `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})`
+        }}
+        disabled={isFull}
       >
         <Upload size={16} /> بارگذاری
       </button>

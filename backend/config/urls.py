@@ -1,3 +1,4 @@
+# config/urls.py
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
@@ -34,18 +35,22 @@ schema_view = get_schema_view(
     public=True,
     permission_classes=(permissions.AllowAny,),
 )
+
 # تغییر عنوان پنل ادمین
 admin.site.site_header = "مدیریت پلتفرم بازار تحول"
 admin.site.site_title = "مدیریت پلتفرم بازار تحول"
 admin.site.index_title = "پنل مدیریت بازار تحول"
+
 # ============================================================
 # لیست اصلی URLها
 # ============================================================
 urlpatterns = [
     # پنل ادمین
     path('admin/', admin.site.urls),
-    # config/urls.py (اضافه کردن به urlpatterns)
+    
+    # پروپوزال‌ها
     path('api/proposals/', include('proposals.urls')),
+    
     # صفحه اصلی
     path('', home, name='home'),
     
@@ -67,7 +72,6 @@ urlpatterns = [
     path('api/matching/', include('matching.urls')),
     path('api/search/', include('search.urls')),
     path('api/negotiations/', include('negotiations.urls')),
-    
     path('api/contracts/', include('contracts.urls')),
     path('api/execution/', include('execution.urls')),
     path('api/payments/', include('payments.urls')),
@@ -80,8 +84,12 @@ urlpatterns = [
     path('api/core/', include('core.urls')),
     
     # ============================================================
-    # API موقت داشبورد (جدید)
+    # اضافه کردن مسیرهای جدید Messages و Wallet
     # ============================================================
+    path('api/messages/', include('user_messages.urls')),  # ← اپلیکیشن پیام‌ها (تغییر نام از messages به user_messages)
+    path('api/wallet/', include('wallet.urls')),           # ← اپلیکیشن کیف پول
+    
+    # API داشبورد
     path('api/dashboard/', dashboard_api, name='dashboard_api'),
 ]
 
