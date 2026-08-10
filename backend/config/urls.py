@@ -81,6 +81,7 @@ urlpatterns = [
     path('api/marketing/', include('marketing.urls')),
     path('api/analytics/', include('analytics.urls')),
     path('api/governance/', include('governance.urls')),
+    path('api/', include('user_messages.urls')),
     path('api/core/', include('core.urls')),
     
     # ============================================================

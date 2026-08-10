@@ -1,4 +1,3 @@
-// next.config.ts
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
@@ -6,8 +5,8 @@ const nextConfig: NextConfig = {
   // تصاویر
   // ============================================================
   images: {
-    // remotePatterns جایگزین domains شده است
     remotePatterns: [
+      // Next.js development server
       {
         protocol: 'http',
         hostname: 'localhost',
@@ -18,30 +17,71 @@ const nextConfig: NextConfig = {
         hostname: '127.0.0.1',
         port: '3000',
       },
+
+      // Django backend - localhost
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+        port: '8000',
+      },
+
+      // Django backend - 127.0.0.1
+      {
+        protocol: 'http',
+        hostname: '127.0.0.1',
+        port: '8000',
+      },
+
+      // HTTPS remote images
       {
         protocol: 'https',
         hostname: '**',
       },
     ],
-    // فرمت‌های بهینه‌سازی شده
+
+    // فرمت‌های بهینه‌سازی‌شده تصاویر
     formats: ['image/avif', 'image/webp'],
-    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
-    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+
+    // اندازه‌های دستگاه
+    deviceSizes: [
+      640,
+      750,
+      828,
+      1080,
+      1200,
+      1920,
+      2048,
+      3840,
+    ],
+
+    // اندازه‌های تصاویر کوچک
+    imageSizes: [
+      16,
+      32,
+      48,
+      64,
+      96,
+      128,
+      256,
+      384,
+    ],
   },
 
   // ============================================================
   // بهینه‌سازی
   // ============================================================
   compress: true,
+
   productionBrowserSourceMaps: true,
 
   // ============================================================
-  // متغیرهای محیطی (عمومی)
+  // متغیرهای محیطی عمومی
   // ============================================================
   env: {
     NEXT_PUBLIC_APP_NAME: 'بازار تحول',
     NEXT_PUBLIC_APP_VERSION: '1.0.0',
-    NEXT_PUBLIC_APP_ENV: process.env.NODE_ENV || 'development',
+    NEXT_PUBLIC_APP_ENV:
+      process.env.NODE_ENV || 'development',
   },
 
   // ============================================================
@@ -77,17 +117,19 @@ const nextConfig: NextConfig = {
   // تنظیمات سرویس‌دهی فایل‌های استاتیک
   // ============================================================
   poweredByHeader: false,
+
   trailingSlash: false,
 
   // ============================================================
   // تنظیمات TypeScript
   // ============================================================
   typescript: {
-    ignoreBuildErrors: process.env.NODE_ENV === 'production',
+    ignoreBuildErrors:
+      process.env.NODE_ENV === 'production',
   },
 
   // ============================================================
-  // تنظیمات تولید (Optimization)
+  // تنظیمات تولید
   // ============================================================
   output: 'standalone',
 
@@ -100,21 +142,20 @@ const nextConfig: NextConfig = {
   },
 
   // ============================================================
-  // تنظیمات بیشتر برای بهینه‌سازی
+  // بهینه‌سازی بیشتر
   // ============================================================
   generateEtags: true,
 
   // ============================================================
-  // تنظیمات آزمایشی (Experimental)
+  // تنظیمات آزمایشی
   // ============================================================
   experimental: {
     optimizeCss: true,
   },
 
   // ============================================================
-  // ====== رفع خطای Turbopack و Webpack ======
+  // تنظیمات Turbopack
   // ============================================================
-  // اضافه کردن یک turbopack config خالی برای رفع خطا
   turbopack: {},
 };
 
