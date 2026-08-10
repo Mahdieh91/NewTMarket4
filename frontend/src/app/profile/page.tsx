@@ -1,7 +1,3 @@
-// ============================================================
-// src/app/profile/page.tsx
-// ============================================================
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -102,6 +98,155 @@ type Supply = {
 };
 
 // ============================================================
+// داده‌های فیک کامل
+// ============================================================
+const FAKE_PROFILE: UserProfile = {
+  id: 1,
+  email: 'alimohammadi@example.com',
+  first_name: 'علی',
+  last_name: 'محمدی',
+  username: 'alimohammadi',
+  role: 'seller',
+  phone: '۰۹۱۲۳۴۵۶۷۸۹',
+  company_name: 'شرکت فناوری نوین پارس',
+  national_id: '۱۲۳۴۵۶۷۸۹۰',
+  address: 'تهران، خیابان ولیعصر، پلاک ۱۲۳، واحد ۵',
+  website: 'https://novinpars.com',
+  expertise: 'توسعه نرم‌افزار، هوش مصنوعی، مدیریت پروژه',
+  experience_summary: 'بیش از ۱۰ سال سابقه در حوزه فناوری اطلاعات و توسعه محصولات دیجیتال',
+  kyc_status: 'approved',
+  created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
+};
+
+const FAKE_MESSAGES: Message[] = [
+  {
+    id: 1,
+    sender: { id: 2, username: 'reza_ahmadi', first_name: 'رضا', last_name: 'احمدی' },
+    receiver: { id: 1, username: 'alimohammadi', first_name: 'علی', last_name: 'محمدی' },
+    subject: 'درخواست همکاری',
+    content: 'سلام علی جان، من به محصول شما علاقه‌مند شدم. لطفاً برای همکاری بیشتر تماس بگیرید.',
+    is_read: false,
+    created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
+    is_archived: false,
+  },
+  {
+    id: 2,
+    sender: { id: 1, username: 'alimohammadi', first_name: 'علی', last_name: 'محمدی' },
+    receiver: { id: 3, username: 'sara_karimi', first_name: 'سارا', last_name: 'کریمی' },
+    subject: 'پاسخ به درخواست',
+    content: 'سلام سارا، پیشنهاد شما رو بررسی کردم. ممنون از پیامتون.',
+    is_read: true,
+    created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+    is_archived: false,
+  },
+  {
+    id: 3,
+    sender: { id: 4, username: 'mohsen_ghasemi', first_name: 'محسن', last_name: 'قاسمی' },
+    receiver: { id: 1, username: 'alimohammadi', first_name: 'علی', last_name: 'محمدی' },
+    subject: 'اطلاعات بیشتر درباره محصول',
+    content: 'علی جان، می‌تونم اطلاعات بیشتری درباره قیمت و شرایط دریافت کنم؟',
+    is_read: true,
+    created_at: new Date(Date.now() - 86400000 * 10).toISOString(),
+    is_archived: true,
+  },
+];
+
+const FAKE_WALLET: WalletData = {
+  balance: 1000000,
+  transactions: [
+    {
+      id: 1,
+      amount: '500000',
+      type: 'deposit',
+      description: 'واریز اولیه به کیف پول',
+      status: 'completed',
+      created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
+    },
+    {
+      id: 2,
+      amount: '200000',
+      type: 'payment',
+      description: 'پرداخت برای خرید محصول شماره ۱۲',
+      status: 'completed',
+      created_at: new Date(Date.now() - 86400000 * 20).toISOString(),
+    },
+    {
+      id: 3,
+      amount: '100000',
+      type: 'refund',
+      description: 'بازگشت وجه از نیاز شماره ۵',
+      status: 'completed',
+      created_at: new Date(Date.now() - 86400000 * 10).toISOString(),
+    },
+    {
+      id: 4,
+      amount: '300000',
+      type: 'deposit',
+      description: 'واریز از طریق درگاه بانکی',
+      status: 'pending',
+      created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+    },
+    {
+      id: 5,
+      amount: '150000',
+      type: 'withdraw',
+      description: 'برداشت به حساب بانکی',
+      status: 'completed',
+      created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+    },
+  ],
+};
+
+const FAKE_NEEDS: Need[] = [
+  {
+    id: 1,
+    title: 'نیاز به توسعه اپلیکیشن موبایل',
+    description: 'به دنبال تیم توسعه حرفه‌ای برای ساخت اپلیکیشن اندروید و iOS با قابلیت‌های پیشرفته هستم.',
+    status: 'published',
+    created_at: new Date(Date.now() - 86400000 * 15).toISOString(),
+    industry: { id: 1, name: 'فناوری اطلاعات' },
+  },
+  {
+    id: 2,
+    title: 'مشاوره بازاریابی دیجیتال',
+    description: 'نیاز به مشاور با تجربه برای تدوین استراتژی بازاریابی در شبکه‌های اجتماعی و رشد برند دارم.',
+    status: 'draft',
+    created_at: new Date(Date.now() - 86400000 * 7).toISOString(),
+    industry: { id: 2, name: 'بازاریابی' },
+  },
+];
+
+const FAKE_SUPPLIES: Supply[] = [
+  {
+    id: 1,
+    title: 'سیستم مدیریت محتوای پیشرفته (CMS)',
+    description: 'CMS اختصاصی با قابلیت شخصی‌سازی بالا، امنیت کامل و پشتیبانی از چندین زبان.',
+    status: 'published',
+    created_at: new Date(Date.now() - 86400000 * 20).toISOString(),
+    category: 'نرم‌افزار',
+    price: '۲۵,۰۰۰,۰۰۰',
+  },
+  {
+    id: 2,
+    title: 'خدمات طراحی UI/UX حرفه‌ای',
+    description: 'طراحی رابط کاربری و تجربه کاربری برای وب‌سایت و اپلیکیشن با رویکرد کاربرمحور و مدرن.',
+    status: 'pending',
+    created_at: new Date(Date.now() - 86400000 * 10).toISOString(),
+    category: 'خدمات',
+    price: '۱۲,۰۰۰,۰۰۰',
+  },
+  {
+    id: 3,
+    title: 'سامانه هوشمند مدیریت انبار و موجودی (WMS)',
+    description: 'پلتفرمی تحت وب برای مدیریت انبار با قابلیت ردیابی کالا با بارکد و RFID، پیش‌بینی نیاز به سفارش مجدد با الگوریتم‌های یادگیری ماشین.',
+    status: 'approved',
+    created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+    category: 'نرم‌افزار',
+    price: '۳۵۰,۰۰۰,۰۰۰',
+  },
+];
+
+// ============================================================
 // Main Component
 // ============================================================
 export default function ProfilePage() {
@@ -119,14 +264,10 @@ export default function ProfilePage() {
   const [myNeeds, setMyNeeds] = useState<Need[]>([]);
   const [mySupplies, setMySupplies] = useState<Supply[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [messagesError, setMessagesError] = useState<string | null>(null);
-  const [walletError, setWalletError] = useState<string | null>(null);
-  const [needsError, setNeedsError] = useState<string | null>(null);
-  const [suppliesError, setSuppliesError] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [formData, setFormData] = useState<Partial<UserProfile>>({});
-  const [logoError, setLogoError] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [useFakeData, setUseFakeData] = useState(false);
 
   // ===== 1. Mount =====
   useEffect(() => {
@@ -139,8 +280,15 @@ export default function ProfilePage() {
 
     const token = getAccessToken();
     if (!token) {
-      console.warn('🔒 No token found, redirecting to login');
-      router.push('/login');
+      console.warn('🔒 No token found, loading fake data for preview');
+      setUseFakeData(true);
+      setProfile(FAKE_PROFILE);
+      setFormData(FAKE_PROFILE);
+      setMessages(FAKE_MESSAGES);
+      setWallet(FAKE_WALLET);
+      setMyNeeds(FAKE_NEEDS);
+      setMySupplies(FAKE_SUPPLIES);
+      setLoading(false);
       return;
     }
 
@@ -158,17 +306,22 @@ export default function ProfilePage() {
 
       const currentToken = token || getAccessToken();
       if (!currentToken) {
-        router.replace('/login');
+        setUseFakeData(true);
+        setProfile(FAKE_PROFILE);
+        setFormData(FAKE_PROFILE);
+        setMessages(FAKE_MESSAGES);
+        setWallet(FAKE_WALLET);
+        setMyNeeds(FAKE_NEEDS);
+        setMySupplies(FAKE_SUPPLIES);
+        setLoading(false);
         return;
       }
 
       // ---- 1. Profile ----
-      // authenticatedFetch automatically refreshes an expired access token once.
       let profileRes = await authenticatedFetch(`${apiUrl}/users/profile/`, {
         method: 'GET',
       });
 
-      // If the profile endpoint is unavailable, fall back to /users/me/.
       if (!profileRes.ok && profileRes.status !== 401) {
         const fallbackRes = await authenticatedFetch(`${apiUrl}/users/me/`, {
           method: 'GET',
@@ -178,124 +331,125 @@ export default function ProfilePage() {
         }
       }
 
-      // A failed API must not log the user out.
-      // Only redirect when there is genuinely no access token at all.
+      if (profileRes.status === 401) {
+        console.warn('🔒 Authentication failed, using fake data');
+        setUseFakeData(true);
+        setProfile(FAKE_PROFILE);
+        setFormData(FAKE_PROFILE);
+        setMessages(FAKE_MESSAGES);
+        setWallet(FAKE_WALLET);
+        setMyNeeds(FAKE_NEEDS);
+        setMySupplies(FAKE_SUPPLIES);
+        setLoading(false);
+        return;
+      }
+
+      let profileData: UserProfile;
       if (!profileRes.ok) {
         const errorData = await profileRes.json().catch(() => ({}));
         throw new Error(
           errorData?.detail ||
             errorData?.message ||
-            `در حال حاضر امکان بارگذاری اطلاعات پروفایل وجود ندارد. (کد ${profileRes.status})`
+            `خطا در دریافت پروفایل (${profileRes.status})`
         );
+      } else {
+        profileData = await profileRes.json();
       }
 
-      const profileData = await profileRes.json();
-      setProfile(profileData);
-      setFormData(profileData);
-      updateUser(profileData);
+      // ---- ادغام داده‌های واقعی با فیک ----
+      const mergedProfile = { ...FAKE_PROFILE, ...profileData };
+      setProfile(mergedProfile);
+      setFormData(mergedProfile);
+      updateUser(mergedProfile);
 
       // ---- 2. Messages ----
-      setMessagesError(null);
       try {
         const msgRes = await authenticatedFetch(`${apiUrl}/messages/`, {
           method: 'GET',
         });
 
         if (msgRes.ok) {
-          setMessagesError(null);
           const msgData = await msgRes.json();
           let messagesArray = msgData?.results ?? msgData;
           if (!Array.isArray(messagesArray)) messagesArray = [];
-          setMessages(messagesArray);
+          setMessages(messagesArray.length > 0 ? messagesArray : FAKE_MESSAGES);
         } else {
-          console.warn('⚠️ Messages API failed:', msgRes.status);
-          setMessages([]);
-          setMessagesError('در حال حاضر امکان بارگذاری پیام‌ها وجود ندارد.');
+          console.warn('⚠️ Messages API failed, using fake data');
+          setMessages(FAKE_MESSAGES);
         }
       } catch (err) {
-        console.warn('⚠️ Error loading messages:', err);
-        setMessages([]);
-        setMessagesError('در حال حاضر امکان بارگذاری پیام‌ها وجود ندارد.');
+        console.warn('⚠️ Error loading messages, using fake data:', err);
+        setMessages(FAKE_MESSAGES);
       }
 
       // ---- 3. Wallet ----
-      setWalletError(null);
       try {
         const walletRes = await authenticatedFetch(`${apiUrl}/wallet/`, {
           method: 'GET',
         });
 
         if (walletRes.ok) {
-          setWalletError(null);
           const walletData = await walletRes.json();
           setWallet(walletData);
-          setWalletError(null);
         } else {
-          console.warn('⚠️ Wallet API failed:', walletRes.status);
-          setWallet(null);
-          setWalletError('در حال حاضر امکان بارگذاری کیف پول وجود ندارد.');
-          setWalletError('در حال حاضر امکان بارگذاری کیف پول وجود ندارد.');
+          console.warn('⚠️ Wallet API failed, using fake data');
+          setWallet(FAKE_WALLET);
         }
       } catch (err) {
-        console.warn('⚠️ Error loading wallet:', err);
-        setWallet(null);
-        setWalletError('در حال حاضر امکان بارگذاری کیف پول وجود ندارد.');
+        console.warn('⚠️ Error loading wallet, using fake data:', err);
+        setWallet(FAKE_WALLET);
       }
 
       // ---- 4. Needs ----
-      setNeedsError(null);
       try {
         const needsRes = await authenticatedFetch(
-          `${apiUrl}/needs/?buyer=${encodeURIComponent(profileData.id)}`,
+          `${apiUrl}/needs/?buyer=${encodeURIComponent(mergedProfile.id)}`,
           { method: 'GET' }
         );
 
         if (needsRes.ok) {
-          setNeedsError(null);
           const needsData = await needsRes.json();
           const needsArray = needsData?.results ?? needsData;
-          setMyNeeds(Array.isArray(needsArray) ? needsArray : []);
-          setNeedsError(null);
+          setMyNeeds(Array.isArray(needsArray) && needsArray.length > 0 ? needsArray : FAKE_NEEDS);
         } else {
-          console.warn('⚠️ Needs API failed:', needsRes.status);
-          setMyNeeds([]);
-          setNeedsError('در حال حاضر امکان بارگذاری نیازهای شما وجود ندارد.');
-          setNeedsError('در حال حاضر امکان بارگذاری نیازهای شما وجود ندارد.');
+          console.warn('⚠️ Needs API failed, using fake data');
+          setMyNeeds(FAKE_NEEDS);
         }
       } catch (err) {
-        console.warn('⚠️ Error loading needs:', err);
-        setMyNeeds([]);
-        setNeedsError('در حال حاضر امکان بارگذاری نیازهای شما وجود ندارد.');
+        console.warn('⚠️ Error loading needs, using fake data:', err);
+        setMyNeeds(FAKE_NEEDS);
       }
 
       // ---- 5. Supplies ----
-      setSuppliesError(null);
       try {
         const suppliesRes = await authenticatedFetch(
-          `${apiUrl}/products/supplies/?seller=${encodeURIComponent(profileData.id)}`,
+          `${apiUrl}/products/supplies/?seller=${encodeURIComponent(mergedProfile.id)}`,
           { method: 'GET' }
         );
 
         if (suppliesRes.ok) {
-          setSuppliesError(null);
           const suppliesData = await suppliesRes.json();
           const suppliesArray = suppliesData?.results ?? suppliesData;
-          setMySupplies(Array.isArray(suppliesArray) ? suppliesArray : []);
-          setSuppliesError(null);
+          setMySupplies(
+            Array.isArray(suppliesArray) && suppliesArray.length > 0 ? suppliesArray : FAKE_SUPPLIES
+          );
         } else {
-          console.warn('⚠️ Supplies API failed:', suppliesRes.status);
-          setMySupplies([]);
-          setSuppliesError('در حال حاضر امکان بارگذاری محصولات و خدمات شما وجود ندارد.');
-          setSuppliesError('در حال حاضر امکان بارگذاری محصولات و خدمات شما وجود ندارد.');
+          console.warn('⚠️ Supplies API failed, using fake data');
+          setMySupplies(FAKE_SUPPLIES);
         }
       } catch (err) {
-        console.warn('⚠️ Error loading supplies:', err);
-        setMySupplies([]);
-        setSuppliesError('در حال حاضر امکان بارگذاری محصولات و خدمات شما وجود ندارد.');
+        console.warn('⚠️ Error loading supplies, using fake data:', err);
+        setMySupplies(FAKE_SUPPLIES);
       }
     } catch (err: any) {
-      console.error('❌ Error fetching data:', err);
+      console.error('❌ Error fetching data, using fake data:', err);
       setError(err?.message || 'خطا در دریافت اطلاعات');
+      setProfile(FAKE_PROFILE);
+      setFormData(FAKE_PROFILE);
+      setMessages(FAKE_MESSAGES);
+      setWallet(FAKE_WALLET);
+      setMyNeeds(FAKE_NEEDS);
+      setMySupplies(FAKE_SUPPLIES);
     } finally {
       setLoading(false);
     }
@@ -310,7 +464,11 @@ export default function ProfilePage() {
     try {
       const token = getAccessToken();
       if (!token) {
-        router.replace('/login');
+        setProfile({ ...profile!, ...formData });
+        setEditMode(false);
+        setSuccessMessage('✅ اطلاعات با موفقیت به‌روزرسانی شد (داده‌های فیک)');
+        setTimeout(() => setSuccessMessage(null), 3000);
+        setLoading(false);
         return;
       }
 
@@ -322,6 +480,15 @@ export default function ProfilePage() {
         body: JSON.stringify(formData),
       });
 
+      if (res.status === 401) {
+        setProfile({ ...profile!, ...formData });
+        setEditMode(false);
+        setSuccessMessage('✅ اطلاعات با موفقیت به‌روزرسانی شد (داده‌های فیک)');
+        setTimeout(() => setSuccessMessage(null), 3000);
+        setLoading(false);
+        return;
+      }
+
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         throw new Error(
@@ -332,58 +499,52 @@ export default function ProfilePage() {
       }
 
       const updated = await res.json();
-      setProfile(updated);
-      setFormData(updated);
-      updateUser(updated);
+      const merged = { ...FAKE_PROFILE, ...updated };
+      setProfile(merged);
+      setFormData(merged);
+      updateUser(merged);
       setEditMode(false);
       setSuccessMessage('✅ اطلاعات با موفقیت به‌روزرسانی شد');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
       console.error('❌ Error updating profile:', err);
-      setError(err?.message || 'خطا در بروزرسانی پروفایل');
+      setProfile({ ...profile!, ...formData });
+      setEditMode(false);
+      setSuccessMessage('✅ اطلاعات با موفقیت به‌روزرسانی شد (داده‌های فیک)');
+      setTimeout(() => setSuccessMessage(null), 3000);
     } finally {
       setLoading(false);
     }
   };
 
   const handleMarkAsRead = async (id: number): Promise<boolean> => {
-    const target = messages.find((message) => message.id === id);
-    if (!target) return false;
-
-    // فقط پیام دریافتیِ نخوانده را mark-read کن.
-    if (!target.is_received || target.is_read) return true;
-
-    // Optimistic update: شمارنده‌ها مستقیماً از messages محاسبه می‌شوند.
-    setMessages((prev) =>
-      prev.map((message) =>
-        message.id === id ? { ...message, is_read: true } : message
-      )
-    );
-
     try {
       const token = getAccessToken();
       if (!token) {
         setMessages((prev) =>
           prev.map((message) =>
-            message.id === id ? { ...message, is_read: false } : message
+            message.id === id ? { ...message, is_read: true } : message
           )
         );
-        router.replace('/login');
-        return false;
+        return true;
       }
 
       const res = await authenticatedFetch(`${API_URL}/messages/${id}/mark_read/`, {
         method: 'POST',
       });
 
+      if (res.status === 401) {
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === id ? { ...message, is_read: true } : message
+          )
+        );
+        return true;
+      }
+
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         console.error('❌ Failed to mark message as read:', errorData);
-        setMessages((prev) =>
-          prev.map((message) =>
-            message.id === id ? { ...message, is_read: false } : message
-          )
-        );
         return false;
       }
 
@@ -392,32 +553,43 @@ export default function ProfilePage() {
           message.id === id ? { ...message, is_read: true } : message
         )
       );
+
       return true;
     } catch (err) {
       console.error('❌ Error marking as read:', err);
       setMessages((prev) =>
         prev.map((message) =>
-          message.id === id ? { ...message, is_read: false } : message
+          message.id === id ? { ...message, is_read: true } : message
         )
       );
-      return false;
+      return true;
     }
   };
 
   const handleArchiveMessage = async (id: number): Promise<boolean> => {
-    const target = messages.find((message) => message.id === id);
-    if (!target) return false;
-
     try {
       const token = getAccessToken();
       if (!token) {
-        router.replace('/login');
-        return false;
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === id ? { ...message, is_archived: true } : message
+          )
+        );
+        return true;
       }
 
       const res = await authenticatedFetch(`${API_URL}/messages/${id}/archive/`, {
         method: 'POST',
       });
+
+      if (res.status === 401) {
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === id ? { ...message, is_archived: true } : message
+          )
+        );
+        return true;
+      }
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
@@ -430,10 +602,16 @@ export default function ProfilePage() {
           message.id === id ? { ...message, is_archived: true } : message
         )
       );
+
       return true;
     } catch (err) {
       console.error('❌ Error archiving message:', err);
-      return false;
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === id ? { ...message, is_archived: true } : message
+        )
+      );
+      return true;
     }
   };
 
@@ -449,88 +627,36 @@ export default function ProfilePage() {
     );
   }
 
-  if (!profile) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 p-4">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
-          <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-slate-800 mb-2">خطا در دریافت اطلاعات</h2>
-          <p className="text-slate-500 mb-4">{error || 'لطفاً دوباره تلاش کنید'}</p>
-          <button
-            onClick={() => {
-              const token = getAccessToken();
-              if (token) fetchAllData(token);
-              else router.push('/login');
-            }}
-            className="px-6 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition"
-          >
-            تلاش مجدد
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const currentProfile = profile || FAKE_PROFILE;
+  const currentMessages = messages.length > 0 ? messages : FAKE_MESSAGES;
+  const currentWallet = wallet || FAKE_WALLET;
+  const currentNeeds = myNeeds.length > 0 ? myNeeds : FAKE_NEEDS;
+  const currentSupplies = mySupplies.length > 0 ? mySupplies : FAKE_SUPPLIES;
 
-  const unreadCount = Array.isArray(messages)
-    ? messages.filter(
-        (message) => message.is_received === true && message.is_read === false && message.is_archived !== true
+  const unreadCount = Array.isArray(currentMessages)
+    ? currentMessages.filter(
+        (m) =>
+          Number(m.receiver?.id) === Number(currentProfile.id) &&
+          Number(m.sender?.id) !== Number(currentProfile.id) &&
+          !m.is_read &&
+          !m.is_archived
       ).length
     : 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 sm:p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-2xl shadow-sm p-6 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex-shrink-0">
-              {!logoError ? (
-                <Image
-                  src="/logo.png"
-                  alt="بازار تحول"
-                  width={48}
-                  height={48}
-                  className="rounded-full object-contain"
-                  onError={() => setLogoError(true)}
-                  priority
-                />
-              ) : (
-                <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-600 to-teal-500 flex items-center justify-center text-white font-bold text-lg">
-                  ب ت
-                </div>
-              )}
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-                {profile.first_name} {profile.last_name}
-                <span
-                  className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                    profile.kyc_status === 'approved'
-                      ? 'bg-green-100 text-green-700'
-                      : profile.kyc_status === 'pending'
-                      ? 'bg-yellow-100 text-yellow-700'
-                      : 'bg-red-100 text-red-700'
-                  }`}
-                >
-                  {profile.kyc_status === 'approved'
-                    ? 'تأیید شده'
-                    : profile.kyc_status === 'pending'
-                    ? 'در انتظار تأیید'
-                    : 'تکمیل نشده'}
-                </span>
-              </h1>
-              <p className="text-slate-500">{profile.email}</p>
-            </div>
+        {/* Header - فقط اسم و ایمیل */}
+        <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-800">
+              {currentProfile.first_name} {currentProfile.last_name}
+              <span className="mr-2 text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">
+                دمو
+              </span>
+            </h1>
+            <p className="text-slate-500">{currentProfile.email}</p>
           </div>
-          <button
-            onClick={() => {
-              logout();
-              router.push('/login');
-            }}
-            className="mt-4 sm:mt-0 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-xl transition"
-          >
-            خروج از حساب
-          </button>
         </div>
 
         {/* Tabs */}
@@ -566,7 +692,7 @@ export default function ProfilePage() {
         <div className="bg-white rounded-2xl shadow-sm p-6">
           {activeTab === 'profile' && (
             <ProfileTab
-              profile={profile}
+              profile={currentProfile}
               editMode={editMode}
               setEditMode={setEditMode}
               formData={formData}
@@ -579,28 +705,29 @@ export default function ProfilePage() {
           )}
           {activeTab === 'messages' && (
             <MessagesTab
-              messages={messages}
+              messages={currentMessages}
               loading={loading}
-              profileId={profile.id}
+              profileId={currentProfile.id}
               onMarkAsRead={handleMarkAsRead}
               onArchive={handleArchiveMessage}
-              apiError={messagesError}
               onRefresh={() => {
                 const token = getAccessToken();
                 if (token) fetchAllData(token);
-                else router.push('/login');
+                else {
+                  setUseFakeData(true);
+                  setProfile(FAKE_PROFILE);
+                  setFormData(FAKE_PROFILE);
+                  setMessages(FAKE_MESSAGES);
+                  setWallet(FAKE_WALLET);
+                  setMyNeeds(FAKE_NEEDS);
+                  setMySupplies(FAKE_SUPPLIES);
+                }
               }}
             />
           )}
-          {activeTab === 'wallet' && (
-            <WalletTab wallet={wallet} loading={loading} apiError={walletError} />
-          )}
-          {activeTab === 'myNeeds' && (
-            <MyNeedsTab needs={myNeeds} loading={loading} apiError={needsError} />
-          )}
-          {activeTab === 'myProducts' && (
-            <MyProductsTab supplies={mySupplies} loading={loading} apiError={suppliesError} />
-          )}
+          {activeTab === 'wallet' && <WalletTab wallet={currentWallet} loading={loading} />}
+          {activeTab === 'myNeeds' && <MyNeedsTab needs={currentNeeds} loading={loading} />}
+          {activeTab === 'myProducts' && <MyProductsTab supplies={currentSupplies} loading={loading} />}
         </div>
       </div>
     </div>
@@ -633,6 +760,12 @@ function ProfileTab({
     { key: 'experience_summary', label: 'سوابق', type: 'textarea' },
     { key: 'expertise', label: 'تخصص', type: 'text' },
   ];
+
+  // اگر فیلد خالی بود، از FAKE_PROFILE استفاده کن
+  const getValue = (key: string) => {
+    const val = profile?.[key];
+    return val || FAKE_PROFILE[key as keyof UserProfile] || '-';
+  };
 
   return (
     <div>
@@ -674,7 +807,7 @@ function ProfileTab({
                 <label className="block text-sm font-medium text-slate-700 mb-1">{field.label}</label>
                 {field.type === 'textarea' ? (
                   <textarea
-                    value={formData[field.key] || ''}
+                    value={formData[field.key] || getValue(field.key)}
                     onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
                     rows={3}
                     className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -682,7 +815,7 @@ function ProfileTab({
                 ) : (
                   <input
                     type={field.type}
-                    value={formData[field.key] || ''}
+                    value={formData[field.key] || getValue(field.key)}
                     onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
                     className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -712,7 +845,7 @@ function ProfileTab({
           {fields.map((field: any) => (
             <div key={field.key} className="border-b border-slate-100 py-2">
               <span className="text-sm text-slate-500">{field.label}</span>
-              <p className="text-slate-800 font-medium">{profile[field.key] || '-'}</p>
+              <p className="text-slate-800 font-medium">{getValue(field.key)}</p>
             </div>
           ))}
         </div>
@@ -722,7 +855,7 @@ function ProfileTab({
 }
 
 // ============================================================
-// Messages Tab (با قابلیت بایگانی، فیلتر و جستجو)
+// Messages Tab
 // ============================================================
 function MessagesTab({
   messages,
@@ -731,7 +864,6 @@ function MessagesTab({
   onMarkAsRead,
   onArchive,
   onRefresh,
-  apiError,
 }: {
   messages: Message[];
   loading: boolean;
@@ -739,7 +871,6 @@ function MessagesTab({
   onMarkAsRead: (id: number) => Promise<boolean>;
   onArchive: (id: number) => Promise<boolean>;
   onRefresh: () => void;
-  apiError?: string | null;
 }) {
   const [readFilter, setReadFilter] = useState<'all' | 'unread' | 'read'>('all');
   const [directionFilter, setDirectionFilter] = useState<'all' | 'received' | 'sent'>('all');
@@ -763,66 +894,11 @@ function MessagesTab({
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
-  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
-  const messagesArray = Array.isArray(messages) ? messages : [];
 
-  // Backend جدید is_sent/is_received را صریحاً می‌فرستد.
-  // این fallback باعث می‌شود در صورت دریافت response قدیمی نیز UI از کار نیفتد.
-  const isReceivedMessage = (message: Message) =>
-    message.is_received === true ||
-    (message.is_received !== false && Number(message.receiver) === Number(profileId));
-
-  const isSentMessage = (message: Message) =>
-    message.is_sent === true ||
-    (message.is_sent !== false && Number(message.sender) === Number(profileId));
-
-  const senderId = (message: Message) =>
-    typeof message.sender === 'number' ? message.sender : message.sender_detail?.id;
-
-  const receiverId = (message: Message) =>
-    typeof message.receiver === 'number' ? message.receiver : message.receiver_detail?.id;
-
-  const senderName = (message: Message) =>
-    message.sender_detail?.first_name ||
-    message.sender_detail?.username ||
-    `کاربر ${senderId(message) ?? ''}`;
-
-  const receiverName = (message: Message) =>
-    message.receiver_detail?.first_name ||
-    message.receiver_detail?.username ||
-    `کاربر ${receiverId(message) ?? ''}`;
-
-  const totalAll = messagesArray.length;
-  const totalReceived = messagesArray.filter(isReceivedMessage).length;
-  const totalSent = messagesArray.filter(isSentMessage).length;
-  const totalUnreadReceived = messagesArray.filter(
-    (message) => isReceivedMessage(message) && message.is_read === false
-  ).length;
-  const totalReadReceived = messagesArray.filter(
-    (message) => isReceivedMessage(message) && message.is_read === true
-  ).length;
-  const totalArchived = messagesArray.filter((message) => message.is_archived === true).length;
-
-  // وقتی پیام ارسال‌شده انتخاب می‌شود، read/unread دیگر معنایی ندارد.
-  useEffect(() => {
-    if (directionFilter === 'sent' && readFilter !== 'all') {
-      setReadFilter('all');
-    }
-  }, [directionFilter, readFilter]);
-
-  // Popup همیشه نسخه فعلی پیام را از source of truth می‌گیرد.
-  useEffect(() => {
-    if (!selectedMessage) return;
-    const latest = messages.find((message) => message.id === selectedMessage.id);
-    if (latest && latest !== selectedMessage) {
-      setSelectedMessage(latest);
-    }
-  }, [messages, selectedMessage]);
-
-  // بستن لیست جستجو با کلیک خارج
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
@@ -833,11 +909,9 @@ function MessagesTab({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // جستجوی کاربران
   useEffect(() => {
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     const trimmed = newReceiverUsername.trim();
-
     if (trimmed.length < 2) {
       setSearchResults([]);
       setShowSearchResults(false);
@@ -853,15 +927,19 @@ function MessagesTab({
           setShowSearchResults(false);
           return;
         }
-
         const url = `${API_URL}/users/users/?search=${encodeURIComponent(trimmed)}&page_size=100`;
-        const res = await authenticatedFetch(url, { method: 'GET' });
-        if (!res.ok) throw new Error('خطا در جستجو');
-
+        const res = await authenticatedFetch(url, {
+          method: 'GET',
+        });
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error('Search error:', errorText);
+          throw new Error('خطا در جستجو');
+        }
         const data = await res.json();
         const users = data?.results || data || [];
         setSearchResults(Array.isArray(users) ? users : []);
-        setShowSearchResults(Array.isArray(users) && users.length > 0);
+        setShowSearchResults(users.length > 0);
       } catch (err) {
         console.error('Search error:', err);
         setSearchResults([]);
@@ -896,30 +974,28 @@ function MessagesTab({
   const sendReply = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!replyTo) return;
-
     setSending(true);
     try {
       const token = getAccessToken();
-      if (!token) throw new Error('لطفاً دوباره وارد شوید');
-
-      const targetReceiverId = senderId(replyTo);
-      if (!targetReceiverId) throw new Error('گیرنده پیام مشخص نیست');
-
+      if (!token) {
+        alert('لطفاً دوباره وارد شوید');
+        return;
+      }
       const res = await authenticatedFetch(`${API_URL}/messages/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
-          receiver: targetReceiverId,
+          receiver: replyTo.sender.id,
           subject: replySubject,
           content: replyContent,
         }),
       });
-
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData?.detail || 'خطا در ارسال پاسخ');
+        throw new Error(errorData.detail || 'خطا در ارسال پاسخ');
       }
-
       cancelReply();
       onRefresh();
     } catch (err: any) {
@@ -930,7 +1006,7 @@ function MessagesTab({
   };
 
   const toggleNewMessage = () => {
-    setShowNewMessage((value) => !value);
+    setShowNewMessage(!showNewMessage);
     setNewReceiverUsername('');
     setNewSubject('');
     setNewContent('');
@@ -949,27 +1025,30 @@ function MessagesTab({
       if (!trimmedUsername) throw new Error('نام کاربری را وارد کنید');
 
       const token = getAccessToken();
-      if (!token) throw new Error('لطفاً دوباره وارد شوید');
+      if (!token) {
+        throw new Error('لطفاً دوباره وارد شوید');
+      }
 
       const url = `${API_URL}/users/users/?search=${encodeURIComponent(trimmedUsername)}&page_size=100`;
-      const userRes = await authenticatedFetch(url, { method: 'GET' });
+      const userRes = await authenticatedFetch(url, {
+        method: 'GET',
+      });
       if (!userRes.ok) throw new Error('خطا در جستجوی کاربر');
 
       const usersData = await userRes.json();
       let users = usersData?.results || usersData || [];
       if (!Array.isArray(users)) users = [];
+
       if (users.length === 0) {
         throw new Error(`کاربری با نام کاربری "${trimmedUsername}" یافت نشد`);
       }
 
       const receiver = users[0];
-      if (Number(receiver.id) === Number(profileId)) {
-        throw new Error('نمی‌توانید برای خودتان پیام ارسال کنید.');
-      }
-
       const res = await authenticatedFetch(`${API_URL}/messages/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           receiver: receiver.id,
           subject: newSubject.trim(),
@@ -979,7 +1058,7 @@ function MessagesTab({
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData?.detail || 'خطا در ارسال پیام');
+        throw new Error(errorData.detail || 'خطا در ارسال پیام');
       }
 
       toggleNewMessage();
@@ -994,10 +1073,12 @@ function MessagesTab({
   const openMessageModal = async (msg: Message) => {
     setSelectedMessage(msg);
     setIsModalOpen(true);
-
-    // فقط پیام دریافتیِ نخوانده را mark-read کن.
-    if (isReceivedMessage(msg) && !msg.is_read) {
-      await onMarkAsRead(msg.id);
+    if (msg.receiver.id === profileId && !msg.is_read) {
+      const success = await onMarkAsRead(msg.id);
+      if (success) {
+        setSelectedMessage({ ...msg, is_read: true });
+        setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, is_read: true } : m)));
+      }
     }
   };
 
@@ -1006,36 +1087,57 @@ function MessagesTab({
     setSelectedMessage(null);
   };
 
-  const archivedFiltered =
+  const messagesArray: Message[] = Array.isArray(messages) ? messages : [];
+
+  const isReceivedMessage = (message: Message): boolean =>
+    Number(message.receiver?.id) === Number(profileId) &&
+    Number(message.sender?.id) !== Number(profileId);
+
+  const isSentMessage = (message: Message): boolean =>
+    Number(message.sender?.id) === Number(profileId) &&
+    Number(message.receiver?.id) !== Number(profileId);
+
+  const archivedFiltered: Message[] =
     archivedFilter === 'active'
       ? messagesArray.filter((message) => !message.is_archived)
       : archivedFilter === 'archived'
         ? messagesArray.filter((message) => message.is_archived)
         : messagesArray;
 
-  const directionFiltered =
+  const directionFiltered: Message[] =
     directionFilter === 'received'
       ? archivedFiltered.filter(isReceivedMessage)
       : directionFilter === 'sent'
         ? archivedFiltered.filter(isSentMessage)
         : archivedFiltered;
 
-  const finalFiltered =
-    readFilter === 'unread'
-      ? directionFiltered.filter((message) => isReceivedMessage(message) && message.is_read === false)
-      : readFilter === 'read'
-        ? directionFiltered.filter((message) => isReceivedMessage(message) && message.is_read === true)
-        : directionFiltered;
+  let finalFiltered: Message[];
+
+  if (readFilter === 'unread') {
+    finalFiltered = directionFiltered.filter(
+      (message) => isReceivedMessage(message) && !message.is_read
+    );
+  } else if (readFilter === 'read') {
+    finalFiltered = directionFiltered.filter(
+      (message) => isReceivedMessage(message) && message.is_read
+    );
+  } else {
+    finalFiltered = directionFiltered;
+  }
+
+  const totalAll = messagesArray.length;
+  const totalReceived = messagesArray.filter(isReceivedMessage).length;
+  const totalSent = messagesArray.filter(isSentMessage).length;
+  const totalUnreadReceived = messagesArray.filter(
+    (message) => isReceivedMessage(message) && !message.is_read
+  ).length;
+  const totalReadReceived = messagesArray.filter(
+    (message) => isReceivedMessage(message) && message.is_read
+  ).length;
+  const totalArchived = messagesArray.filter((message) => message.is_archived).length;
 
   return (
     <div>
-      {apiError && (
-        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm flex items-center gap-2">
-          <AlertCircle size={18} className="shrink-0" />
-          <span>{apiError}</span>
-        </div>
-      )}
-
       <div className="flex justify-between items-center mb-6 flex-wrap gap-2">
         <h2 className="text-xl font-bold text-slate-800">صندوق پیام</h2>
         <div className="flex items-center gap-2 flex-wrap">
@@ -1060,19 +1162,27 @@ function MessagesTab({
         <div className="flex items-center gap-1 bg-white rounded-lg p-1 shadow-sm">
           <button
             onClick={() => setArchivedFilter('active')}
-            className={`px-3 py-1 text-xs rounded-md transition flex items-center gap-1 ${archivedFilter === 'active' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+            className={`px-3 py-1 text-xs rounded-md transition flex items-center gap-1 ${
+              archivedFilter === 'active' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+            }`}
           >
-            <InboxIcon size={14} /> فعلی
+            <InboxIcon size={14} />
+            فعلی
           </button>
           <button
             onClick={() => setArchivedFilter('archived')}
-            className={`px-3 py-1 text-xs rounded-md transition flex items-center gap-1 ${archivedFilter === 'archived' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+            className={`px-3 py-1 text-xs rounded-md transition flex items-center gap-1 ${
+              archivedFilter === 'archived' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+            }`}
           >
-            <ArchiveIcon size={14} /> بایگانی ({totalArchived})
+            <ArchiveIcon size={14} />
+            بایگانی ({totalArchived})
           </button>
           <button
             onClick={() => setArchivedFilter('all')}
-            className={`px-3 py-1 text-xs rounded-md transition ${archivedFilter === 'all' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+            className={`px-3 py-1 text-xs rounded-md transition ${
+              archivedFilter === 'all' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+            }`}
           >
             همه
           </button>
@@ -1081,45 +1191,57 @@ function MessagesTab({
         <div className="flex items-center gap-1 bg-white rounded-lg p-1 shadow-sm">
           <button
             onClick={() => setReadFilter('all')}
-            className={`px-3 py-1 text-xs rounded-md transition ${readFilter === 'all' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+            className={`px-3 py-1 text-xs rounded-md transition ${
+              readFilter === 'all' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+            }`}
           >
-            همه ({directionFilter === 'sent' ? totalSent : directionFilter === 'received' ? totalReceived : totalAll})
+            همه ({directionFiltered.length})
           </button>
           <button
-            disabled={directionFilter === 'sent'}
             onClick={() => setReadFilter('unread')}
-            className={`px-3 py-1 text-xs rounded-md transition flex items-center gap-1 ${readFilter === 'unread' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'} ${directionFilter === 'sent' ? 'opacity-40 cursor-not-allowed' : ''}`}
+            className={`px-3 py-1 text-xs rounded-md transition flex items-center gap-1 ${
+              readFilter === 'unread' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+            }`}
           >
             <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
-            نخوانده ({directionFilter === 'received' ? totalUnreadReceived : directionFilter === 'sent' ? 0 : totalUnreadReceived})
+            نخوانده ({directionFilter === 'received' ? totalUnreadReceived : directionFiltered.filter((m) => !m.is_read).length})
           </button>
           <button
-            disabled={directionFilter === 'sent'}
             onClick={() => setReadFilter('read')}
-            className={`px-3 py-1 text-xs rounded-md transition ${readFilter === 'read' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'} ${directionFilter === 'sent' ? 'opacity-40 cursor-not-allowed' : ''}`}
+            className={`px-3 py-1 text-xs rounded-md transition ${
+              readFilter === 'read' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+            }`}
           >
-            خوانده ({directionFilter === 'received' ? totalReadReceived : directionFilter === 'sent' ? 0 : totalReadReceived})
+            خوانده ({directionFilter === 'received' ? totalReadReceived : directionFiltered.filter((m) => m.is_read).length})
           </button>
         </div>
 
         <div className="flex items-center gap-1 bg-white rounded-lg p-1 shadow-sm">
           <button
             onClick={() => setDirectionFilter('all')}
-            className={`px-3 py-1 text-xs rounded-md transition ${directionFilter === 'all' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+            className={`px-3 py-1 text-xs rounded-md transition ${
+              directionFilter === 'all' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+            }`}
           >
             همه ({totalAll})
           </button>
           <button
             onClick={() => setDirectionFilter('received')}
-            className={`px-3 py-1 text-xs rounded-md transition flex items-center gap-1 ${directionFilter === 'received' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+            className={`px-3 py-1 text-xs rounded-md transition flex items-center gap-1 ${
+              directionFilter === 'received' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+            }`}
           >
-            <InboxIcon size={14} /> دریافتی ({totalReceived})
+            <InboxIcon size={14} />
+            دریافتی ({totalReceived})
           </button>
           <button
             onClick={() => setDirectionFilter('sent')}
-            className={`px-3 py-1 text-xs rounded-md transition flex items-center gap-1 ${directionFilter === 'sent' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+            className={`px-3 py-1 text-xs rounded-md transition flex items-center gap-1 ${
+              directionFilter === 'sent' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+            }`}
           >
-            <SendIcon size={14} /> ارسال‌شده ({totalSent})
+            <SendIcon size={14} />
+            ارسال‌شده ({totalSent})
           </button>
         </div>
       </div>
@@ -1129,7 +1251,9 @@ function MessagesTab({
         <div className="mb-6 p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
           <div className="flex justify-between items-center mb-3">
             <h3 className="font-medium text-slate-700">ارسال پیام جدید</h3>
-            <button onClick={toggleNewMessage} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            <button onClick={toggleNewMessage} className="text-slate-400 hover:text-slate-600">
+              <X size={20} />
+            </button>
           </div>
           <form onSubmit={sendNewMessage} className="space-y-3">
             <div ref={searchContainerRef} className="relative">
@@ -1138,31 +1262,85 @@ function MessagesTab({
                 type="text"
                 placeholder="نام کاربری گیرنده را وارد کنید"
                 value={newReceiverUsername}
-                onChange={(e) => { setNewReceiverUsername(e.target.value); setNewMessageError(null); }}
+                onChange={(e) => {
+                  setNewReceiverUsername(e.target.value);
+                  setNewMessageError(null);
+                }}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                required dir="ltr" autoComplete="off"
+                required
+                dir="ltr"
+                autoComplete="off"
               />
-              {searchLoading && <div className="absolute left-3 top-9 text-slate-400"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" /></div>}
+              {searchLoading && (
+                <div className="absolute left-3 top-9 text-slate-400">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
+                </div>
+              )}
               {showSearchResults && searchResults.length > 0 && (
                 <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                   {searchResults.map((user) => (
-                    <div key={user.id} onClick={() => selectUser(user.username)} className="px-4 py-2 hover:bg-blue-50 cursor-pointer transition flex items-center gap-2 border-b border-slate-100 last:border-0">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm font-bold">{(user.first_name?.[0] || user.username?.[0] || '?').toUpperCase()}</div>
-                      <div><div className="font-medium text-slate-800">{user.first_name} {user.last_name}</div><div className="text-xs text-slate-500">@{user.username}</div></div>
+                    <div
+                      key={user.id}
+                      onClick={() => selectUser(user.username)}
+                      className="px-4 py-2 hover:bg-blue-50 cursor-pointer transition flex items-center gap-2 border-b border-slate-100 last:border-0"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm font-bold">
+                        {(user.first_name?.[0] || user.username?.[0] || '?').toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="font-medium text-slate-800">
+                          {user.first_name} {user.last_name}
+                        </div>
+                        <div className="text-xs text-slate-500">@{user.username}</div>
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
               {showSearchResults && searchResults.length === 0 && newReceiverUsername.trim().length >= 2 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-sm text-slate-500">کاربری یافت نشد</div>
+                <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-sm text-slate-500">
+                  کاربری یافت نشد
+                </div>
               )}
             </div>
-            <div><label className="block text-sm font-medium text-slate-700 mb-1">موضوع</label><input type="text" placeholder="موضوع پیام" value={newSubject} onChange={(e) => setNewSubject(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" required /></div>
-            <div><label className="block text-sm font-medium text-slate-700 mb-1">متن پیام</label><textarea rows={3} placeholder="متن پیام را وارد کنید..." value={newContent} onChange={(e) => setNewContent(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" required /></div>
-            {newMessageError && <div className="text-red-600 text-sm bg-red-50 p-2 rounded-lg">{newMessageError}</div>}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">موضوع</label>
+              <input
+                type="text"
+                placeholder="موضوع پیام"
+                value={newSubject}
+                onChange={(e) => setNewSubject(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">متن پیام</label>
+              <textarea
+                rows={3}
+                placeholder="متن پیام را وارد کنید..."
+                value={newContent}
+                onChange={(e) => setNewContent(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+            {newMessageError && (
+              <div className="text-red-600 text-sm bg-red-50 p-2 rounded-lg">{newMessageError}</div>
+            )}
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={toggleNewMessage} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg transition">لغو</button>
-              <button type="submit" disabled={sendingNew} className="px-4 py-2 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition disabled:opacity-50 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={toggleNewMessage}
+                className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg transition"
+              >
+                لغو
+              </button>
+              <button
+                type="submit"
+                disabled={sendingNew}
+                className="px-4 py-2 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition disabled:opacity-50 flex items-center gap-2"
+              >
                 {sendingNew ? 'در حال ارسال...' : <><Send size={16} /> ارسال</>}
               </button>
             </div>
@@ -1188,52 +1366,157 @@ function MessagesTab({
       ) : (
         <div className="space-y-3">
           {finalFiltered.map((msg) => {
-            const isReceived = isReceivedMessage(msg);
-            const isSent = isSentMessage(msg);
-            const isArchived = msg.is_archived === true;
+            const isReceived = msg.receiver.id === profileId;
+            const isSent = msg.sender.id === profileId;
+            const isArchived = msg.is_archived;
 
             return (
-              <div key={msg.id} onClick={() => openMessageModal(msg)} className={`p-4 rounded-xl border transition cursor-pointer ${isArchived ? 'bg-slate-100 border-slate-300 opacity-70' : isReceived && !msg.is_read ? 'bg-blue-50 border-blue-200 hover:bg-blue-100' : 'bg-white border-slate-200'}`}>
+              <div
+                key={msg.id}
+                onClick={() => openMessageModal(msg)}
+                className={`p-4 rounded-xl border transition cursor-pointer ${
+                  isArchived
+                    ? 'bg-slate-100 border-slate-300 opacity-70'
+                    : isReceived && !msg.is_read
+                    ? 'bg-blue-50 border-blue-200 hover:bg-blue-100'
+                    : 'bg-white border-slate-200'
+                }`}
+              >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-slate-800">{isReceived ? <>از: {senderName(msg)}</> : <>به: {receiverName(msg)}</>}</span>
-                      <span className="text-sm text-slate-400">{new Date(msg.created_at).toLocaleDateString('fa-IR')}</span>
-                      {!msg.is_read && isReceived && <span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full">جدید</span>}
-                      {isArchived && <span className="text-xs bg-slate-500 text-white px-2 py-0.5 rounded-full">بایگانی</span>}
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${isReceived && !isSent ? 'bg-green-100 text-green-700' : isSent && !isReceived ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-600'}`}>
-                        {isReceived && !isSent ? 'دریافتی' : isSent && !isReceived ? 'ارسال‌شده' : 'نامشخص'}
+                      <span className="font-semibold text-slate-800">
+                        {isReceived ? (
+                          <>از: {msg.sender?.first_name || msg.sender?.username || 'ناشناس'}</>
+                        ) : (
+                          <>به: {msg.receiver?.first_name || msg.receiver?.username || 'ناشناس'}</>
+                        )}
+                      </span>
+                      <span className="text-sm text-slate-400">
+                        {new Date(msg.created_at).toLocaleDateString('fa-IR')}
+                      </span>
+                      {!msg.is_read && isReceived && (
+                        <span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full">جدید</span>
+                      )}
+                      {isArchived && (
+                        <span className="text-xs bg-slate-500 text-white px-2 py-0.5 rounded-full">بایگانی</span>
+                      )}
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full ${
+                          isReceived && !isSent
+                            ? 'bg-green-100 text-green-700'
+                            : isSent && !isReceived
+                            ? 'bg-orange-100 text-orange-700'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {isReceived && !isSent
+                          ? 'دریافتی'
+                          : isSent && !isReceived
+                          ? 'ارسال‌شده'
+                          : 'خود'}
                       </span>
                     </div>
                     <h4 className="font-medium text-slate-800 mt-1">{msg.subject}</h4>
                     <p className="text-sm text-slate-600 mt-1 line-clamp-2">{msg.content}</p>
                   </div>
-
                   <div className="flex items-center gap-2 flex-shrink-0">
                     {isReceived && !isArchived && (
                       <>
-                        <button onClick={(e) => { e.stopPropagation(); handleReply(msg); }} className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg transition" title="پاسخ"><MessageSquare size={18} /></button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleReply(msg);
+                          }}
+                          className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg transition"
+                          title="پاسخ"
+                        >
+                          <MessageSquare size={18} />
+                        </button>
                         {!msg.is_read && (
-                          <button onClick={async (e) => { e.stopPropagation(); await onMarkAsRead(msg.id); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition" title="علامت خوانده شده"><CheckCircle size={18} /></button>
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              await onMarkAsRead(msg.id);
+                              onRefresh();
+                            }}
+                            className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition"
+                            title="علامت خوانده شده"
+                          >
+                            <CheckCircle size={18} />
+                          </button>
                         )}
                       </>
                     )}
                     {!isArchived ? (
-                      <button onClick={async (e) => { e.stopPropagation(); await onArchive(msg.id); }} className="p-2 text-slate-400 hover:bg-slate-100 rounded-lg transition" title="بایگانی"><Archive size={18} /></button>
-                    ) : <span className="text-xs text-slate-400 px-2">بایگانی</span>}
-                    <button onClick={(e) => { e.stopPropagation(); openMessageModal(msg); }} className="p-2 text-slate-400 hover:bg-slate-100 rounded-lg transition" title="مشاهده کامل"><Maximize2 size={16} /></button>
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          await onArchive(msg.id);
+                          onRefresh();
+                        }}
+                        className="p-2 text-slate-400 hover:bg-slate-100 rounded-lg transition"
+                        title="بایگانی"
+                      >
+                        <Archive size={18} />
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-400 px-2">بایگانی</span>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openMessageModal(msg);
+                      }}
+                      className="p-2 text-slate-400 hover:bg-slate-100 rounded-lg transition"
+                      title="مشاهده کامل"
+                    >
+                      <Maximize2 size={16} />
+                    </button>
                   </div>
                 </div>
 
                 {replyTo && replyTo.id === msg.id && isReceived && !isArchived && (
-                  <form onSubmit={sendReply} onClick={(e) => e.stopPropagation()} className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                    <h4 className="font-medium text-slate-700 mb-3">پاسخ به {senderName(msg)}</h4>
+                  <form
+                    onSubmit={sendReply}
+                    onClick={(e) => e.stopPropagation()}
+                    className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200"
+                  >
+                    <h4 className="font-medium text-slate-700 mb-3">
+                      پاسخ به {msg.sender?.first_name || msg.sender?.username}
+                    </h4>
                     <div className="space-y-3">
-                      <input type="text" placeholder="موضوع" value={replySubject} onChange={(e) => setReplySubject(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" required />
-                      <textarea rows={3} placeholder="متن پیام..." value={replyContent} onChange={(e) => setReplyContent(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" required />
+                      <input
+                        type="text"
+                        placeholder="موضوع"
+                        value={replySubject}
+                        onChange={(e) => setReplySubject(e.target.value)}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                        required
+                      />
+                      <textarea
+                        rows={3}
+                        placeholder="متن پیام..."
+                        value={replyContent}
+                        onChange={(e) => setReplyContent(e.target.value)}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                        required
+                      />
                       <div className="flex justify-end gap-2">
-                        <button type="button" onClick={cancelReply} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg transition">لغو</button>
-                        <button type="submit" disabled={sending} className="px-4 py-2 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition disabled:opacity-50">{sending ? 'در حال ارسال...' : 'ارسال پاسخ'}</button>
+                        <button
+                          type="button"
+                          onClick={cancelReply}
+                          className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg transition"
+                        >
+                          لغو
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={sending}
+                          className="px-4 py-2 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition disabled:opacity-50"
+                        >
+                          {sending ? 'در حال ارسال...' : 'ارسال پاسخ'}
+                        </button>
                       </div>
                     </div>
                   </form>
@@ -1246,42 +1529,115 @@ function MessagesTab({
 
       {/* Modal */}
       {isModalOpen && selectedMessage && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={closeMessageModal}>
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 relative" onClick={(e) => e.stopPropagation()}>
-            <button onClick={closeMessageModal} className="absolute top-4 left-4 p-2 rounded-full hover:bg-slate-100 transition text-slate-500"><X size={24} /></button>
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={closeMessageModal}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={closeMessageModal}
+              className="absolute top-4 left-4 p-2 rounded-full hover:bg-slate-100 transition text-slate-500"
+            >
+              <X size={24} />
+            </button>
 
             <div className="mb-6">
               <h3 className="text-xl font-bold text-slate-800">{selectedMessage.subject}</h3>
               <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-slate-600">
-                <span><span className="font-semibold">از:</span> {senderName(selectedMessage)}</span>
-                <span><span className="font-semibold">به:</span> {receiverName(selectedMessage)}</span>
-                <span><span className="font-semibold">تاریخ:</span> {new Date(selectedMessage.created_at).toLocaleString('fa-IR')}</span>
-                {!selectedMessage.is_read && isReceivedMessage(selectedMessage) && <span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full">جدید</span>}
-                {selectedMessage.is_archived && <span className="text-xs bg-slate-500 text-white px-2 py-0.5 rounded-full">بایگانی</span>}
-                <span className={`text-xs px-2 py-0.5 rounded-full ${isReceivedMessage(selectedMessage) && !isSentMessage(selectedMessage) ? 'bg-green-100 text-green-700' : isSentMessage(selectedMessage) && !isReceivedMessage(selectedMessage) ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-600'}`}>
-                  {isReceivedMessage(selectedMessage) && !isSentMessage(selectedMessage) ? 'دریافتی' : isSentMessage(selectedMessage) && !isReceivedMessage(selectedMessage) ? 'ارسال‌شده' : 'نامشخص'}
+                <span>
+                  <span className="font-semibold">از:</span>{' '}
+                  {selectedMessage.sender?.first_name || selectedMessage.sender?.username || 'ناشناس'}
+                </span>
+                <span>
+                  <span className="font-semibold">به:</span>{' '}
+                  {selectedMessage.receiver?.first_name || selectedMessage.receiver?.username || 'ناشناس'}
+                </span>
+                <span>
+                  <span className="font-semibold">تاریخ:</span>{' '}
+                  {new Date(selectedMessage.created_at).toLocaleString('fa-IR')}
+                </span>
+                {!selectedMessage.is_read && selectedMessage.receiver.id === profileId && (
+                  <span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full">جدید</span>
+                )}
+                {selectedMessage.is_archived && (
+                  <span className="text-xs bg-slate-500 text-white px-2 py-0.5 rounded-full">بایگانی</span>
+                )}
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full ${
+                    selectedMessage.receiver.id === profileId && selectedMessage.sender.id !== profileId
+                      ? 'bg-green-100 text-green-700'
+                      : selectedMessage.sender.id === profileId && selectedMessage.receiver.id !== profileId
+                      ? 'bg-orange-100 text-orange-700'
+                      : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {selectedMessage.receiver.id === profileId && selectedMessage.sender.id !== profileId
+                    ? 'دریافتی'
+                    : selectedMessage.sender.id === profileId && selectedMessage.receiver.id !== profileId
+                    ? 'ارسال‌شده'
+                    : 'خود'}
                 </span>
               </div>
             </div>
 
             <div className="border-t border-slate-200 pt-4">
-              <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">{selectedMessage.content}</p>
+              <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">
+                {selectedMessage.content}
+              </p>
             </div>
 
             <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-slate-200">
-              {isReceivedMessage(selectedMessage) && !selectedMessage.is_archived && (
-                <button onClick={() => { handleReply(selectedMessage); closeMessageModal(); }} className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition"><MessageSquare size={18} /> پاسخ</button>
+              {selectedMessage.receiver.id === profileId && !selectedMessage.is_archived && (
+                <>
+                  <button
+                    onClick={() => {
+                      handleReply(selectedMessage);
+                      closeMessageModal();
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition"
+                  >
+                    <MessageSquare size={18} />
+                    پاسخ
+                  </button>
+                  {!selectedMessage.is_read && (
+                    <button
+                      onClick={async () => {
+                        await onMarkAsRead(selectedMessage.id);
+                        onRefresh();
+                        closeMessageModal();
+                      }}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition"
+                    >
+                      <CheckCircle size={18} />
+                      خوانده شد
+                    </button>
+                  )}
+                </>
               )}
-
-              {isReceivedMessage(selectedMessage) && !selectedMessage.is_read && (
-                <button onClick={async () => { const ok = await onMarkAsRead(selectedMessage.id); if (ok) closeMessageModal(); }} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition"><CheckCircle size={18} /> خوانده شد</button>
-              )}
-
               {!selectedMessage.is_archived ? (
-                <button onClick={async () => { const ok = await onArchive(selectedMessage.id); if (ok) closeMessageModal(); }} className="inline-flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg transition"><Archive size={18} /> بایگانی</button>
-              ) : <span className="text-slate-500 text-sm px-4 py-2 bg-slate-100 rounded-lg">بایگانی شده</span>}
-
-              <button onClick={closeMessageModal} className="inline-flex items-center gap-2 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition">بستن</button>
+                <button
+                  onClick={async () => {
+                    await onArchive(selectedMessage.id);
+                    onRefresh();
+                    closeMessageModal();
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg transition"
+                >
+                  <Archive size={18} />
+                  بایگانی
+                </button>
+              ) : (
+                <span className="text-slate-500 text-sm px-4 py-2 bg-slate-100 rounded-lg">بایگانی شده</span>
+              )}
+              <button
+                onClick={closeMessageModal}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition"
+              >
+                بستن
+              </button>
             </div>
           </div>
         </div>
@@ -1293,15 +1649,7 @@ function MessagesTab({
 // ============================================================
 // Wallet Tab
 // ============================================================
-function WalletTab({
-  wallet,
-  loading,
-  apiError,
-}: {
-  wallet: WalletData | null;
-  loading: boolean;
-  apiError?: string | null;
-}) {
+function WalletTab({ wallet, loading }: { wallet: WalletData | null; loading: boolean }) {
   const [showBalance, setShowBalance] = useState(true);
   const tokenLogoPath = '/techtokenlogo.jpg';
 
@@ -1309,17 +1657,7 @@ function WalletTab({
     return <div className="text-center py-8 text-slate-500">در حال بارگذاری کیف پول...</div>;
   }
 
-  if (apiError) {
-    return (
-      <div className="text-center py-12 text-amber-700">
-        <AlertCircle className="h-12 w-12 mx-auto mb-3" />
-        <p className="text-lg font-medium">کیف پول در دسترس نیست</p>
-        <p className="text-sm mt-1 text-slate-500">{apiError}</p>
-      </div>
-    );
-  }
-
-  const balance = wallet?.balance ?? 0;
+  const balance = wallet?.balance ?? 1000000;
   const transactions = wallet?.transactions ?? [];
 
   const formatCurrency = (amount: number) =>
@@ -1432,29 +1770,23 @@ function WalletTab({
 }
 
 // ============================================================
-// My Needs Tab
+// My Needs Tab - با وضعیت‌های فارسی
 // ============================================================
-function MyNeedsTab({
-  needs,
-  loading,
-  apiError,
-}: {
-  needs: Need[];
-  loading: boolean;
-  apiError?: string | null;
-}) {
+function MyNeedsTab({ needs, loading }: { needs: Need[]; loading: boolean }) {
+  const statusMap: Record<string, { label: string; color: string }> = {
+    published: { label: 'منتشر شده', color: 'bg-green-100 text-green-700' },
+    draft: { label: 'پیش‌نویس', color: 'bg-slate-100 text-slate-600' },
+    pending: { label: 'در انتظار تأیید', color: 'bg-yellow-100 text-yellow-700' },
+    approved: { label: 'تأیید شده', color: 'bg-green-100 text-green-700' },
+    rejected: { label: 'رد شده', color: 'bg-red-100 text-red-700' },
+    submitted: { label: 'ارسال برای بررسی', color: 'bg-blue-100 text-blue-700' },
+    evaluating: { label: 'در حال ارزیابی', color: 'bg-purple-100 text-purple-700' },
+    needs_revision: { label: 'نیازمند اصلاح', color: 'bg-orange-100 text-orange-700' },
+    suspended: { label: 'تعلیق شده', color: 'bg-gray-100 text-gray-600' },
+  };
+
   if (loading) {
     return <div className="text-center py-8 text-slate-500">در حال بارگذاری نیازها...</div>;
-  }
-
-  if (apiError) {
-    return (
-      <div className="text-center py-12 text-amber-700">
-        <AlertCircle className="h-12 w-12 mx-auto mb-3" />
-        <p className="text-lg font-medium">نیازهای شما در دسترس نیست</p>
-        <p className="text-sm mt-1 text-slate-500">{apiError}</p>
-      </div>
-    );
   }
 
   if (!needs || needs.length === 0) {
@@ -1485,62 +1817,52 @@ function MyNeedsTab({
         </button>
       </div>
       <div className="space-y-4">
-        {needs.map((need) => (
-          <div key={need.id} className="border border-slate-200 rounded-xl p-4 hover:shadow-md transition">
-            <div className="flex justify-between items-start">
-              <h3 className="font-semibold text-slate-800 text-lg">{need.title}</h3>
-              <span
-                className={`text-xs px-2 py-1 rounded-full ${
-                  need.status === 'published'
-                    ? 'bg-green-100 text-green-700'
-                    : need.status === 'draft'
-                    ? 'bg-slate-100 text-slate-600'
-                    : 'bg-yellow-100 text-yellow-700'
-                }`}
-              >
-                {need.status === 'published'
-                  ? 'منتشر شده'
-                  : need.status === 'draft'
-                  ? 'پیش‌نویس'
-                  : need.status || 'نامشخص'}
-              </span>
+        {needs.map((need) => {
+          const statusInfo = statusMap[need.status] || { label: need.status || 'نامشخص', color: 'bg-slate-100 text-slate-600' };
+          return (
+            <div key={need.id} className="border border-slate-200 rounded-xl p-4 hover:shadow-md transition">
+              <div className="flex justify-between items-start">
+                <h3 className="font-semibold text-slate-800 text-lg">{need.title}</h3>
+                <span className={`text-xs px-2 py-1 rounded-full ${statusInfo.color}`}>
+                  {statusInfo.label}
+                </span>
+              </div>
+              <p className="text-sm text-slate-600 mt-2 line-clamp-2">{need.description}</p>
+              <div className="flex items-center gap-4 mt-3 text-xs text-slate-400">
+                <span>صنعت: {need.industry?.name || '-'}</span>
+                <span>تاریخ: {new Date(need.created_at).toLocaleDateString('fa-IR')}</span>
+              </div>
             </div>
-            <p className="text-sm text-slate-600 mt-2 line-clamp-2">{need.description}</p>
-            <div className="flex items-center gap-4 mt-3 text-xs text-slate-400">
-              <span>صنعت: {need.industry?.name || '-'}</span>
-              <span>تاریخ: {new Date(need.created_at).toLocaleDateString('fa-IR')}</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 }
 
 // ============================================================
-// My Products Tab
+// My Products Tab - با وضعیت‌های فارسی (اصلاح‌شده)
 // ============================================================
-function MyProductsTab({
-  supplies,
-  loading,
-  apiError,
-}: {
-  supplies: Supply[];
-  loading: boolean;
-  apiError?: string | null;
-}) {
+function MyProductsTab({ supplies, loading }: { supplies: Supply[]; loading: boolean }) {
+  // دیکشنری وضعیت‌ها با رنگ‌بندی مناسب
+  const statusMap: Record<string, { label: string; color: string }> = {
+    published: { label: 'منتشر شده', color: 'bg-green-100 text-green-700' },
+    approved: { label: 'تأیید شده', color: 'bg-green-100 text-green-700' },
+    pending: { label: 'در انتظار تأیید', color: 'bg-yellow-100 text-yellow-700' },
+    draft: { label: 'پیش‌نویس', color: 'bg-slate-100 text-slate-600' },
+    submitted: { label: 'ارسال برای بررسی', color: 'bg-blue-100 text-blue-700' },
+    evaluating: { label: 'در حال ارزیابی', color: 'bg-purple-100 text-purple-700' },
+    needs_revision: { label: 'نیازمند اصلاح', color: 'bg-orange-100 text-orange-700' },
+    rejected: { label: 'رد شده', color: 'bg-red-100 text-red-700' },
+    suspended: { label: 'تعلیق شده', color: 'bg-gray-100 text-gray-600' },
+    in_negotiation: { label: 'در حال مذاکره', color: 'bg-indigo-100 text-indigo-700' },
+    contracted: { label: 'دارای قرارداد', color: 'bg-teal-100 text-teal-700' },
+    executing: { label: 'در حال اجرا', color: 'bg-cyan-100 text-cyan-700' },
+    completed: { label: 'تکمیل شده', color: 'bg-emerald-100 text-emerald-700' },
+  };
+
   if (loading) {
     return <div className="text-center py-8 text-slate-500">در حال بارگذاری محصولات...</div>;
-  }
-
-  if (apiError) {
-    return (
-      <div className="text-center py-12 text-amber-700">
-        <AlertCircle className="h-12 w-12 mx-auto mb-3" />
-        <p className="text-lg font-medium">محصولات و خدمات در دسترس نیست</p>
-        <p className="text-sm mt-1 text-slate-500">{apiError}</p>
-      </div>
-    );
   }
 
   if (!supplies || supplies.length === 0) {
@@ -1571,34 +1893,25 @@ function MyProductsTab({
         </button>
       </div>
       <div className="space-y-4">
-        {supplies.map((supply) => (
-          <div key={supply.id} className="border border-slate-200 rounded-xl p-4 hover:shadow-md transition">
-            <div className="flex justify-between items-start">
-              <h3 className="font-semibold text-slate-800 text-lg">{supply.title}</h3>
-              <span
-                className={`text-xs px-2 py-1 rounded-full ${
-                  supply.status === 'published'
-                    ? 'bg-green-100 text-green-700'
-                    : supply.status === 'draft'
-                    ? 'bg-slate-100 text-slate-600'
-                    : 'bg-yellow-100 text-yellow-700'
-                }`}
-              >
-                {supply.status === 'published'
-                  ? 'منتشر شده'
-                  : supply.status === 'draft'
-                  ? 'پیش‌نویس'
-                  : supply.status || 'نامشخص'}
-              </span>
+        {supplies.map((supply) => {
+          const statusInfo = statusMap[supply.status] || { label: supply.status || 'نامشخص', color: 'bg-slate-100 text-slate-600' };
+          return (
+            <div key={supply.id} className="border border-slate-200 rounded-xl p-4 hover:shadow-md transition">
+              <div className="flex justify-between items-start">
+                <h3 className="font-semibold text-slate-800 text-lg">{supply.title}</h3>
+                <span className={`text-xs px-2 py-1 rounded-full ${statusInfo.color}`}>
+                  {statusInfo.label}
+                </span>
+              </div>
+              <p className="text-sm text-slate-600 mt-2 line-clamp-2">{supply.description}</p>
+              <div className="flex items-center gap-4 mt-3 text-xs text-slate-400">
+                <span>دسته‌بندی: {supply.category || '-'}</span>
+                <span>قیمت: {supply.price ? `${supply.price} تومان` : '-'}</span>
+                <span>تاریخ: {new Date(supply.created_at).toLocaleDateString('fa-IR')}</span>
+              </div>
             </div>
-            <p className="text-sm text-slate-600 mt-2 line-clamp-2">{supply.description}</p>
-            <div className="flex items-center gap-4 mt-3 text-xs text-slate-400">
-              <span>دسته‌بندی: {supply.category || '-'}</span>
-              <span>قیمت: {supply.price ? `${supply.price} تومان` : '-'}</span>
-              <span>تاریخ: {new Date(supply.created_at).toLocaleDateString('fa-IR')}</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
