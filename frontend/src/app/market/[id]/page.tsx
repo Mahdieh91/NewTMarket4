@@ -1,500 +1,1773 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
+
 import {
-  ArrowLeft,
-  Building2,
+  ArrowRight,
   MapPin,
-  Star,
   Clock,
-  Package,
+  Shield,
   Wrench,
+  Package,
   MessageCircle,
-  Loader2,
-  AlertCircle,
-  CheckCircle,
   Calendar,
-  Eye,
-  Heart,
+  CheckCircle,
+  Image as ImageIcon,
+  FileText,
+  Download,
+  ExternalLink,
+  Building2,
+  Boxes,
+  Cpu,
+  Layers,
+  Tag,
+  Sparkles,
 } from 'lucide-react';
-import { useAuthStore, API_URL } from '@/store/auth-store';
 
-// ============================================================
-// Helpers
-// ============================================================
+import {
+  mockProducts,
+  formatPrice,
+} from '@/app/data/products';
 
-const API_BASE = (API_URL || 'http://127.0.0.1:8000/api').replace(/\/+$/, '');
-const API_ORIGIN = API_BASE.replace(/\/api\/?$/, '');
+/* ============================================================
+   API
+============================================================ */
 
-function resolveMediaUrl(url?: string | null): string {
-  if (!url) return '';
-  if (/^https?:\/\//i.test(url)) return url;
-  return `${API_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
+const API_BASE_URL = 'http://127.0.0.1:8000';
+
+const SUPPLIES_API_URL =
+  `${API_BASE_URL}/api/products/supplies/`;
+
+/* ============================================================
+   Types
+============================================================ */
+
+interface SupplyImage {
+  id: number;
+  image: string;
+  caption?: string | null;
+  uploaded_at?: string;
 }
 
-function formatPrice(price?: number): string {
-  if (!price) return '—';
-  return new Intl.NumberFormat('fa-IR').format(price) + ' تومان';
+interface Supply {
+  id: number;
+  seller: number | null;
+  seller_name?: string;
+
+  title: string;
+  category: string;
+  industry: string;
+  technology: string;
+  city: string;
+  description: string;
+
+  quantity: string;
+  unit: string;
+  price: string | number;
+
+  trl: string;
+  documents: string[];
+
+  status: string;
+
+  created_at: string;
+  updated_at: string;
+
+  images: SupplyImage[];
 }
 
-function formatPersianDate(value?: string) {
-  if (!value) return '—';
-  try {
-    return new Intl.DateTimeFormat('fa-IR', {
-      dateStyle: 'short',
-      timeStyle: 'short',
-    }).format(new Date(value));
-  } catch {
+interface MockProduct {
+  id: string;
+  title: string;
+  category: string;
+  image?: string;
+  images?: string[];
+  shortDescription?: string;
+  fullDescription?: string;
+  trl?: number;
+  mrl?: number;
+  riskLevel?: string;
+  tags?: string[];
+  certifications?: string[];
+  afterSalesService?: boolean;
+  ipStatus?: string;
+  complianceScore?: number;
+  price?: number;
+
+  seller?: {
+    name: string;
+    verified: boolean;
+    rating: number;
+    totalSales: number;
+    location: string;
+  };
+
+  deliveryTime?: string;
+  viewCount?: number;
+  createdAt?: string;
+}
+
+/* ============================================================
+   Helpers
+============================================================ */
+
+function buildMediaUrl(
+  path: string | null | undefined,
+): string {
+  if (!path) {
+    return '';
+  }
+
+  if (
+    path.startsWith('http://') ||
+    path.startsWith('https://')
+  ) {
+    return path;
+  }
+
+  if (path.startsWith('//')) {
+    return `http:${path}`;
+  }
+
+  if (path.startsWith('/')) {
+    return `${API_BASE_URL}${path}`;
+  }
+
+  return `${API_BASE_URL}/${path}`;
+}
+
+function formatSupplyPrice(
+  price: string | number | null | undefined,
+): string {
+  if (
+    price === null ||
+    price === undefined ||
+    price === '' ||
+    Number(price) === 0
+  ) {
+    return 'قابل مذاکره';
+  }
+
+  const numericPrice = Number(price);
+
+  if (Number.isNaN(numericPrice)) {
+    return String(price);
+  }
+
+  return `${numericPrice.toLocaleString('fa-IR')} تومان`;
+}
+
+function formatDate(
+  value: string | null | undefined,
+): string {
+  if (!value) {
+    return '';
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
     return value;
+  }
+
+  return date.toLocaleDateString('fa-IR');
+}
+
+function getStatusLabel(
+  status: string,
+): string {
+  const labels: Record<string, string> = {
+    pending: 'در انتظار بررسی',
+    approved: 'تأیید شده',
+    rejected: 'رد شده',
+    draft: 'پیش‌نویس',
+    submitted: 'ارسال برای بررسی',
+    evaluating: 'در حال ارزیابی',
+    needs_revision: 'نیازمند اصلاح',
+    published: 'منتشر شده',
+    suspended: 'تعلیق شده',
+  };
+
+  return (
+    labels[status] ||
+    status ||
+    'ثبت نشده'
+  );
+}
+
+function getStatusClass(
+  status: string,
+): string {
+  const classes: Record<string, string> = {
+    pending:
+      'bg-amber-50 text-amber-700 border border-amber-200',
+
+    approved:
+      'bg-emerald-50 text-emerald-700 border border-emerald-200',
+
+    published:
+      'bg-blue-50 text-blue-700 border border-blue-200',
+
+    rejected:
+      'bg-red-50 text-red-700 border border-red-200',
+
+    suspended:
+      'bg-slate-100 text-slate-600 border border-slate-200',
+
+    draft:
+      'bg-slate-100 text-slate-600 border border-slate-200',
+
+    submitted:
+      'bg-indigo-50 text-indigo-700 border border-indigo-200',
+
+    evaluating:
+      'bg-purple-50 text-purple-700 border border-purple-200',
+
+    needs_revision:
+      'bg-orange-50 text-orange-700 border border-orange-200',
+  };
+
+  return (
+    classes[status] ||
+    'bg-slate-100 text-slate-600 border border-slate-200'
+  );
+}
+
+function getFileName(url: string): string {
+  try {
+    const cleanUrl = url.split('?')[0];
+    const parts = cleanUrl.split('/');
+    const fileName =
+      parts[parts.length - 1];
+
+    return decodeURIComponent(
+      fileName || 'مستند',
+    );
+  } catch {
+    return 'مستند';
   }
 }
 
-// ============================================================
-// Types
-// ============================================================
+/* ============================================================
+   Reusable Components
+============================================================ */
 
-interface ProductDetail {
-  id: number;
-  title: string;
-  description?: string;
-  price?: number;
-  category?: string;
-  industry?: string;
-  technology?: string;
-  city?: string;
-  seller: {
-    id: number;
-    username: string;
-    first_name?: string;
-    last_name?: string;
-    email?: string;
-    company_name?: string;
-    location?: string;
-    rating?: number;
-  };
-  images?: Array<{ id: number; image: string; caption?: string }>;
-  trl?: number;
-  status?: string;
-  created_at?: string;
-  updated_at?: string;
-  quantity?: string;
-  unit?: string;
+function InfoItem({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value?: string | number | null;
+}) {
+  if (
+    value === undefined ||
+    value === null ||
+    String(value).trim() === ''
+  ) {
+    return null;
+  }
+
+  return (
+    <div className="group rounded-2xl border border-slate-200 bg-white p-5 transition-all duration-300 hover:-translate-y-0.5 hover:border-[#14B8A6]/40 hover:shadow-md">
+      <div className="flex items-center gap-2 text-slate-400 mb-3">
+        {icon}
+
+        <span className="text-xs font-bold">
+          {label}
+        </span>
+      </div>
+
+      <p className="text-sm font-extrabold text-slate-800 leading-7">
+        {value}
+      </p>
+    </div>
+  );
 }
 
-// ============================================================
-// Page Component
-// ============================================================
+function SectionTitle({
+  icon,
+  title,
+  count,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  count?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 mb-5">
+      <div className="flex items-center gap-2">
+        <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
+          {icon}
+        </div>
+
+        <h2 className="text-lg font-extrabold text-slate-900">
+          {title}
+        </h2>
+      </div>
+
+      {count && (
+        <span className="text-xs text-slate-400">
+          {count}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/* ============================================================
+   Component
+============================================================ */
 
 export default function ProductDetailPage() {
   const params = useParams();
-  const router = useRouter();
-  const { user, accessToken, isAuthenticated } = useAuthStore();
 
-  const productId = Array.isArray(params.id) ? params.id[0] : params.id;
+  const rawId = params?.id;
 
-  const [product, setProduct] = useState<ProductDetail | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [isNegotiating, setIsNegotiating] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  const [isFavorite, setIsFavorite] = useState(false);
+  const routeId = Array.isArray(rawId)
+    ? rawId[0]
+    : rawId;
 
-  // ============================================================
-  // Fetch product details
-  // ============================================================
+  const [supply, setSupply] =
+    useState<Supply | null>(null);
 
-  const loadProduct = useCallback(async () => {
-    if (!productId) {
-      setError('شناسه محصول مشخص نیست.');
-      setIsLoading(false);
-      return;
+  const [mockProduct, setMockProduct] =
+    useState<MockProduct | null>(null);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState<string | null>(null);
+
+  const [selectedImage, setSelectedImage] =
+    useState<string | null>(null);
+
+  /* ============================================================
+     تشخیص Supply واقعی
+  ============================================================ */
+
+  const supplyId = useMemo(() => {
+    if (!routeId) {
+      return null;
     }
 
-    setIsLoading(true);
-    setError('');
+    const value = String(routeId);
 
-    try {
-      const url = `${API_BASE}/products/supplies/${productId}/`;
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
+    if (value.startsWith('supply-')) {
+      const numericPart =
+        value.replace(
+          'supply-',
+          '',
+        );
 
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error('محصول با این شناسه وجود ندارد.');
-        }
-        throw new Error(`خطا در دریافت محصول: ${response.status}`);
-      }
+      const parsed =
+        Number(numericPart);
 
-      const data = await response.json();
-      setProduct(data);
-    } catch (err: any) {
-      console.error('❌ Load product error:', err);
-      setError(err.message || 'خطا در دریافت اطلاعات محصول.');
-      setProduct(null);
-    } finally {
-      setIsLoading(false);
+      return Number.isFinite(parsed)
+        ? parsed
+        : null;
     }
-  }, [productId, accessToken]);
+
+    return null;
+  }, [routeId]);
+
+  /* ============================================================
+     تشخیص Mock Product
+  ============================================================ */
 
   useEffect(() => {
-    if (isAuthenticated) {
-      loadProduct();
-    } else {
-      setIsLoading(false);
-      setError('لطفاً وارد حساب کاربری خود شوید.');
-    }
-  }, [isAuthenticated, loadProduct]);
-
-  // ============================================================
-  // Toast helper
-  // ============================================================
-
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  // ============================================================
-  // Toggle favorite (mock)
-  // ============================================================
-
-  const toggleFavorite = () => {
-    setIsFavorite(!isFavorite);
-    showToast(isFavorite ? 'از علاقه‌مندی‌ها حذف شد' : 'به علاقه‌مندی‌ها اضافه شد');
-  };
-
-  // ============================================================
-  // Start negotiation (POST)
-  // ============================================================
-
-  const handleStartNegotiation = async () => {
-    if (!user) {
-      router.push('/login?next=' + encodeURIComponent(`/market/${productId}`));
+    if (!routeId || supplyId !== null) {
       return;
     }
 
-    if (!product || !product.id) {
-      showToast('اطلاعات محصول در دسترس نیست.');
+    const found =
+      mockProducts.find(
+        (item) =>
+          String(item.id) ===
+          String(routeId),
+      );
+
+    if (found) {
+      setMockProduct(
+        found as MockProduct,
+      );
+    }
+
+    setLoading(false);
+  }, [routeId, supplyId]);
+
+  /* ============================================================
+     دریافت Supply واقعی از Django
+  ============================================================ */
+
+  useEffect(() => {
+    if (supplyId === null) {
       return;
     }
 
-    setIsNegotiating(true);
+    let cancelled = false;
 
-    try {
-      const res = await fetch(`${API_BASE}/negotiations/`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ product: product.id }),
-      });
+    async function loadSupply() {
+      try {
+        setLoading(true);
+        setError(null);
 
-      if (!res.ok) {
-        let errorMsg = 'خطا در شروع مذاکره';
-        try {
-          const err = await res.json();
-          errorMsg = err.detail || err.message || errorMsg;
-        } catch {}
-        showToast(errorMsg);
-        setIsNegotiating(false);
-        return;
+        const response =
+          await fetch(
+            SUPPLIES_API_URL,
+            {
+              method: 'GET',
+              headers: {
+                Accept:
+                  'application/json',
+              },
+              credentials: 'include',
+              cache: 'no-store',
+            },
+          );
+
+        if (!response.ok) {
+          if (
+            response.status === 401
+          ) {
+            throw new Error(
+              'دریافت اطلاعات عرضه از سرور نیازمند دسترسی مناسب است.',
+            );
+          }
+
+          if (
+            response.status === 403
+          ) {
+            throw new Error(
+              'دسترسی به اطلاعات این عرضه از طرف سرور محدود شده است.',
+            );
+          }
+
+          throw new Error(
+            `خطا در دریافت عرضه‌ها. کد خطا: ${response.status}`,
+          );
+        }
+
+        const data =
+          await response.json();
+
+        const supplies: Supply[] =
+          Array.isArray(data)
+            ? data
+            : Array.isArray(
+                data?.results,
+              )
+            ? data.results
+            : [];
+
+        const foundSupply =
+          supplies.find(
+            (item) =>
+              Number(item.id) ===
+              Number(supplyId),
+          );
+
+        if (!foundSupply) {
+          throw new Error(
+            `عرضه شماره ${supplyId} در داده‌های دریافتی پیدا نشد.`,
+          );
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        setSupply(
+          foundSupply,
+        );
+
+        if (
+          Array.isArray(
+            foundSupply.images,
+          ) &&
+          foundSupply.images.length >
+            0
+        ) {
+          const firstImage =
+            buildMediaUrl(
+              foundSupply.images[0]
+                ?.image,
+            );
+
+          setSelectedImage(
+            firstImage || null,
+          );
+        }
+      } catch (err) {
+        if (cancelled) {
+          return;
+        }
+
+        console.error(
+          'خطا در دریافت جزئیات Supply:',
+          err,
+        );
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'خطا در دریافت اطلاعات عرضه.',
+        );
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-
-      const data = await res.json();
-      router.push(`/negotiation/${data.id}`);
-    } catch (error) {
-      console.error('❌ Error starting negotiation:', error);
-      showToast('خطا در ارتباط با سرور');
-      setIsNegotiating(false);
     }
-  };
 
-  // ============================================================
-  // UI States
-  // ============================================================
+    loadSupply();
 
-  if (!isAuthenticated) {
+    return () => {
+      cancelled = true;
+    };
+  }, [supplyId]);
+
+  /* ============================================================
+     Loading
+  ============================================================ */
+
+  if (loading) {
     return (
-      <main dir="rtl" className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 flex items-center justify-center p-6">
-        <div className="bg-white rounded-3xl p-8 text-center shadow-xl max-w-md w-full">
-          <Loader2 className="mx-auto h-10 w-10 animate-spin text-[#1E3A8A]" />
-          <p className="mt-4 font-bold text-gray-700">در حال بررسی ورود...</p>
-        </div>
-      </main>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <main dir="rtl" className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 flex items-center justify-center p-6">
-        <div className="bg-white rounded-3xl p-10 text-center shadow-xl">
-          <Loader2 className="mx-auto h-10 w-10 animate-spin text-[#14B8A6]" />
-          <h2 className="mt-5 text-lg font-black text-gray-800">در حال دریافت محصول</h2>
-          <p className="mt-2 text-sm text-gray-500">لطفاً چند لحظه صبر کنید...</p>
-        </div>
-      </main>
-    );
-  }
-
-  if (error || !product) {
-    return (
-      <main dir="rtl" className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 flex items-center justify-center p-6">
-        <div className="bg-white rounded-3xl p-8 text-center shadow-xl max-w-md w-full">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50">
-            <AlertCircle className="h-8 w-8 text-red-500" />
-          </div>
-          <h1 className="mt-5 text-xl font-black text-gray-800">محصول پیدا نشد</h1>
-          <p className="mt-2 text-sm text-gray-500">{error || 'محصول با این شناسه وجود ندارد.'}</p>
-          <button
-            onClick={() => router.back()}
-            className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#1E3A8A] px-6 py-3 text-sm font-bold text-white hover:bg-blue-800 transition"
-          >
-            <ArrowLeft size={17} />
-            بازگشت
-          </button>
-        </div>
-      </main>
-    );
-  }
-
-  // ============================================================
-  // Main Render
-  // ============================================================
-
-  const productImage = product.images?.[0]?.image ? resolveMediaUrl(product.images[0].image) : null;
-  const sellerName =
-    product.seller?.company_name ||
-    [product.seller?.first_name, product.seller?.last_name].filter(Boolean).join(' ') ||
-    product.seller?.username ||
-    'فروشنده';
-
-  return (
-    <main
-      dir="rtl"
-      className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 p-4 md:p-6"
-      style={{ fontFamily: "'Vazir', 'Vazirmatn', 'Iran Sans', Tahoma, sans-serif" }}
-    >
-      {/* Toast */}
-      {toast && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-[#1E3A8A] text-white px-6 py-3 rounded-2xl shadow-lg flex items-center gap-2 animate-bounce">
-          <CheckCircle size={16} />
-          <span className="text-sm font-bold">{toast}</span>
-        </div>
-      )}
-
-      <div className="max-w-5xl mx-auto">
-        {/* Back Button */}
-        <button
-          onClick={() => router.back()}
-          className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-gray-600 shadow-sm hover:text-[#1E3A8A] hover:shadow-md transition mb-6 border border-gray-100"
-        >
-          <ArrowLeft size={17} />
-          بازگشت به بازار
-        </button>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Product Card */}
-            <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100">
-              {/* Image */}
-              <div className="relative h-80 bg-gradient-to-br from-[#1E3A8A10] to-[#14B8A610] flex items-center justify-center">
-                {productImage ? (
-                  <Image
-                    src={productImage}
-                    alt={product.title || 'محصول'}
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 1024px) 100vw, 66vw"
-                  />
-                ) : (
-                  <div className="w-24 h-24 rounded-2xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] flex items-center justify-center">
-                    {product.category?.includes('خدمت') ? (
-                      <Wrench size={48} className="text-white" />
-                    ) : (
-                      <Package size={48} className="text-white" />
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Content */}
-              <div className="p-6">
-                {/* Title & Status */}
-                <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
-                  <div>
-                    <h1 className="text-2xl md:text-3xl font-black text-gray-900">
-                      {product.title || 'بدون عنوان'}
-                    </h1>
-                    <div className="flex flex-wrap items-center gap-2 mt-2">
-                      {product.category && (
-                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-bold">
-                          {product.category === 'service' ? 'خدمت' : 'محصول'}
-                        </span>
-                      )}
-                      {product.industry && (
-                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs">
-                          {product.industry}
-                        </span>
-                      )}
-                      {product.technology && (
-                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs">
-                          {product.technology}
-                        </span>
-                      )}
-                      {product.trl && (
-                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-teal-100 text-teal-700 text-xs font-medium">
-                          TRL {product.trl}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <button
-                    onClick={toggleFavorite}
-                    className={`p-2 rounded-xl border transition ${isFavorite ? 'border-red-200 bg-red-50 text-red-500' : 'border-gray-200 bg-white text-gray-400 hover:text-red-400'}`}
-                    aria-label="افزودن به علاقه‌مندی‌ها"
-                  >
-                    <Heart size={20} fill={isFavorite ? 'currentColor' : 'none'} />
-                  </button>
-                </div>
-
-                {/* Description */}
-                {product.description && (
-                  <div className="mb-6">
-                    <h3 className="text-sm font-bold text-gray-700 mb-2">توضیحات</h3>
-                    <p className="text-sm text-gray-600 leading-7 whitespace-pre-wrap">
-                      {product.description}
-                    </p>
-                  </div>
-                )}
-
-                {/* Details Grid */}
-                <div className="grid grid-cols-2 gap-4 p-4 rounded-2xl bg-gray-50 mb-6">
-                  {product.price && (
-                    <div>
-                      <p className="text-xs text-gray-400">قیمت</p>
-                      <p className="font-extrabold text-[#1E3A8A]">{formatPrice(product.price)}</p>
-                    </div>
-                  )}
-                  {product.quantity && (
-                    <div>
-                      <p className="text-xs text-gray-400">مقدار</p>
-                      <p className="font-bold text-gray-800">{product.quantity} {product.unit || ''}</p>
-                    </div>
-                  )}
-                  {product.city && (
-                    <div>
-                      <p className="text-xs text-gray-400">استان</p>
-                      <p className="font-bold text-gray-800 flex items-center gap-1">
-                        <MapPin size={14} className="text-gray-400" />
-                        {product.city}
-                      </p>
-                    </div>
-                  )}
-                  {product.created_at && (
-                    <div>
-                      <p className="text-xs text-gray-400">تاریخ ثبت</p>
-                      <p className="font-bold text-gray-800 flex items-center gap-1">
-                        <Calendar size={14} className="text-gray-400" />
-                        {formatPersianDate(product.created_at)}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Seller Info */}
-                <div className="flex items-center gap-4 p-4 rounded-2xl bg-gray-50">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#1E3A8A] text-lg font-black text-white">
-                    {sellerName.charAt(0)}
-                  </div>
-                  <div>
-                    <p className="font-bold text-gray-800">{sellerName}</p>
-                    {product.seller?.location && (
-                      <p className="text-sm text-gray-400 flex items-center gap-1">
-                        <MapPin size={14} />
-                        {product.seller.location}
-                      </p>
-                    )}
-                    {product.seller?.rating && (
-                      <p className="text-sm text-gray-400 flex items-center gap-1">
-                        <Star size={14} className="text-[#D4A547] fill-[#D4A547]" />
-                        {product.seller.rating}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
+      <div
+        dir="rtl"
+        className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#f0fdfa] flex items-center justify-center"
+        style={{
+          fontFamily:
+            "'Vazir', 'Vazirmatn', 'Iran Sans', Tahoma, sans-serif",
+        }}
+      >
+        <div className="text-center">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-white shadow-lg border border-slate-200 flex items-center justify-center">
+            <div className="w-6 h-6 rounded-full border-2 border-slate-200 border-t-[#14B8A6] animate-spin" />
           </div>
 
-          {/* Sidebar */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* Action Card */}
-            <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100 p-6 sticky top-24">
-              <h3 className="text-sm font-bold text-gray-700 mb-4">عملیات</h3>
-              <button
-                onClick={handleStartNegotiation}
-                disabled={isNegotiating}
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#1E3A8A] text-white px-6 py-3 font-bold text-sm hover:bg-blue-800 transition disabled:opacity-60"
-              >
-                {isNegotiating ? (
-                  <Loader2 size={18} className="animate-spin" />
-                ) : (
-                  <MessageCircle size={18} />
-                )}
-                شروع مذاکره
-              </button>
-              <Link
-                href="/market"
-                className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-6 py-3 text-sm font-bold text-gray-600 hover:bg-gray-50 transition mt-3"
-              >
-                <ArrowLeft size={17} />
-                بازگشت به بازار
-              </Link>
-            </div>
-
-            {/* Quick Info */}
-            <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100 p-6">
-              <h3 className="text-sm font-bold text-gray-700 mb-4">اطلاعات سریع</h3>
-              <div className="space-y-3 text-sm">
-                {product.trl && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">TRL</span>
-                    <span className="font-bold text-gray-800">{product.trl}</span>
-                  </div>
-                )}
-                {product.industry && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">صنعت</span>
-                    <span className="font-bold text-gray-800">{product.industry}</span>
-                  </div>
-                )}
-                {product.technology && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">فناوری</span>
-                    <span className="font-bold text-gray-800">{product.technology}</span>
-                  </div>
-                )}
-                {product.status && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">وضعیت</span>
-                    <span className="font-medium text-emerald-600">
-                      {product.status === 'approved' ? 'تأیید شده' : product.status === 'pending' ? 'در انتظار بررسی' : product.status}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          <p className="text-sm font-bold text-slate-600 mt-5">
+            در حال دریافت اطلاعات عرضه...
+          </p>
         </div>
       </div>
-    </main>
+    );
+  }
+
+  /* ============================================================
+     Supply Error
+  ============================================================ */
+
+  if (
+    supplyId !== null &&
+    !supply
+  ) {
+    return (
+      <div
+        dir="rtl"
+        className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#f0fdfa] flex items-center justify-center p-5"
+        style={{
+          fontFamily:
+            "'Vazir', 'Vazirmatn', 'Iran Sans', Tahoma, sans-serif",
+        }}
+      >
+        <div className="max-w-md w-full bg-white rounded-3xl border border-slate-200 shadow-xl p-8 text-center">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-red-50 text-red-500 flex items-center justify-center">
+            <Package size={30} />
+          </div>
+
+          <h1 className="text-xl font-extrabold text-slate-900 mt-5">
+            دریافت اطلاعات عرضه ناموفق بود
+          </h1>
+
+          <p className="text-sm text-slate-500 mt-3 leading-7">
+            {error ||
+              'اطلاعات عرضه موردنظر در سرور پیدا نشد.'}
+          </p>
+
+          <Link
+            href="/market"
+            className="inline-flex items-center gap-2 mt-6 px-5 py-3 rounded-xl bg-[#1E3A8A] text-white font-bold hover:bg-[#172f72] transition"
+          >
+            <ArrowRight size={18} />
+            بازگشت به بازار
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  /* ============================================================
+     MOCK PRODUCT
+  ============================================================ */
+
+  if (
+    !supply &&
+    mockProduct
+  ) {
+    const galleryImages =
+      mockProduct.images &&
+      mockProduct.images.length > 0
+        ? mockProduct.images
+        : mockProduct.image
+        ? [mockProduct.image]
+        : [];
+
+    const activeImage =
+      selectedImage ||
+      galleryImages[0];
+
+    return (
+      <div
+        dir="rtl"
+        className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#f0fdfa]"
+        style={{
+          fontFamily:
+            "'Vazir', 'Vazirmatn', 'Iran Sans', Tahoma, sans-serif",
+        }}
+      >
+        <header className="bg-white/95 backdrop-blur border-b border-slate-200 sticky top-0 z-30">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <Link
+              href="/market"
+              className="inline-flex items-center gap-2 text-sm font-bold text-[#1E3A8A] hover:text-[#14B8A6] transition"
+            >
+              <ArrowRight size={18} />
+              بازگشت به بازار
+            </Link>
+          </div>
+        </header>
+
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden">
+
+            {/* Hero */}
+
+            <div className="relative h-40 md:h-48 bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] overflow-hidden">
+
+              <div className="absolute inset-0 opacity-10">
+                <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+
+                <div className="absolute bottom-0 left-0 w-80 h-80 bg-white rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
+              </div>
+
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-24 h-24 rounded-3xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/30 shadow-xl">
+                  {mockProduct.category ===
+                  'service' ? (
+                    <Wrench
+                      size={44}
+                      className="text-white"
+                    />
+                  ) : (
+                    <Package
+                      size={44}
+                      className="text-white"
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5 md:p-8">
+
+              {/* Gallery */}
+
+              {galleryImages.length >
+                0 &&
+                activeImage && (
+                  <section className="mb-10">
+                    <SectionTitle
+                      icon={
+                        <ImageIcon
+                          size={18}
+                          className="text-[#1E3A8A]"
+                        />
+                      }
+                      title="تصاویر محصول"
+                    />
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="md:col-span-3">
+                        <div className="relative w-full h-[280px] sm:h-[380px] md:h-[460px] rounded-2xl overflow-hidden border border-slate-200 bg-slate-50">
+                          <Image
+                            src={
+                              activeImage
+                            }
+                            alt={
+                              mockProduct.title
+                            }
+                            fill
+                            priority
+                            unoptimized
+                            className="object-contain"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="grid grid-cols-3 md:grid-cols-1 gap-3">
+                          {galleryImages.map(
+                            (
+                              image,
+                              index,
+                            ) => (
+                              <button
+                                key={`${image}-${index}`}
+                                type="button"
+                                onClick={() =>
+                                  setSelectedImage(
+                                    image,
+                                  )
+                                }
+                                className={`relative h-24 md:h-28 rounded-xl overflow-hidden bg-slate-100 border-2 transition ${
+                                  activeImage ===
+                                  image
+                                    ? 'border-[#14B8A6] ring-2 ring-[#14B8A6]/30'
+                                    : 'border-slate-200 hover:border-[#14B8A6]/60'
+                                }`}
+                              >
+                                <Image
+                                  src={
+                                    image
+                                  }
+                                  alt={`${mockProduct.title} - تصویر ${
+                                    index +
+                                    1
+                                  }`}
+                                  fill
+                                  unoptimized
+                                  className="object-cover"
+                                />
+                              </button>
+                            ),
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                )}
+
+              {/* Main */}
+
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_350px] gap-8">
+
+                {/* Content */}
+
+                <div className="min-w-0">
+
+                  <div className="flex flex-wrap items-center gap-2 mb-4">
+                    <span className="px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
+                      محصول
+                    </span>
+
+                    {mockProduct.category && (
+                      <span className="px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 text-xs font-bold">
+                        {
+                          mockProduct.category
+                        }
+                      </span>
+                    )}
+                  </div>
+
+                  <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 leading-tight">
+                    {
+                      mockProduct.title
+                    }
+                  </h1>
+
+                  {mockProduct.shortDescription && (
+                    <p className="text-sm text-slate-500 mt-4 leading-8">
+                      {
+                        mockProduct.shortDescription
+                      }
+                    </p>
+                  )}
+
+                  {mockProduct.fullDescription && (
+                    <section className="mt-10">
+                      <SectionTitle
+                        icon={
+                          <FileText
+                            size={18}
+                            className="text-[#1E3A8A]"
+                          />
+                        }
+                        title="توضیحات کامل"
+                      />
+
+                      <div className="rounded-2xl bg-slate-50 border border-slate-200 p-5 md:p-6">
+                        <p className="text-sm text-slate-700 leading-8 whitespace-pre-line">
+                          {
+                            mockProduct.fullDescription
+                          }
+                        </p>
+                      </div>
+                    </section>
+                  )}
+                </div>
+
+                {/* Sticky Summary */}
+
+                <aside className="lg:sticky lg:top-24 self-start">
+                  <div className="rounded-3xl border border-slate-200 bg-white shadow-lg shadow-slate-200/50 overflow-hidden">
+
+                    <div className="p-5 bg-gradient-to-br from-[#1E3A8A] to-[#2563EB] text-white">
+                      <div className="flex items-center gap-2">
+                        <Sparkles size={17} />
+
+                        <span className="text-xs font-bold text-white/80">
+                          خلاصه محصول
+                        </span>
+                      </div>
+
+                      <h2 className="text-lg font-extrabold mt-3 leading-7">
+                        {
+                          mockProduct.title
+                        }
+                      </h2>
+                    </div>
+
+                    <div className="p-5 space-y-4">
+
+                      {mockProduct.price !==
+                        undefined && (
+                        <div className="rounded-2xl bg-blue-50 border border-blue-100 p-4">
+                          <span className="text-xs font-bold text-blue-500">
+                            قیمت
+                          </span>
+
+                          <p className="text-xl font-extrabold text-[#1E3A8A] mt-2">
+                            {formatPrice(
+                              mockProduct as any,
+                            )}
+                          </p>
+                        </div>
+                      )}
+
+                      {mockProduct.seller && (
+                        <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4">
+                          <div className="flex items-center gap-2">
+                            <Shield
+                              size={17}
+                              className="text-emerald-500"
+                            />
+
+                            <span className="text-sm font-extrabold text-slate-800">
+                              {
+                                mockProduct
+                                  .seller
+                                  .name
+                              }
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2 mt-3">
+                            <MapPin
+                              size={15}
+                              className="text-slate-400"
+                            />
+
+                            <span className="text-xs text-slate-500">
+                              {
+                                mockProduct
+                                  .seller
+                                  .location
+                              }
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      <Link
+                        href={`/negotiation/${mockProduct.id}`}
+                        className="w-full inline-flex items-center justify-center gap-2 px-5 py-3.5 bg-[#14B8A6] text-white rounded-xl text-sm font-extrabold hover:bg-[#0d9488] transition shadow-md shadow-teal-500/20"
+                      >
+                        <MessageCircle
+                          size={18}
+                        />
+                        درخواست مذاکره
+                      </Link>
+                    </div>
+                  </div>
+                </aside>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  /* ============================================================
+     Nothing Found
+  ============================================================ */
+
+  if (
+    !supply &&
+    !mockProduct
+  ) {
+    return (
+      <div
+        dir="rtl"
+        className="min-h-screen bg-slate-50 flex items-center justify-center"
+      >
+        <div className="text-center">
+          <Package
+            size={40}
+            className="mx-auto text-slate-300"
+          />
+
+          <h1 className="text-xl font-extrabold text-slate-800 mt-4">
+            محصول یافت نشد
+          </h1>
+
+          <Link
+            href="/market"
+            className="text-[#1E3A8A] underline mt-3 inline-block"
+          >
+            بازگشت به بازار
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  /* ============================================================
+     REAL SUPPLY
+  ============================================================ */
+
+  const supplyImages =
+    supply?.images
+      ?.map((item) =>
+        buildMediaUrl(
+          item.image,
+        ),
+      )
+      .filter(Boolean) || [];
+
+  const hasImages =
+    supplyImages.length > 0;
+
+  const activeSupplyImage =
+    selectedImage ||
+    supplyImages[0] ||
+    '';
+
+  const documents =
+    Array.isArray(
+      supply?.documents,
+    )
+      ? supply.documents.filter(
+          (item) =>
+            typeof item ===
+              'string' &&
+            item.trim().length > 0,
+        )
+      : [];
+
+  const hasDocuments =
+    documents.length > 0;
+
+  const isService =
+    supply!.category
+      ?.toLowerCase()
+      .includes('service') ||
+    supply!.category
+      ?.toLowerCase()
+      .includes('خدمت');
+
+  return (
+    <div
+      dir="rtl"
+      className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#f0fdfa]"
+      style={{
+        fontFamily:
+          "'Vazir', 'Vazirmatn', 'Iran Sans', Tahoma, sans-serif",
+      }}
+    >
+
+      {/* ======================================================
+          Header
+      ====================================================== */}
+
+      <header className="bg-white/95 backdrop-blur-xl border-b border-slate-200 sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between gap-4">
+
+          <Link
+            href="/market"
+            className="inline-flex items-center gap-2 text-sm font-bold text-[#1E3A8A] hover:text-[#14B8A6] transition"
+          >
+            <ArrowRight
+              size={18}
+            />
+            بازگشت به بازار
+          </Link>
+
+          {supply!.status && (
+            <span
+              className={`px-3 py-1.5 rounded-full text-xs font-bold ${getStatusClass(
+                supply!.status,
+              )}`}
+            >
+              {getStatusLabel(
+                supply!.status,
+              )}
+            </span>
+          )}
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        {/* ==================================================
+            Layout
+        ================================================== */}
+
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-8 items-start">
+
+          {/* ==================================================
+              Main Content
+          ================================================== */}
+
+          <div className="min-w-0 bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden">
+
+            {/* Hero */}
+
+            <div className="relative h-36 md:h-44 bg-gradient-to-r from-[#1E3A8A] via-[#2563EB] to-[#14B8A6] overflow-hidden">
+
+              <div className="absolute inset-0 opacity-10">
+                <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+
+                <div className="absolute bottom-0 left-0 w-80 h-80 bg-white rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
+              </div>
+
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-24 h-24 rounded-3xl bg-white/15 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-xl">
+                  {isService ? (
+                    <Wrench
+                      size={42}
+                      className="text-white"
+                    />
+                  ) : (
+                    <Package
+                      size={42}
+                      className="text-white"
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5 md:p-8">
+
+              {/* ==================================================
+                  Title
+              ================================================== */}
+
+              <div className="mb-8">
+
+                <div className="flex flex-wrap items-center gap-2 mb-4">
+
+                  <span className="px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
+                    عرضه ثبت‌شده
+                  </span>
+
+                  {supply!.category && (
+                    <span className="px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 text-xs font-bold">
+                      {
+                        supply!.category
+                      }
+                    </span>
+                  )}
+
+                  <span className="px-3 py-1.5 rounded-full bg-slate-100 text-slate-500 text-xs font-bold">
+                    شناسه: {supply!.id}
+                  </span>
+                </div>
+
+                <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 leading-tight">
+                  {supply!.title}
+                </h1>
+
+                {supply!.description && (
+                  <p className="text-sm text-slate-500 mt-4 leading-8 max-w-3xl">
+                    {
+                      supply!.description
+                    }
+                  </p>
+                )}
+              </div>
+
+              {/* ==================================================
+                  Gallery
+              ================================================== */}
+
+              {hasImages && (
+                <section className="mb-10">
+
+                  <SectionTitle
+                    icon={
+                      <ImageIcon
+                        size={18}
+                        className="text-[#1E3A8A]"
+                      />
+                    }
+                    title="تصاویر عرضه"
+                    count={`${supplyImages.length.toLocaleString(
+                      'fa-IR',
+                    )} تصویر`}
+                  />
+
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+
+                    <div className="md:col-span-3">
+                      <div className="relative w-full h-[300px] sm:h-[400px] md:h-[500px] rounded-2xl overflow-hidden border border-slate-200 bg-slate-50">
+                        <Image
+                          src={
+                            activeSupplyImage
+                          }
+                          alt={
+                            supply!.title
+                          }
+                          fill
+                          priority
+                          unoptimized
+                          className="object-contain"
+                          sizes="(max-width: 768px) 100vw, 75vw"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="grid grid-cols-3 md:grid-cols-1 gap-3">
+
+                        {supplyImages.map(
+                          (
+                            image,
+                            index,
+                          ) => {
+                            const isSelected =
+                              activeSupplyImage ===
+                              image;
+
+                            const originalImage =
+                              supply!
+                                .images[
+                                index
+                              ];
+
+                            return (
+                              <button
+                                key={`${image}-${index}`}
+                                type="button"
+                                onClick={() =>
+                                  setSelectedImage(
+                                    image,
+                                  )
+                                }
+                                className={`relative h-24 md:h-28 rounded-xl overflow-hidden bg-slate-100 border-2 transition ${
+                                  isSelected
+                                    ? 'border-[#14B8A6] ring-2 ring-[#14B8A6]/30'
+                                    : 'border-slate-200 hover:border-[#14B8A6]/60'
+                                }`}
+                              >
+                                <Image
+                                  src={
+                                    image
+                                  }
+                                  alt={
+                                    originalImage?.caption ||
+                                    `${supply!.title} - تصویر ${
+                                      index +
+                                      1
+                                    }`
+                                  }
+                                  fill
+                                  unoptimized
+                                  className="object-cover"
+                                  sizes="180px"
+                                />
+                              </button>
+                            );
+                          },
+                        )}
+
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* ==================================================
+                  Basic Information
+              ================================================== */}
+
+              <section className="mb-10">
+
+                <SectionTitle
+                  icon={
+                    <Boxes
+                      size={18}
+                      className="text-[#1E3A8A]"
+                    />
+                  }
+                  title="اطلاعات عرضه"
+                />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                  <InfoItem
+                    icon={
+                      <Tag size={16} />
+                    }
+                    label="دسته‌بندی"
+                    value={
+                      supply!.category
+                    }
+                  />
+
+                  <InfoItem
+                    icon={
+                      <Building2
+                        size={16}
+                      />
+                    }
+                    label="صنعت"
+                    value={
+                      supply!.industry
+                    }
+                  />
+
+                  <InfoItem
+                    icon={
+                      <Cpu size={16} />
+                    }
+                    label="فناوری"
+                    value={
+                      supply!.technology
+                    }
+                  />
+
+                  <InfoItem
+                    icon={
+                      <MapPin
+                        size={16}
+                      />
+                    }
+                    label="محل عرضه"
+                    value={
+                      supply!.city
+                    }
+                  />
+
+                  <InfoItem
+                    icon={
+                      <Boxes
+                        size={16}
+                      />
+                    }
+                    label="مقدار عرضه"
+                    value={
+                      supply!.quantity
+                        ? `${supply!.quantity}${
+                            supply!.unit
+                              ? ` ${supply!.unit}`
+                              : ''
+                          }`
+                        : null
+                    }
+                  />
+
+                </div>
+              </section>
+
+              {/* ==================================================
+                  Description
+              ================================================== */}
+
+              {supply!.description && (
+                <section className="mb-10">
+
+                  <SectionTitle
+                    icon={
+                      <FileText
+                        size={18}
+                        className="text-[#1E3A8A]"
+                      />
+                    }
+                    title="توضیحات کامل عرضه"
+                  />
+
+                  <div className="rounded-2xl bg-slate-50 border border-slate-200 p-5 md:p-6">
+
+                    <p className="text-sm text-slate-700 leading-8 whitespace-pre-line">
+                      {
+                        supply!.description
+                      }
+                    </p>
+
+                  </div>
+                </section>
+              )}
+
+              {/* ==================================================
+                  Technical / Status Information
+              ================================================== */}
+
+              <section className="mb-10">
+
+                <SectionTitle
+                  icon={
+                    <Layers
+                      size={18}
+                      className="text-[#1E3A8A]"
+                    />
+                  }
+                  title="اطلاعات تکمیلی"
+                />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                  {supply!.trl && (
+                    <InfoItem
+                      icon={
+                        <Layers
+                          size={16}
+                        />
+                      }
+                      label="سطح آمادگی فناوری"
+                      value={`TRL ${supply!.trl}`}
+                    />
+                  )}
+
+                  {supply!.status && (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <div className="flex items-center gap-2 text-slate-400 mb-3">
+                        <CheckCircle
+                          size={16}
+                        />
+
+                        <span className="text-xs font-bold">
+                          وضعیت عرضه
+                        </span>
+                      </div>
+
+                      <span
+                        className={`inline-flex px-3 py-1.5 rounded-full text-xs font-extrabold ${getStatusClass(
+                          supply!.status,
+                        )}`}
+                      >
+                        {getStatusLabel(
+                          supply!.status,
+                        )}
+                      </span>
+                    </div>
+                  )}
+
+                  {supply!.created_at && (
+                    <InfoItem
+                      icon={
+                        <Calendar
+                          size={16}
+                        />
+                      }
+                      label="تاریخ ثبت"
+                      value={formatDate(
+                        supply!
+                          .created_at,
+                      )}
+                    />
+                  )}
+
+                  {supply!.updated_at && (
+                    <InfoItem
+                      icon={
+                        <Clock
+                          size={16}
+                        />
+                      }
+                      label="آخرین بروزرسانی"
+                      value={formatDate(
+                        supply!
+                          .updated_at,
+                      )}
+                    />
+                  )}
+
+                </div>
+              </section>
+
+              {/* ==================================================
+                  Seller
+              ================================================== */}
+
+              {(supply!.seller_name ||
+                supply!.seller) && (
+                <section className="mb-10">
+
+                  <SectionTitle
+                    icon={
+                      <Shield
+                        size={18}
+                        className="text-[#1E3A8A]"
+                      />
+                    }
+                    title="اطلاعات عرضه‌کننده"
+                  />
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 md:p-6">
+
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+
+                      <div>
+                        <p className="text-xs text-slate-400 mb-1">
+                          عرضه‌کننده
+                        </p>
+
+                        <p className="text-base font-extrabold text-slate-800">
+                          {supply!
+                            .seller_name ||
+                            `کاربر شماره ${
+                              supply!
+                                .seller ||
+                              'نامشخص'
+                            }`}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50">
+                        <Shield
+                          size={16}
+                          className="text-emerald-500"
+                        />
+
+                        <span className="text-xs font-bold text-emerald-700">
+                          اطلاعات ثبت‌شده در سامانه
+                        </span>
+                      </div>
+
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* ==================================================
+                  Documents
+              ================================================== */}
+
+              {hasDocuments && (
+                <section className="mb-10">
+
+                  <SectionTitle
+                    icon={
+                      <FileText
+                        size={18}
+                        className="text-[#1E3A8A]"
+                      />
+                    }
+                    title="مستندات عرضه"
+                    count={`${documents.length.toLocaleString(
+                      'fa-IR',
+                    )} فایل`}
+                  />
+
+                  <div className="space-y-3">
+
+                    {documents.map(
+                      (
+                        documentUrl,
+                        index,
+                      ) => {
+                        const url =
+                          buildMediaUrl(
+                            documentUrl,
+                          );
+
+                        const fileName =
+                          getFileName(
+                            documentUrl,
+                          );
+
+                        return (
+                          <div
+                            key={`${documentUrl}-${index}`}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 hover:border-[#14B8A6]/40 transition"
+                          >
+
+                            <div className="flex items-center gap-3 min-w-0">
+
+                              <div className="w-11 h-11 shrink-0 rounded-xl bg-white border border-slate-200 flex items-center justify-center">
+                                <FileText
+                                  size={20}
+                                  className="text-[#1E3A8A]"
+                                />
+                              </div>
+
+                              <div className="min-w-0">
+                                <p className="text-sm font-bold text-slate-800 truncate">
+                                  {
+                                    fileName
+                                  }
+                                </p>
+
+                                <p className="text-xs text-slate-400 mt-1">
+                                  مستند عرضه شماره{' '}
+                                  {(
+                                    index +
+                                    1
+                                  ).toLocaleString(
+                                    'fa-IR',
+                                  )}
+                                </p>
+                              </div>
+
+                            </div>
+
+                            <div className="flex items-center gap-2">
+
+                              <a
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:border-[#14B8A6] hover:text-[#0d9488] transition"
+                              >
+                                <ExternalLink
+                                  size={15}
+                                />
+                                مشاهده
+                              </a>
+
+                              <a
+                                href={url}
+                                download
+                                className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-[#1E3A8A] text-white text-xs font-bold hover:bg-[#172f72] transition"
+                              >
+                                <Download
+                                  size={15}
+                                />
+                                دریافت
+                              </a>
+
+                            </div>
+                          </div>
+                        );
+                      },
+                    )}
+
+                  </div>
+                </section>
+              )}
+
+            </div>
+          </div>
+
+          {/* ==================================================
+              STICKY SUMMARY PANEL
+          ================================================== */}
+
+          <aside className="lg:sticky lg:top-24 self-start">
+
+            <div className="rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60 overflow-hidden">
+
+              {/* Panel Header */}
+
+              <div className="relative overflow-hidden bg-gradient-to-br from-[#1E3A8A] via-[#2563EB] to-[#14B8A6] p-6 text-white">
+
+                <div className="absolute -top-16 -left-16 w-40 h-40 rounded-full bg-white/10 blur-2xl" />
+
+                <div className="relative">
+
+                  <div className="flex items-center justify-between gap-3">
+
+                    <div className="flex items-center gap-2">
+                      <Sparkles
+                        size={17}
+                        className="text-white/80"
+                      />
+
+                      <span className="text-xs font-bold text-white/80">
+                        خلاصه عرضه
+                      </span>
+                    </div>
+
+                    {supply!.status && (
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-white/95 ${
+                          supply!.status ===
+                          'approved' ||
+                          supply!.status ===
+                          'published'
+                            ? 'text-emerald-700'
+                            : 'text-slate-700'
+                        }`}
+                      >
+                        {getStatusLabel(
+                          supply!.status,
+                        )}
+                      </span>
+                    )}
+                  </div>
+
+                  <h2 className="text-lg font-extrabold leading-8 mt-5">
+                    {supply!.title}
+                  </h2>
+
+                  <p className="text-xs text-white/70 mt-2">
+                    شناسه عرضه:{" "}
+                    {supply!.id.toLocaleString(
+                      'fa-IR',
+                    )}
+                  </p>
+
+                </div>
+              </div>
+
+              {/* Summary */}
+
+              <div className="p-5">
+
+                <div className="space-y-3">
+
+                  {/* City */}
+
+                  {supply!.city && (
+                    <div className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 border border-slate-100 px-4 py-3.5">
+
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center">
+                          <MapPin
+                            size={17}
+                            className="text-[#1E3A8A]"
+                          />
+                        </div>
+
+                        <span className="text-xs text-slate-500">
+                          محل عرضه
+                        </span>
+                      </div>
+
+                      <span className="text-sm font-extrabold text-slate-800">
+                        {supply!.city}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Quantity */}
+
+                  {supply!.quantity && (
+                    <div className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 border border-slate-100 px-4 py-3.5">
+
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center">
+                          <Boxes
+                            size={17}
+                            className="text-[#1E3A8A]"
+                          />
+                        </div>
+
+                        <span className="text-xs text-slate-500">
+                          مقدار
+                        </span>
+                      </div>
+
+                      <span className="text-sm font-extrabold text-slate-800">
+                        {
+                          supply!.quantity
+                        }{' '}
+                        {
+                          supply!.unit
+                        }
+                      </span>
+                    </div>
+                  )}
+
+                  {/* TRL */}
+
+                  {supply!.trl && (
+                    <div className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 border border-slate-100 px-4 py-3.5">
+
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center">
+                          <Layers
+                            size={17}
+                            className="text-[#1E3A8A]"
+                          />
+                        </div>
+
+                        <span className="text-xs text-slate-500">
+                          آمادگی فناوری
+                        </span>
+                      </div>
+
+                      <span className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-extrabold">
+                        TRL{' '}
+                        {
+                          supply!.trl
+                        }
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Price */}
+
+                  <div className="rounded-2xl bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-100 p-5 mt-4">
+
+                    <div className="flex items-center gap-2">
+                      <Tag
+                        size={17}
+                        className="text-[#1E3A8A]"
+                      />
+
+                      <span className="text-xs font-bold text-blue-600">
+                        قیمت
+                      </span>
+                    </div>
+
+                    <p className="text-xl font-black text-[#1E3A8A] mt-2">
+                      {formatSupplyPrice(
+                        supply!.price,
+                      )}
+                    </p>
+
+                  </div>
+
+                </div>
+
+                {/* CTA */}
+
+                <div className="mt-5 pt-5 border-t border-slate-100">
+
+                  <Link
+                    href={`/negotiation/supply-${supply!.id}`}
+                    className="w-full inline-flex items-center justify-center gap-2 px-5 py-4 bg-[#14B8A6] text-white rounded-2xl text-sm font-extrabold hover:bg-[#0d9488] transition-all duration-300 shadow-lg shadow-teal-500/20 hover:shadow-xl hover:shadow-teal-500/25 hover:-translate-y-0.5"
+                  >
+                    <MessageCircle
+                      size={19}
+                    />
+
+                    درخواست مذاکره
+                  </Link>
+
+                  <p className="text-[11px] text-slate-400 text-center mt-3 leading-6">
+                    برای دریافت اطلاعات بیشتر یا
+                    شروع گفت‌وگو با عرضه‌کننده
+                    درخواست مذاکره ارسال کنید.
+                  </p>
+
+                </div>
+
+              </div>
+            </div>
+          </aside>
+
+        </div>
+      </main>
+    </div>
   );
 }

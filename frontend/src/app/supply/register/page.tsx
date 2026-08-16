@@ -1,3 +1,4 @@
+// این فایل: صفحه ثبت عرضه محصول / خدمت در فرانت‌اند
 'use client';
 
 import { useRef, useState, useEffect } from 'react';
@@ -117,7 +118,12 @@ const cityOptions = [
   'سایر',
 ];
 
-const wizardSteps = ['اطلاعات پایه', 'جزئیات عرضه', 'مستندات', 'تأیید و ارسال'];
+const wizardSteps = [
+  'اطلاعات پایه',
+  'جزئیات عرضه',
+  'مستندات',
+  'تأیید و ارسال',
+];
 
 const initialForm: SupplyFormData = {
   title: '',
@@ -140,12 +146,15 @@ const MAX_IMAGES = 3;
 
 export default function SupplyRegisterPage() {
   const router = useRouter();
+
   const [step, setStep] = useState<number>(0);
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
   const [errors, setErrors] = useState<string[]>([]);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>(
+    {},
+  );
   const [form, setForm] = useState<SupplyFormData>(initialForm);
   const [logoFailed, setLogoFailed] = useState(false);
 
@@ -160,16 +169,22 @@ export default function SupplyRegisterPage() {
     setFieldErrors((prev) => ({ ...prev, [key]: '' }));
   };
 
-  const handleFileChange = (field: 'images' | 'documents', files: FileList | null) => {
+  const handleFileChange = (
+    field: 'images' | 'documents',
+    files: FileList | null,
+  ) => {
     if (!files) return;
 
     let newFiles = Array.from(files);
 
     if (field === 'images') {
       const total = form.images.length + newFiles.length;
+
       if (total > MAX_IMAGES) {
         setErrors([`حداکثر ${MAX_IMAGES} تصویر می‌توانید آپلود کنید.`]);
+
         const remaining = MAX_IMAGES - form.images.length;
+
         if (remaining > 0) {
           newFiles = newFiles.slice(0, remaining);
         } else {
@@ -184,7 +199,10 @@ export default function SupplyRegisterPage() {
     }));
   };
 
-  const removeFile = (field: 'images' | 'documents', index: number) => {
+  const removeFile = (
+    field: 'images' | 'documents',
+    index: number,
+  ) => {
     setForm((prev) => ({
       ...prev,
       [field]: prev[field].filter((_, i) => i !== index),
@@ -196,26 +214,49 @@ export default function SupplyRegisterPage() {
     const newFieldErrors: Record<string, string> = {};
 
     if (step === 0) {
-      if (!form.title.trim()) newFieldErrors.title = 'عنوان الزامی است.';
-      if (!form.category) newFieldErrors.category = 'دسته‌بندی الزامی است.';
+      if (!form.title.trim()) {
+        newFieldErrors.title = 'عنوان الزامی است.';
+      }
+
+      if (!form.category) {
+        newFieldErrors.category = 'دسته‌بندی الزامی است.';
+      }
     }
 
     if (step === 1) {
-      if (!form.description.trim()) newFieldErrors.description = 'توضیحات الزامی است.';
-      if (!form.quantity.trim()) newFieldErrors.quantity = 'مقدار الزامی است.';
-      else if (!/^\d+(\.\d+)?$/.test(form.quantity)) newFieldErrors.quantity = 'فقط عدد وارد کنید.';
-      if (!form.unit) newFieldErrors.unit = 'واحد الزامی است.';
-      if (!form.price.trim()) newFieldErrors.price = 'قیمت الزامی است.';
-      else if (!/^\d+(\.\d+)?$/.test(form.price)) newFieldErrors.price = 'فقط عدد وارد کنید.';
+      if (!form.description.trim()) {
+        newFieldErrors.description = 'توضیحات الزامی است.';
+      }
+
+      if (!form.quantity.trim()) {
+        newFieldErrors.quantity = 'مقدار الزامی است.';
+      } else if (!/^\d+(\.\d+)?$/.test(form.quantity)) {
+        newFieldErrors.quantity = 'فقط عدد وارد کنید.';
+      }
+
+      if (!form.unit) {
+        newFieldErrors.unit = 'واحد الزامی است.';
+      }
+
+      if (!form.price.trim()) {
+        newFieldErrors.price = 'قیمت الزامی است.';
+      } else if (!/^\d+(\.\d+)?$/.test(form.price)) {
+        newFieldErrors.price = 'فقط عدد وارد کنید.';
+      }
     }
 
     setErrors(newErrors);
     setFieldErrors(newFieldErrors);
-    return Object.keys(newFieldErrors).length === 0 && newErrors.length === 0;
+
+    return (
+      Object.keys(newFieldErrors).length === 0 &&
+      newErrors.length === 0
+    );
   };
 
   const goToStep = (targetStep: number) => {
     if (targetStep > step && !validateStep()) return;
+
     setErrors([]);
     setFieldErrors({});
     setStep(targetStep);
@@ -223,6 +264,7 @@ export default function SupplyRegisterPage() {
 
   const nextStep = () => {
     if (!validateStep()) return;
+
     setErrors([]);
     setFieldErrors({});
     setStep((prev) => Math.min(prev + 1, 3));
@@ -235,13 +277,44 @@ export default function SupplyRegisterPage() {
   };
 
   // ============================================================
-  // ✅ تابع ارسال اصلاح‌شده (با کلیدهای صحیح)
+  // تابع ثبت عرضه
+  // فقط console.log و console.time برای تشخیص زمان اضافه شده‌اند.
+  // هیچ نام فیلد API یا رفتار قبلی تغییر نکرده است.
   // ============================================================
+
   const handleSubmit = async () => {
-    if (!validateStep()) return;
+    console.log('========================================');
+    console.log('🚀 [SUPPLY SUBMIT] شروع ثبت عرضه');
+    console.log('========================================');
+
+    console.time('⏱️ TOTAL submit');
+
+    const validationStart = performance.now();
+
+    if (!validateStep()) {
+      console.log('❌ [SUPPLY SUBMIT] اعتبارسنجی فرم ناموفق بود');
+
+      console.timeEnd('⏱️ TOTAL submit');
+      return;
+    }
+
+    console.log(
+      `✅ [SUPPLY SUBMIT] اعتبارسنجی انجام شد: ${(
+        performance.now() - validationStart
+      ).toFixed(2)} ms`,
+    );
+
+    console.log('🔐 [SUPPLY SUBMIT] وضعیت احراز هویت:', {
+      isAuthenticated,
+      hasAccessToken: Boolean(accessToken),
+    });
 
     if (!isAuthenticated || !accessToken) {
+      console.log('❌ [SUPPLY SUBMIT] کاربر احراز هویت نشده است');
+
       setErrors(['لطفاً ابتدا وارد حساب کاربری خود شوید.']);
+
+      console.timeEnd('⏱️ TOTAL submit');
       return;
     }
 
@@ -250,62 +323,188 @@ export default function SupplyRegisterPage() {
     setErrors([]);
 
     try {
+      // ============================================================
+      // ساخت FormData
+      // ============================================================
+
+      console.time('⏱️ FormData creation');
+
       const formData = new FormData();
 
       const textFields: (keyof SupplyFormData)[] = [
-        'title', 'category', 'industry', 'technology', 'city',
-        'description', 'quantity', 'unit', 'price', 'trl'
+        'title',
+        'category',
+        'industry',
+        'technology',
+        'city',
+        'description',
+        'quantity',
+        'unit',
+        'price',
+        'trl',
       ];
-      textFields.forEach(field => {
+
+      textFields.forEach((field) => {
         const value = form[field];
+
         if (value) {
           formData.append(field, String(value));
         }
       });
 
-      // ===== تصاویر با کلید 'uploaded_images' =====
-      form.images.forEach(file => {
+      console.log('📦 [SUPPLY SUBMIT] فیلدهای متنی اضافه شدند');
+
+      // تصاویر با همان کلید قبلی
+      form.images.forEach((file) => {
         formData.append('uploaded_images', file);
       });
 
-      // ===== مستندات با کلید 'uploaded_documents' (نه 'documents') =====
-      form.documents.forEach(file => {
+      console.log(
+        `🖼️ [SUPPLY SUBMIT] تعداد تصاویر: ${form.images.length}`,
+      );
+
+      // مستندات با همان کلید قبلی
+      form.documents.forEach((file) => {
         formData.append('uploaded_documents', file);
       });
 
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+      console.log(
+        `📄 [SUPPLY SUBMIT] تعداد مستندات: ${form.documents.length}`,
+      );
 
-      const response = await fetch(`${API_URL}/products/supplies/`, {
+      console.log(
+        '📦 [SUPPLY SUBMIT] حجم تقریبی فایل‌ها:',
+        {
+          images: form.images.reduce(
+            (sum, file) => sum + file.size,
+            0,
+          ),
+          documents: form.documents.reduce(
+            (sum, file) => sum + file.size,
+            0,
+          ),
+        },
+      );
+
+      console.timeEnd('⏱️ FormData creation');
+
+      // ============================================================
+      // API URL
+      // ============================================================
+
+      const API_URL =
+        process.env.NEXT_PUBLIC_API_URL ||
+        'http://127.0.0.1:8000/api';
+
+      const endpoint = `${API_URL}/products/supplies/`;
+
+      console.log('🌐 [SUPPLY SUBMIT] API URL:', endpoint);
+
+      // ============================================================
+      // ارسال درخواست
+      // ============================================================
+
+      console.log('📤 [SUPPLY SUBMIT] درخواست POST ارسال شد');
+
+      console.time('⏱️ FETCH request');
+
+      const fetchStart = performance.now();
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         body: formData,
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
+          Authorization: `Bearer ${accessToken}`,
         },
       });
 
+      const fetchDuration = performance.now() - fetchStart;
+
+      console.timeEnd('⏱️ FETCH request');
+
+      console.log(
+        `⏱️ [SUPPLY SUBMIT] زمان دریافت response: ${fetchDuration.toFixed(
+          2,
+        )} ms`,
+      );
+
+      console.log('📥 [SUPPLY SUBMIT] response:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+      });
+
+      // ============================================================
+      // خواندن پاسخ
+      // ============================================================
+
+      console.time('⏱️ Response text parsing');
+
       const textResponse = await response.text();
+
+      console.log(
+        '📥 [SUPPLY SUBMIT] طول پاسخ:',
+        textResponse.length,
+      );
+
       let data: any = null;
       let parseError = false;
+
       try {
         data = JSON.parse(textResponse);
       } catch {
         parseError = true;
       }
 
+      console.timeEnd('⏱️ Response text parsing');
+
+      console.log('📥 [SUPPLY SUBMIT] داده پاسخ:', data);
+
+      // ============================================================
+      // خطای HTTP
+      // ============================================================
+
       if (!response.ok) {
+        console.error(
+          '❌ [SUPPLY SUBMIT] پاسخ ناموفق:',
+          {
+            status: response.status,
+            statusText: response.statusText,
+            data,
+          },
+        );
+
         if (response.status === 401) {
+          console.log(
+            '🔐 [SUPPLY SUBMIT] نشست منقضی شده؛ logout انجام می‌شود.',
+          );
+
           logout();
           router.push('/login?session_expired=true');
-          throw new Error('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.');
+
+          throw new Error(
+            'نشست شما منقضی شده است. لطفاً دوباره وارد شوید.',
+          );
         }
 
         let errorMsg = 'خطا در ثبت عرضه.';
 
         if (!parseError && data) {
-          if (data?.errors && typeof data.errors === 'object') {
+          if (
+            data?.errors &&
+            typeof data.errors === 'object'
+          ) {
             const fieldErrors = Object.entries(data.errors)
-              .map(([f, msgs]) => `${f}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
+              .map(
+                ([f, msgs]) =>
+                  `${f}: ${
+                    Array.isArray(msgs)
+                      ? msgs.join(', ')
+                      : msgs
+                  }`,
+              )
               .join('; ');
+
             errorMsg = `خطاهای اعتبارسنجی: ${fieldErrors}`;
           } else if (data?.detail) {
             errorMsg = data.detail;
@@ -325,20 +524,62 @@ export default function SupplyRegisterPage() {
         throw new Error(errorMsg);
       }
 
-      if (parseError) throw new Error('پاسخ سرور نامعتبر است.');
+      // ============================================================
+      // پاسخ موفق
+      // ============================================================
 
-      setSubmitMessage('✅ عرضه شما با موفقیت ثبت شد و برای بررسی کارشناس ارسال گردید.');
+      if (parseError) {
+        console.error(
+          '❌ [SUPPLY SUBMIT] پاسخ JSON معتبر نبود:',
+          textResponse,
+        );
+
+        throw new Error('پاسخ سرور نامعتبر است.');
+      }
+
+      console.log(
+        '✅ [SUPPLY SUBMIT] عرضه با موفقیت در سرور ثبت شد.',
+      );
+
+      console.log(
+        '📦 [SUPPLY SUBMIT] response data:',
+        data,
+      );
+
+      setSubmitMessage(
+        '✅ عرضه شما با موفقیت ثبت شد و برای بررسی کارشناس ارسال گردید.',
+      );
     } catch (error: any) {
-      console.error('❌ خطا در ثبت عرضه:', error);
-      setErrors([error.message || 'خطا در ثبت عرضه. لطفاً دوباره تلاش کنید.']);
+      console.error(
+        '❌ [SUPPLY SUBMIT] خطا در ثبت عرضه:',
+        error,
+      );
+
+      setErrors([
+        error?.message ||
+          'خطا در ثبت عرضه. لطفاً دوباره تلاش کنید.',
+      ]);
     } finally {
       setLoading(false);
+
+      console.timeEnd('⏱️ TOTAL submit');
+
+      console.log(
+        '========================================',
+      );
+      console.log(
+        '🏁 [SUPPLY SUBMIT] پایان عملیات ثبت عرضه',
+      );
+      console.log(
+        '========================================',
+      );
     }
   };
 
   // ============================================================
-  // نمایش پیام لاگین در صورت عدم احراز هویت
+  // نمایش پیام لاگین
   // ============================================================
+
   if (mounted && !isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1E3A8A10] to-[#14B8A610] p-4">
@@ -353,12 +594,21 @@ export default function SupplyRegisterPage() {
                   onError={() => setLogoFailed(true)}
                 />
               ) : (
-                <span className="text-[#1E3A8A] font-black text-5xl">ب ت</span>
+                <span className="text-[#1E3A8A] font-black text-5xl">
+                  ب ت
+                </span>
               )}
             </div>
           </div>
-          <h2 className="text-2xl font-bold text-slate-800 mb-2">لطفاً وارد شوید</h2>
-          <p className="text-slate-500 text-sm mb-6">برای ثبت محصول، باید وارد حساب کاربری خود شوید.</p>
+
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">
+            لطفاً وارد شوید
+          </h2>
+
+          <p className="text-slate-500 text-sm mb-6">
+            برای ثبت محصول، باید وارد حساب کاربری خود شوید.
+          </p>
+
           <Link
             href="/login?next=/supply/register"
             className="inline-flex items-center justify-center w-full py-3 px-6 rounded-xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] text-white font-bold shadow-lg hover:shadow-xl transition"
@@ -372,21 +622,42 @@ export default function SupplyRegisterPage() {
 
   if (!mounted) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${BRAND.primary}10, ${BRAND.secondary}10, #ffffff)` }}>
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{
+          background: `linear-gradient(135deg, ${BRAND.primary}10, ${BRAND.secondary}10, #ffffff)`,
+        }}
+      >
         <div className="w-full max-w-4xl rounded-[28px] border border-white/60 bg-white/90 p-8 shadow-[0_20px_70px_rgba(30,58,138,0.12)] backdrop-blur-sm text-center">
-          <img src="/logo.png" alt="بازار تحول" className="h-16 w-auto mx-auto mb-4" />
-          <h1 className="text-2xl font-black text-slate-900 sm:text-3xl">ثبت عرضه</h1>
-          <p className="mt-4 text-sm text-slate-500">در حال بارگذاری...</p>
+          <img
+            src="/logo.png"
+            alt="بازار تحول"
+            className="h-16 w-auto mx-auto mb-4"
+          />
+
+          <h1 className="text-2xl font-black text-slate-900 sm:text-3xl">
+            ثبت عرضه
+          </h1>
+
+          <p className="mt-4 text-sm text-slate-500">
+            در حال بارگذاری...
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6" style={{ background: `linear-gradient(135deg, ${BRAND.primary}10, ${BRAND.secondary}10, #ffffff)` }}>
+    <div
+      className="min-h-screen flex items-center justify-center p-4 sm:p-6"
+      style={{
+        background: `linear-gradient(135deg, ${BRAND.primary}10, ${BRAND.secondary}10, #ffffff)`,
+      }}
+    >
       <div className="w-full max-w-4xl rounded-[28px] border border-white/60 bg-white/90 p-5 shadow-[0_20px_70px_rgba(30,58,138,0.12)] backdrop-blur-sm sm:p-8">
 
         {/* ===== Header ===== */}
+
         <div className="mb-8 flex flex-col items-center text-center">
           {!logoFailed ? (
             <img
@@ -400,20 +671,29 @@ export default function SupplyRegisterPage() {
               ب ت
             </div>
           )}
-          <h1 className="text-2xl font-black text-slate-900 sm:text-3xl">ثبت عرضه محصول / خدمت</h1>
+
+          <h1 className="text-2xl font-black text-slate-900 sm:text-3xl">
+            ثبت عرضه محصول / خدمت
+          </h1>
+
           <p className="mt-2 text-sm leading-7 text-slate-500 sm:text-base">
             محصول، خدمت یا راهکار فناورانه خود را برای عرضه در بازار تحول ثبت کنید.
           </p>
         </div>
 
         {/* ===== Stepper ===== */}
+
         <div className="mb-8">
           <div className="flex items-center justify-between gap-1 sm:gap-2">
             {wizardSteps.map((label, index) => {
               const isActive = step === index;
               const isDone = step > index;
+
               return (
-                <div key={label} className="flex items-center gap-1 sm:gap-2">
+                <div
+                  key={label}
+                  className="flex items-center gap-1 sm:gap-2"
+                >
                   <button
                     type="button"
                     onClick={() => goToStep(index)}
@@ -422,26 +702,43 @@ export default function SupplyRegisterPage() {
                   >
                     <div
                       className={`flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-full text-xs sm:text-sm font-bold transition-all ${
-                        isActive ? 'scale-110 text-white shadow-lg' :
-                        isDone ? 'text-white' : 'bg-slate-200 text-slate-500'
+                        isActive
+                          ? 'scale-110 text-white shadow-lg'
+                          : isDone
+                            ? 'text-white'
+                            : 'bg-slate-200 text-slate-500'
                       }`}
                       style={{
-                        background: (isActive || isDone)
-                          ? `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})`
-                          : undefined,
+                        background:
+                          isActive || isDone
+                            ? `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})`
+                            : undefined,
                       }}
                     >
                       {isDone ? <Check size={14} /> : index + 1}
                     </div>
-                    <span className={`mt-1 text-[10px] sm:text-xs font-medium whitespace-nowrap ${
-                      isActive ? 'text-slate-900 font-extrabold' :
-                      isDone ? 'text-teal-700' : 'text-slate-400'
-                    }`}>
+
+                    <span
+                      className={`mt-1 text-[10px] sm:text-xs font-medium whitespace-nowrap ${
+                        isActive
+                          ? 'text-slate-900 font-extrabold'
+                          : isDone
+                            ? 'text-teal-700'
+                            : 'text-slate-400'
+                      }`}
+                    >
                       {label}
                     </span>
                   </button>
+
                   {index < wizardSteps.length - 1 && (
-                    <div className={`h-0.5 w-4 sm:w-6 ${step > index ? 'bg-teal-500' : 'bg-slate-200'}`} />
+                    <div
+                      className={`h-0.5 w-4 sm:w-6 ${
+                        step > index
+                          ? 'bg-teal-500'
+                          : 'bg-slate-200'
+                      }`}
+                    />
                   )}
                 </div>
               );
@@ -450,21 +747,39 @@ export default function SupplyRegisterPage() {
         </div>
 
         {/* ===== Error Box ===== */}
+
         {errors.length > 0 && (
           <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">
-            <div className="mb-2 flex items-center gap-2 font-bold"><AlertCircle size={18} /> خطاهای فرم</div>
+            <div className="mb-2 flex items-center gap-2 font-bold">
+              <AlertCircle size={18} />
+              خطاهای فرم
+            </div>
+
             <ul className="list-inside list-disc space-y-1 text-sm">
-              {errors.map((err, i) => <li key={i}>{err}</li>)}
+              {errors.map((err, i) => (
+                <li key={i}>{err}</li>
+              ))}
             </ul>
           </div>
         )}
 
         {/* ===== Success Message ===== */}
+
         {submitMessage && (
           <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center">
-            <ShieldCheck className="h-14 w-14 text-emerald-600 mx-auto mb-3" strokeWidth={1.5} />
-            <h3 className="text-lg font-bold text-emerald-800">{submitMessage}</h3>
-            <p className="text-sm text-emerald-600 mt-1">عرضه شما با موفقیت در سامانه ثبت شد.</p>
+            <ShieldCheck
+              className="h-14 w-14 text-emerald-600 mx-auto mb-3"
+              strokeWidth={1.5}
+            />
+
+            <h3 className="text-lg font-bold text-emerald-800">
+              {submitMessage}
+            </h3>
+
+            <p className="text-sm text-emerald-600 mt-1">
+              عرضه شما با موفقیت در سامانه ثبت شد.
+            </p>
+
             <button
               onClick={() => router.push('/dashboard')}
               className="mt-5 px-8 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition shadow-md"
@@ -474,16 +789,22 @@ export default function SupplyRegisterPage() {
           </div>
         )}
 
-        {/* ===== اگر submitMessage وجود دارد، بقیه محتوا را مخفی می‌کنیم ===== */}
         {!submitMessage && (
           <>
-            {/* ===== Step 0 - Basic Info ===== */}
+            {/* ===== Step 0 ===== */}
+
             {step === 0 && (
               <div className="space-y-6">
                 <div>
-                  <h2 className="text-xl font-extrabold text-slate-900">اطلاعات پایه</h2>
-                  <p className="mt-1 text-sm text-slate-500">عنوان، دسته‌بندی، صنعت، فناوری و شهر را مشخص کنید.</p>
+                  <h2 className="text-xl font-extrabold text-slate-900">
+                    اطلاعات پایه
+                  </h2>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    عنوان، دسته‌بندی، صنعت، فناوری و شهر را مشخص کنید.
+                  </p>
                 </div>
+
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <InputField
                     label="عنوان محصول / خدمت"
@@ -493,6 +814,7 @@ export default function SupplyRegisterPage() {
                     icon={<Tag size={18} />}
                     placeholder="مثال: سامانه مدیریت انرژی"
                   />
+
                   <SelectField
                     label="دسته‌بندی"
                     value={form.category}
@@ -501,6 +823,7 @@ export default function SupplyRegisterPage() {
                     error={fieldErrors.category}
                     icon={<Layers size={18} />}
                   />
+
                   <SelectField
                     label="صنعت"
                     value={form.industry}
@@ -509,6 +832,7 @@ export default function SupplyRegisterPage() {
                     icon={<Package size={18} />}
                     placeholder="انتخاب صنعت"
                   />
+
                   <InputField
                     label="فناوری"
                     value={form.technology}
@@ -516,6 +840,7 @@ export default function SupplyRegisterPage() {
                     icon={<Cpu size={18} />}
                     placeholder="مثال: هوش مصنوعی، اینترنت اشیاء"
                   />
+
                   <SelectField
                     label="شهر"
                     value={form.city}
@@ -528,26 +853,46 @@ export default function SupplyRegisterPage() {
               </div>
             )}
 
-            {/* ===== Step 1 - Supply Details ===== */}
+            {/* ===== Step 1 ===== */}
+
             {step === 1 && (
               <div className="space-y-6">
                 <div>
-                  <h2 className="text-xl font-extrabold text-slate-900">جزئیات عرضه</h2>
-                  <p className="mt-1 text-sm text-slate-500">توضیحات، مقدار، قیمت و سطح آمادگی فناوری را وارد کنید.</p>
+                  <h2 className="text-xl font-extrabold text-slate-900">
+                    جزئیات عرضه
+                  </h2>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    توضیحات، مقدار، قیمت و سطح آمادگی فناوری را وارد کنید.
+                  </p>
                 </div>
+
                 <div>
-                  <label className="mb-2 block text-sm font-bold text-slate-700">توضیحات</label>
+                  <label className="mb-2 block text-sm font-bold text-slate-700">
+                    توضیحات
+                  </label>
+
                   <textarea
                     value={form.description}
-                    onChange={(e) => updateForm('description', e.target.value)}
+                    onChange={(e) =>
+                      updateForm('description', e.target.value)
+                    }
                     rows={5}
                     className={`w-full rounded-2xl border bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:ring-2 ${
-                      fieldErrors.description ? 'border-red-400 focus:ring-red-400' : 'border-slate-200 focus:border-transparent focus:ring-[#1E3A8A]'
+                      fieldErrors.description
+                        ? 'border-red-400 focus:ring-red-400'
+                        : 'border-slate-200 focus:border-transparent focus:ring-[#1E3A8A]'
                     }`}
                     placeholder="توضیحات کامل محصول یا خدمت، کاربردها و مزایا..."
                   />
-                  {fieldErrors.description && <p className="mt-1 text-xs text-red-500">{fieldErrors.description}</p>}
+
+                  {fieldErrors.description && (
+                    <p className="mt-1 text-xs text-red-500">
+                      {fieldErrors.description}
+                    </p>
+                  )}
                 </div>
+
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <InputField
                     label="مقدار"
@@ -558,6 +903,7 @@ export default function SupplyRegisterPage() {
                     inputMode="numeric"
                     placeholder="مثلاً ۱۰۰"
                   />
+
                   <SelectField
                     label="واحد"
                     value={form.unit}
@@ -565,6 +911,7 @@ export default function SupplyRegisterPage() {
                     options={unitOptions}
                     error={fieldErrors.unit}
                   />
+
                   <InputField
                     label="قیمت (تومان)"
                     value={form.price}
@@ -574,6 +921,7 @@ export default function SupplyRegisterPage() {
                     inputMode="numeric"
                     placeholder="مثلاً ۵۰۰۰۰۰۰۰"
                   />
+
                   <InputField
                     label="سطح آمادگی فناوری (TRL)"
                     value={form.trl}
@@ -586,32 +934,47 @@ export default function SupplyRegisterPage() {
               </div>
             )}
 
-            {/* ===== Step 2 - Documents (با محدودیت ۳ تصویر) ===== */}
+            {/* ===== Step 2 ===== */}
+
             {step === 2 && (
               <div className="space-y-6">
                 <div>
-                  <h2 className="text-xl font-extrabold text-slate-900">مستندات و رسانه</h2>
+                  <h2 className="text-xl font-extrabold text-slate-900">
+                    مستندات و رسانه
+                  </h2>
+
                   <p className="mt-1 text-sm text-slate-500">
-                    تصاویر (حداکثر {MAX_IMAGES} عدد)، کاتالوگ، گواهی‌نامه‌ها و مستندات فنی را بارگذاری کنید (اختیاری).
+                    تصاویر (حداکثر {MAX_IMAGES} عدد)، کاتالوگ،
+                    گواهی‌نامه‌ها و مستندات فنی را بارگذاری کنید (اختیاری).
                   </p>
                 </div>
+
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                   <FileUploadCard
                     title="تصاویر محصول"
                     description={`فرمت‌های jpg, png, webp (حداکثر ${MAX_IMAGES} عدد)`}
                     files={form.images}
-                    onAdd={(files) => handleFileChange('images', files)}
-                    onRemove={(index) => removeFile('images', index)}
+                    onAdd={(files) =>
+                      handleFileChange('images', files)
+                    }
+                    onRemove={(index) =>
+                      removeFile('images', index)
+                    }
                     accept="image/*"
                     maxFiles={MAX_IMAGES}
                     currentCount={form.images.length}
                   />
+
                   <FileUploadCard
                     title="مستندات فنی"
                     description="PDF, Word, Excel"
                     files={form.documents}
-                    onAdd={(files) => handleFileChange('documents', files)}
-                    onRemove={(index) => removeFile('documents', index)}
+                    onAdd={(files) =>
+                      handleFileChange('documents', files)
+                    }
+                    onRemove={(index) =>
+                      removeFile('documents', index)
+                    }
                     accept=".pdf,.doc,.docx,.xls,.xlsx"
                     maxFiles={10}
                     currentCount={form.documents.length}
@@ -620,37 +983,100 @@ export default function SupplyRegisterPage() {
               </div>
             )}
 
-            {/* ===== Step 3 - Review & Submit ===== */}
+            {/* ===== Step 3 ===== */}
+
             {step === 3 && (
               <div className="space-y-6">
                 <div>
-                  <h2 className="text-xl font-extrabold text-slate-900">تأیید و ارسال</h2>
-                  <p className="mt-1 text-sm text-slate-500">اطلاعات وارد شده را مرور کرده و عرضه را نهایی کنید.</p>
+                  <h2 className="text-xl font-extrabold text-slate-900">
+                    تأیید و ارسال
+                  </h2>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    اطلاعات وارد شده را مرور کرده و عرضه را نهایی کنید.
+                  </p>
                 </div>
+
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                   <SummaryCard title="اطلاعات پایه">
-                    <SummaryRow label="عنوان" value={form.title} />
-                    <SummaryRow label="دسته‌بندی" value={form.category} />
-                    <SummaryRow label="صنعت" value={form.industry || '-'} />
-                    <SummaryRow label="فناوری" value={form.technology || '-'} />
-                    <SummaryRow label="شهر" value={form.city || '-'} />
+                    <SummaryRow
+                      label="عنوان"
+                      value={form.title}
+                    />
+
+                    <SummaryRow
+                      label="دسته‌بندی"
+                      value={form.category}
+                    />
+
+                    <SummaryRow
+                      label="صنعت"
+                      value={form.industry || '-'}
+                    />
+
+                    <SummaryRow
+                      label="فناوری"
+                      value={form.technology || '-'}
+                    />
+
+                    <SummaryRow
+                      label="شهر"
+                      value={form.city || '-'}
+                    />
                   </SummaryCard>
+
                   <SummaryCard title="جزئیات عرضه">
-                    <SummaryRow label="توضیحات" value={form.description} />
-                    <SummaryRow label="مقدار" value={form.quantity} />
-                    <SummaryRow label="واحد" value={form.unit} />
-                    <SummaryRow label="قیمت" value={`${form.price} تومان`} />
-                    <SummaryRow label="TRL" value={form.trl || '-'} />
+                    <SummaryRow
+                      label="توضیحات"
+                      value={form.description}
+                    />
+
+                    <SummaryRow
+                      label="مقدار"
+                      value={form.quantity}
+                    />
+
+                    <SummaryRow
+                      label="واحد"
+                      value={form.unit}
+                    />
+
+                    <SummaryRow
+                      label="قیمت"
+                      value={`${form.price} تومان`}
+                    />
+
+                    <SummaryRow
+                      label="TRL"
+                      value={form.trl || '-'}
+                    />
                   </SummaryCard>
+
                   <SummaryCard title="مستندات">
-                    <SummaryRow label="تصاویر" value={form.images.length ? `${form.images.length} فایل` : 'بدون تصویر'} />
-                    <SummaryRow label="مستندات" value={form.documents.length ? `${form.documents.length} فایل` : 'بدون مستندات'} />
+                    <SummaryRow
+                      label="تصاویر"
+                      value={
+                        form.images.length
+                          ? `${form.images.length} فایل`
+                          : 'بدون تصویر'
+                      }
+                    />
+
+                    <SummaryRow
+                      label="مستندات"
+                      value={
+                        form.documents.length
+                          ? `${form.documents.length} فایل`
+                          : 'بدون مستندات'
+                      }
+                    />
                   </SummaryCard>
                 </div>
               </div>
             )}
 
             {/* ===== Footer Navigation ===== */}
+
             <div className="mt-10 flex flex-col gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:items-center sm:justify-between">
               <button
                 type="button"
@@ -658,11 +1084,13 @@ export default function SupplyRegisterPage() {
                 disabled={step === 0 || loading}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <ChevronRight size={18} /> مرحله قبل
+                <ChevronRight size={18} />
+                مرحله قبل
               </button>
 
               <div className="flex items-center gap-2 text-xs text-slate-400">
-                <Sparkles size={14} /> مرحله {step + 1} از {wizardSteps.length}
+                <Sparkles size={14} />
+                مرحله {step + 1} از {wizardSteps.length}
               </div>
 
               {step < 3 ? (
@@ -671,9 +1099,12 @@ export default function SupplyRegisterPage() {
                   onClick={nextStep}
                   disabled={loading}
                   className="inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
-                  style={{ background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})` }}
+                  style={{
+                    background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})`,
+                  }}
                 >
-                  مرحله بعد <ChevronLeft size={18} />
+                  مرحله بعد
+                  <ChevronLeft size={18} />
                 </button>
               ) : (
                 <button
@@ -681,15 +1112,17 @@ export default function SupplyRegisterPage() {
                   onClick={handleSubmit}
                   disabled={loading}
                   className="inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
-                  style={{ background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})` }}
+                  style={{
+                    background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})`,
+                  }}
                 >
-                  {loading ? 'در حال ثبت...' : 'ثبت عرضه'} <ShieldCheck size={18} />
+                  {loading ? 'در حال ثبت...' : 'ثبت عرضه'}
+                  <ShieldCheck size={18} />
                 </button>
               )}
             </div>
           </>
         )}
-
       </div>
     </div>
   );
@@ -697,18 +1130,38 @@ export default function SupplyRegisterPage() {
 
 // ==================== Sub-components ====================
 
-function InputField({ label, value, onChange, type = 'text', error, icon, inputMode, placeholder }: {
-  label: string; value: string; onChange: (v: string) => void; type?: string; error?: string; icon?: React.ReactNode; inputMode?: 'numeric' | 'text'; placeholder?: string;
+function InputField({
+  label,
+  value,
+  onChange,
+  type = 'text',
+  error,
+  icon,
+  inputMode,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  error?: string;
+  icon?: React.ReactNode;
+  inputMode?: 'numeric' | 'text';
+  placeholder?: string;
 }) {
   return (
     <div>
-      <label className="mb-2 block text-sm font-bold text-slate-700">{label}</label>
+      <label className="mb-2 block text-sm font-bold text-slate-700">
+        {label}
+      </label>
+
       <div className="relative">
         {icon && (
           <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
             {icon}
           </div>
         )}
+
         <input
           type={type}
           value={value}
@@ -718,48 +1171,94 @@ function InputField({ label, value, onChange, type = 'text', error, icon, inputM
           className={`w-full rounded-2xl border bg-white py-3 text-sm text-slate-700 outline-none transition focus:ring-2 ${
             icon ? 'pr-10 pl-4' : 'px-4'
           } ${
-            error ? 'border-red-400 focus:ring-red-400' : 'border-slate-200 focus:border-transparent focus:ring-[#1E3A8A]'
+            error
+              ? 'border-red-400 focus:ring-red-400'
+              : 'border-slate-200 focus:border-transparent focus:ring-[#1E3A8A]'
           }`}
         />
       </div>
-      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+
+      {error && (
+        <p className="mt-1 text-xs text-red-500">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
 
-function SelectField({ label, value, onChange, options, error, icon, placeholder }: {
-  label: string; value: string; onChange: (v: string) => void; options: string[]; error?: string; icon?: React.ReactNode; placeholder?: string;
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+  error,
+  icon,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  error?: string;
+  icon?: React.ReactNode;
+  placeholder?: string;
 }) {
   return (
     <div>
-      <label className="mb-2 block text-sm font-bold text-slate-700">{label}</label>
+      <label className="mb-2 block text-sm font-bold text-slate-700">
+        {label}
+      </label>
+
       <div className="relative">
         {icon && (
           <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
             {icon}
           </div>
         )}
+
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className={`w-full rounded-2xl border bg-white py-3 text-sm text-slate-700 outline-none transition focus:ring-2 ${
             icon ? 'pr-10 pl-4' : 'px-4'
           } ${
-            error ? 'border-red-400 focus:ring-red-400' : 'border-slate-200 focus:border-transparent focus:ring-[#1E3A8A]'
+            error
+              ? 'border-red-400 focus:ring-red-400'
+              : 'border-slate-200 focus:border-transparent focus:ring-[#1E3A8A]'
           }`}
         >
-          <option value="">{placeholder || 'انتخاب کنید...'}</option>
+          <option value="">
+            {placeholder || 'انتخاب کنید...'}
+          </option>
+
           {options.map((opt) => (
-            <option key={opt} value={opt}>{opt}</option>
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
           ))}
         </select>
       </div>
-      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+
+      {error && (
+        <p className="mt-1 text-xs text-red-500">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
 
-function FileUploadCard({ title, description, files, onAdd, onRemove, accept, maxFiles, currentCount }: {
+function FileUploadCard({
+  title,
+  description,
+  files,
+  onAdd,
+  onRemove,
+  accept,
+  maxFiles,
+  currentCount,
+}: {
   title: string;
   description: string;
   files: File[];
@@ -770,7 +1269,11 @@ function FileUploadCard({ title, description, files, onAdd, onRemove, accept, ma
   currentCount?: number;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const isFull = maxFiles !== undefined && currentCount !== undefined && currentCount >= maxFiles;
+
+  const isFull =
+    maxFiles !== undefined &&
+    currentCount !== undefined &&
+    currentCount >= maxFiles;
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md">
@@ -778,35 +1281,66 @@ function FileUploadCard({ title, description, files, onAdd, onRemove, accept, ma
         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
           <ImageIcon size={20} />
         </div>
+
         <div>
-          <h3 className="text-sm font-extrabold text-slate-800">{title}</h3>
-          <p className="mt-1 text-xs leading-6 text-slate-500">{description}</p>
-          {isFull && <p className="text-xs text-red-500">تعداد مجاز تکمیل شده است.</p>}
+          <h3 className="text-sm font-extrabold text-slate-800">
+            {title}
+          </h3>
+
+          <p className="mt-1 text-xs leading-6 text-slate-500">
+            {description}
+          </p>
+
+          {isFull && (
+            <p className="text-xs text-red-500">
+              تعداد مجاز تکمیل شده است.
+            </p>
+          )}
         </div>
       </div>
+
       {files.length > 0 && (
         <ul className="mb-4 space-y-2">
           {files.map((file, i) => (
-            <li key={i} className="flex items-center justify-between rounded-xl bg-slate-50 p-2 text-xs">
-              <span className="truncate max-w-[180px]">{file.name}</span>
-              <button type="button" onClick={() => onRemove(i)} className="text-red-500 hover:text-red-700 font-medium">حذف</button>
+            <li
+              key={i}
+              className="flex items-center justify-between rounded-xl bg-slate-50 p-2 text-xs"
+            >
+              <span className="truncate max-w-[180px]">
+                {file.name}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => onRemove(i)}
+                className="text-red-500 hover:text-red-700 font-medium"
+              >
+                حذف
+              </button>
             </li>
           ))}
         </ul>
       )}
+
       <button
         type="button"
         onClick={() => fileInputRef.current?.click()}
         className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white shadow-md transition ${
-          isFull ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.01]'
+          isFull
+            ? 'opacity-50 cursor-not-allowed'
+            : 'hover:scale-[1.01]'
         }`}
         style={{
-          background: isFull ? '#9CA3AF' : `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})`
+          background: isFull
+            ? '#9CA3AF'
+            : `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})`,
         }}
         disabled={isFull}
       >
-        <Upload size={16} /> بارگذاری
+        <Upload size={16} />
+        بارگذاری
       </button>
+
       <input
         type="file"
         ref={fileInputRef}
@@ -819,20 +1353,40 @@ function FileUploadCard({ title, description, files, onAdd, onRemove, accept, ma
   );
 }
 
-function SummaryCard({ title, children }: { title: string; children: React.ReactNode }) {
+function SummaryCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-      <h3 className="mb-4 text-sm font-black text-slate-800">{title}</h3>
+      <h3 className="mb-4 text-sm font-black text-slate-800">
+        {title}
+      </h3>
+
       <div className="space-y-3">{children}</div>
     </div>
   );
 }
 
-function SummaryRow({ label, value }: { label: string; value: string }) {
+function SummaryRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
   return (
     <div className="flex flex-col gap-1 border-b border-slate-200 pb-2 last:border-b-0 last:pb-0">
-      <span className="text-xs font-bold text-slate-500">{label}</span>
-      <span className="text-sm text-slate-800">{value || '-'}</span>
+      <span className="text-xs font-bold text-slate-500">
+        {label}
+      </span>
+
+      <span className="text-sm text-slate-800">
+        {value || '-'}
+      </span>
     </div>
   );
 }
