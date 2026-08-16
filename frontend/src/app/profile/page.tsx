@@ -646,20 +646,7 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 sm:p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header - فقط اسم و ایمیل */}
-        <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-800">
-              {currentProfile.first_name} {currentProfile.last_name}
-              <span className="mr-2 text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">
-                دمو
-              </span>
-            </h1>
-            <p className="text-slate-500">{currentProfile.email}</p>
-          </div>
-        </div>
-
-        {/* Tabs */}
+        {/* Tabs - بدون هدر */}
         <div className="flex flex-wrap gap-2 mb-6">
           {[
             { id: 'profile', label: 'اطلاعات کاربری', icon: User },
@@ -1770,34 +1757,42 @@ function WalletTab({ wallet, loading }: { wallet: WalletData | null; loading: bo
 }
 
 // ============================================================
-// My Needs Tab - با وضعیت‌های فارسی
+// My Needs Tab - با وضعیت‌های فارسی و نمایش کاربرپسند (بدون JSON)
+// ============================================================
+// ============================================================
+// My Needs Tab - با نمایش کامل توضیحات (بدون برش کلمات)
 // ============================================================
 function MyNeedsTab({ needs, loading }: { needs: Need[]; loading: boolean }) {
-  const statusMap: Record<string, { label: string; color: string }> = {
-    published: { label: 'منتشر شده', color: 'bg-green-100 text-green-700' },
-    draft: { label: 'پیش‌نویس', color: 'bg-slate-100 text-slate-600' },
-    pending: { label: 'در انتظار تأیید', color: 'bg-yellow-100 text-yellow-700' },
-    approved: { label: 'تأیید شده', color: 'bg-green-100 text-green-700' },
-    rejected: { label: 'رد شده', color: 'bg-red-100 text-red-700' },
-    submitted: { label: 'ارسال برای بررسی', color: 'bg-blue-100 text-blue-700' },
-    evaluating: { label: 'در حال ارزیابی', color: 'bg-purple-100 text-purple-700' },
-    needs_revision: { label: 'نیازمند اصلاح', color: 'bg-orange-100 text-orange-700' },
-    suspended: { label: 'تعلیق شده', color: 'bg-gray-100 text-gray-600' },
+  const statusMap: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+    published: { label: 'منتشر شده', color: 'bg-green-100 text-green-700', icon: <CheckCircle size={14} /> },
+    draft: { label: 'پیش‌نویس', color: 'bg-slate-100 text-slate-600', icon: <AlertCircle size={14} /> },
+    pending: { label: 'در انتظار تأیید', color: 'bg-yellow-100 text-yellow-700', icon: <AlertCircle size={14} /> },
+    approved: { label: 'تأیید شده', color: 'bg-green-100 text-green-700', icon: <CheckCircle size={14} /> },
+    rejected: { label: 'رد شده', color: 'bg-red-100 text-red-700', icon: <X size={14} /> },
+    submitted: { label: 'ارسال برای بررسی', color: 'bg-blue-100 text-blue-700', icon: <Send size={14} /> },
+    evaluating: { label: 'در حال ارزیابی', color: 'bg-purple-100 text-purple-700', icon: <History size={14} /> },
+    needs_revision: { label: 'نیازمند اصلاح', color: 'bg-orange-100 text-orange-700', icon: <AlertCircle size={14} /> },
+    suspended: { label: 'تعلیق شده', color: 'bg-gray-100 text-gray-600', icon: <AlertCircle size={14} /> },
   };
 
   if (loading) {
-    return <div className="text-center py-8 text-slate-500">در حال بارگذاری نیازها...</div>;
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <span className="mr-3 text-slate-500">در حال بارگذاری نیازها...</span>
+      </div>
+    );
   }
 
   if (!needs || needs.length === 0) {
     return (
       <div className="text-center py-12 text-slate-400">
-        <Target className="h-12 w-12 mx-auto mb-3" strokeWidth={1.5} />
-        <p className="text-lg font-medium">هیچ نیازی ثبت نشده است</p>
-        <p className="text-sm mt-1">شما هنوز هیچ نیازی ثبت نکرده‌اید.</p>
+        <Target className="h-16 w-16 mx-auto mb-4 stroke-1" />
+        <p className="text-lg font-medium text-slate-600">هیچ نیازی ثبت نشده است</p>
+        <p className="text-sm mt-1 text-slate-400">شما هنوز هیچ نیازی ثبت نکرده‌اید.</p>
         <button
-          onClick={() => window.location.href = '/needs/register'}
-          className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition"
+          onClick={() => (window.location.href = '/needs/register')}
+          className="mt-5 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition shadow-sm text-sm font-medium"
         >
           ثبت نیاز جدید
         </button>
@@ -1805,33 +1800,76 @@ function MyNeedsTab({ needs, loading }: { needs: Need[]; loading: boolean }) {
     );
   }
 
+  const formatDate = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('fa-IR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-6 flex-wrap gap-2">
         <h2 className="text-xl font-bold text-slate-800">نیازهای ثبت‌شده</h2>
         <button
-          onClick={() => window.location.href = '/needs/register'}
-          className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition text-sm"
+          onClick={() => (window.location.href = '/needs/register')}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition text-sm font-medium shadow-sm flex items-center gap-2"
         >
-          + ثبت نیاز جدید
+          <Plus size={16} />
+          ثبت نیاز جدید
         </button>
       </div>
+
+      {/* ستونی (یک کارت در هر ردیف) برای نمایش کامل متن */}
       <div className="space-y-4">
         {needs.map((need) => {
-          const statusInfo = statusMap[need.status] || { label: need.status || 'نامشخص', color: 'bg-slate-100 text-slate-600' };
+          const statusInfo = statusMap[need.status] || {
+            label: need.status || 'نامشخص',
+            color: 'bg-slate-100 text-slate-600',
+            icon: <AlertCircle size={14} />,
+          };
+
           return (
-            <div key={need.id} className="border border-slate-200 rounded-xl p-4 hover:shadow-md transition">
-              <div className="flex justify-between items-start">
-                <h3 className="font-semibold text-slate-800 text-lg">{need.title}</h3>
-                <span className={`text-xs px-2 py-1 rounded-full ${statusInfo.color}`}>
+            <div
+              key={need.id}
+              className="group bg-white border border-slate-200 rounded-2xl p-5 hover:shadow-md transition-all duration-200 hover:border-blue-200"
+            >
+              <div className="flex justify-between items-start gap-3">
+                <h3 className="font-semibold text-slate-800 text-base leading-6 flex-1">
+                  {need.title}
+                </h3>
+                <span
+                  className={`inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full whitespace-nowrap shrink-0 ${statusInfo.color}`}
+                >
+                  {statusInfo.icon}
                   {statusInfo.label}
                 </span>
               </div>
-              <p className="text-sm text-slate-600 mt-2 line-clamp-2">{need.description}</p>
-              <div className="flex items-center gap-4 mt-3 text-xs text-slate-400">
-                <span>صنعت: {need.industry?.name || '-'}</span>
-                <span>تاریخ: {new Date(need.created_at).toLocaleDateString('fa-IR')}</span>
+
+              {/* ✅ نمایش کامل توضیحات – بدون برش کلمات */}
+              <div
+                className="text-sm text-slate-600 mt-3 leading-relaxed [&_*]:inline [&_*]:text-sm [&_*]:text-slate-600"
+                dangerouslySetInnerHTML={{ __html: need.description || 'بدون توضیحات' }}
+              />
+
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-4 pt-3 border-t border-slate-100 text-xs text-slate-400">
+                <span className="flex items-center gap-1.5">
+                  <Target size={14} className="text-slate-400" />
+                  صنعت: {need.industry?.name || 'نامشخص'}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <History size={14} className="text-slate-400" />
+                  {formatDate(need.created_at)}
+                </span>
               </div>
+
+              
             </div>
           );
         })}

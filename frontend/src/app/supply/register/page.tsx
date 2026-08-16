@@ -235,7 +235,7 @@ export default function SupplyRegisterPage() {
   };
 
   // ============================================================
-  // تابع ارسال با نام صحیح فیلد تصاویر = 'uploaded_images'
+  // ✅ تابع ارسال اصلاح‌شده (با کلیدهای صحیح)
   // ============================================================
   const handleSubmit = async () => {
     if (!validateStep()) return;
@@ -263,13 +263,14 @@ export default function SupplyRegisterPage() {
         }
       });
 
-      // ===== تغییر کلید از 'images' به 'uploaded_images' =====
+      // ===== تصاویر با کلید 'uploaded_images' =====
       form.images.forEach(file => {
         formData.append('uploaded_images', file);
       });
 
+      // ===== مستندات با کلید 'uploaded_documents' (نه 'documents') =====
       form.documents.forEach(file => {
-        formData.append('documents', file);
+        formData.append('uploaded_documents', file);
       });
 
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';

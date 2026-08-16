@@ -14,12 +14,14 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 # اپ‌های نصب‌شده
 # ============================================================
 INSTALLED_APPS = [
+    'daphne',  # 🔴 اضافه شد (باید اولین اپ باشد)
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    
     # پکیج‌های جانبی
     'rest_framework',
     'rest_framework_simplejwt',
@@ -28,7 +30,7 @@ INSTALLED_APPS = [
     'drf_yasg',
     'ckeditor',
     'ckeditor_uploader',
-    'import_export',          # ← فقط یک بار
+    'import_export',
     'crispy_forms',
     'crispy_bootstrap5',
     'django_extensions',
@@ -37,20 +39,22 @@ INSTALLED_APPS = [
     'django_celery_results',
     'storages',
     'whitenoise',
+    'channels',  # 🔴 اضافه شد (برای WebSocket)
+    
     # اپ‌های پروژه (۲۰ ماژول)
     'users', 'industries', 'products', 'needs', 'evaluations',
     'readiness', 'matching', 'search', 'negotiations', 'proposals',
     'contracts', 'execution', 'payments', 'support', 'reviews',
-    'crm', 'marketing', 'analytics', 'governance', 'core'
-    ,'user_messages',
+    'crm', 'marketing', 'analytics', 'governance', 'core',
+    'user_messages',
     'wallet'
 ]
 
 # ============================================================
-# میان‌افزارها
+# میان‌افزارها (بدون تغییر)
 # ============================================================
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # باید در بالای لیست باشد
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -83,7 +87,18 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 
 # ============================================================
-# پایگاه داده (PostgreSQL)
+# 🔴 تنظیمات WebSocket (اضافه شد)
+# ============================================================
+ASGI_APPLICATION = 'config.asgi.application'  # مسیر فایل asgi.py
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',  # برای توسعه
+    },
+}
+
+# ============================================================
+# پایگاه داده (بدون تغییر)
 # ============================================================
 DATABASES = {
     'default': {
@@ -97,12 +112,12 @@ DATABASES = {
 }
 
 # ============================================================
-# مدل کاربر سفارشی
+# مدل کاربر سفارشی (بدون تغییر)
 # ============================================================
 AUTH_USER_MODEL = 'users.User'
 
 # ============================================================
-# REST Framework (JWT)
+# REST Framework (بدون تغییر)
 # ============================================================
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -118,7 +133,6 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
-    #'EXCEPTION_HANDLER': 'core.exceptions.custom_exception_handler',
 }
 
 SIMPLE_JWT = {
@@ -129,18 +143,11 @@ SIMPLE_JWT = {
 }
 
 # ============================================================
-# تنظیمات CORS (اصلاح‌شده برای اتصال فرانت‌اند)
+# تنظیمات CORS (بدون تغییر)
 # ============================================================
-CORS_ALLOW_ALL_ORIGINS = True  # برای توسعه (در تولید به CORS_ALLOWED_ORIGINS محدود کنید)
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
-# اگر CORS_ALLOW_ALL_ORIGINS کار نکرد، این خط را فعال کنید
-# CORS_ALLOWED_ORIGINS = [
-#     "http://localhost:3000",
-#     "http://127.0.0.1:3000",
-# ]
-
-# تنظیمات اضافی CORS (برای اطمینان از مجوزهای کامل)
 CORS_ALLOW_METHODS = [
     'DELETE',
     'GET',
@@ -163,7 +170,7 @@ CORS_ALLOW_HEADERS = [
 ]
 
 # ============================================================
-# تنظیمات CSRF
+# تنظیمات CSRF (بدون تغییر)
 # ============================================================
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
@@ -171,7 +178,15 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 # ============================================================
-# زبان و زمان
+# 🔴 تنظیمات کوکی برای WebSocket (اضافه شد)
+# ============================================================
+SESSION_COOKIE_HTTPONLY = False   # اجازه دسترسی به کوکی از جاوااسکریپت
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_HTTPONLY = False
+CSRF_COOKIE_SAMESITE = 'Lax'
+
+# ============================================================
+# زبان و زمان (بدون تغییر)
 # ============================================================
 LANGUAGE_CODE = 'fa-ir'
 TIME_ZONE = 'Asia/Tehran'
@@ -180,7 +195,7 @@ USE_L10N = True
 USE_TZ = True
 
 # ============================================================
-# فایل‌های ایستا و رسانه
+# فایل‌های ایستا و رسانه (بدون تغییر)
 # ============================================================
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
@@ -191,7 +206,7 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # ============================================================
-# CKEditor
+# CKEditor (بدون تغییر)
 # ============================================================
 CKEDITOR_UPLOAD_PATH = 'uploads/'
 CKEDITOR_IMAGE_BACKEND = "pillow"
@@ -205,13 +220,13 @@ CKEDITOR_CONFIGS = {
 }
 
 # ============================================================
-# Crispy Forms
+# Crispy Forms (بدون تغییر)
 # ============================================================
 CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
 CRISPY_TEMPLATE_PACK = "bootstrap5"
 
 # ============================================================
-# Celery
+# Celery (بدون تغییر)
 # ============================================================
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/1')
@@ -222,7 +237,7 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
 # ============================================================
-# Cache (Redis)
+# Cache (بدون تغییر)
 # ============================================================
 CACHES = {
     'default': {
@@ -235,14 +250,14 @@ CACHES = {
 }
 
 # ============================================================
-# ابزارهای جانبی
+# ابزارهای جانبی (بدون تغییر)
 # ============================================================
 INTERNAL_IPS = ['127.0.0.1', 'localhost']
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
 
 # ============================================================
-# لاگ‌گیری
+# لاگ‌گیری (بدون تغییر)
 # ============================================================
 LOGGING = {
     'version': 1,
@@ -271,9 +286,8 @@ LOGGING = {
 }
 
 # ============================================================
-# تنظیمات اضافی برای امنیت و تولید
+# تنظیمات امنیتی تولید (بدون تغییر)
 # ============================================================
-# اگر DEBUG=False باشد، این تنظیمات را فعال کنید
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     USE_X_FORWARDED_HOST = True

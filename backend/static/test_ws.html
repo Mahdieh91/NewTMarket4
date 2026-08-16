@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>تست WebSocket</title>
+</head>
+<body>
+    <h2>تست WebSocket</h2>
+    <div id="status">در حال اتصال...</div>
+    <div id="messages" style="border:1px solid #ccc;height:200px;overflow:auto;padding:10px;"></div>
+    <input type="text" id="msgInput" placeholder="متن پیام..." />
+    <button onclick="sendMessage()">ارسال</button>
+
+    <script>
+        const socket = new WebSocket('ws://127.0.0.1:8000/ws/negotiation/1/');
+
+        socket.onopen = function() {
+            document.getElementById('status').textContent = '✅ متصل شد';
+            document.getElementById('status').style.color = 'green';
+        };
+
+        socket.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            const div = document.getElementById('messages');
+            const p = document.createElement('div');
+            p.textContent = data.text || data.type || 'پیام دریافت شد';
+            div.appendChild(p);
+        };
+
+        socket.onclose = function() {
+            document.getElementById('status').textContent = '❌ قطع شد';
+            document.getElementById('status').style.color = 'red';
+        };
+
+        function sendMessage() {
+            const input = document.getElementById('msgInput');
+            const text = input.value.trim();
+            if (!text) return;
+            socket.send(JSON.stringify({ type: 'message', text: text }));
+            input.value = '';
+        }
+    </script>
+</body>
+</html>

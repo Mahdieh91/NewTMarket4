@@ -161,8 +161,9 @@ const mockMatches: MatchResult[] = [
 export default function MatchingPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userRole, setUserRole] = useState<string | null>(null);
+  // موقتاً همیشه لاگین فرض می‌شود
+  const [isLoggedIn] = useState(true);
+  const [userRole] = useState('buyer');
   const [matches, setMatches] = useState<MatchResult[]>(mockMatches);
   const [sortBy, setSortBy] = useState<'match' | 'price' | 'rating'>('match');
   const [filterOpen, setFilterOpen] = useState(false);
@@ -174,12 +175,6 @@ export default function MatchingPage() {
 
   useEffect(() => {
     setMounted(true);
-    const token = localStorage.getItem('token');
-    if (token) {
-      setIsLoggedIn(true);
-      setUserRole('buyer');
-    }
-
     const savedCompare = localStorage.getItem('compareList');
     if (savedCompare) {
       try {
@@ -267,9 +262,6 @@ export default function MatchingPage() {
       dir="rtl"
       style={{ fontFamily: "'Vazir', 'Vazirmatn', 'Iran Sans', Tahoma, sans-serif" }}
     >
-      
-
-      {/* ===== Main Content ===== */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* ===== Right Column: Registered Need (1/3) ===== */}
@@ -307,51 +299,34 @@ export default function MatchingPage() {
                   </div>
                 </div>
 
-                {isLoggedIn ? (
-                  <div className="space-y-2 pt-3 border-t border-slate-100">
-                    <button
-                      onClick={() => sortedMatches.length > 0 && startNegotiation(sortedMatches[0])}
-                      className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] px-4 py-2.5 text-sm font-bold text-white hover:shadow-lg transition"
+                {/* همیشه لاگین فرض می‌شود */}
+                <div className="space-y-2 pt-3 border-t border-slate-100">
+                  <button
+                    onClick={() => sortedMatches.length > 0 && startNegotiation(sortedMatches[0])}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] px-4 py-2.5 text-sm font-bold text-white hover:shadow-lg transition"
+                  >
+                    <MessageSquareText size={16} />
+                    شروع مذاکره با برترین گزینه
+                  </button>
+                  {userRole === 'buyer' && (
+                    <Link
+                      href="/need/register"
+                      className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-[#1E3A8A] px-4 py-2.5 text-sm font-bold text-[#1E3A8A] hover:bg-[#1E3A8A]/5 transition"
                     >
-                      <MessageSquareText size={16} />
-                      شروع مذاکره با برترین گزینه
-                    </button>
-                    {userRole === 'buyer' && (
-                      <Link
-                        href="/need/register"
-                        className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-[#1E3A8A] px-4 py-2.5 text-sm font-bold text-[#1E3A8A] hover:bg-[#1E3A8A]/5 transition"
-                      >
-                        <Lightbulb size={16} />
-                        ثبت نیاز جدید
-                      </Link>
-                    )}
-                    {userRole === 'supplier' && (
-                      <Link
-                        href="/supply/register"
-                        className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-[#14B8A6] px-4 py-2.5 text-sm font-bold text-[#14B8A6] hover:bg-[#14B8A6]/5 transition"
-                      >
-                        <Package size={16} />
-                        ثبت محصول جدید
-                      </Link>
-                    )}
-                  </div>
-                ) : (
-                  <div className="pt-3 border-t border-slate-100">
-                    <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-center">
-                      <Lock size={16} className="inline text-amber-600 mb-1" />
-                      <p className="text-xs text-amber-700 font-medium">
-                        برای ثبت نیاز یا محصول، ابتدا
-                        <Link href="/login" className="text-[#1E3A8A] font-bold mx-1 hover:underline">
-                          وارد شوید
-                        </Link>
-                        یا
-                        <Link href="/register" className="text-[#1E3A8A] font-bold mx-1 hover:underline">
-                          ثبت‌نام کنید
-                        </Link>
-                      </p>
-                    </div>
-                  </div>
-                )}
+                      <Lightbulb size={16} />
+                      ثبت نیاز جدید
+                    </Link>
+                  )}
+                  {userRole === 'supplier' && (
+                    <Link
+                      href="/supply/register"
+                      className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-[#14B8A6] px-4 py-2.5 text-sm font-bold text-[#14B8A6] hover:bg-[#14B8A6]/5 transition"
+                    >
+                      <Package size={16} />
+                      ثبت محصول جدید
+                    </Link>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -513,59 +488,46 @@ export default function MatchingPage() {
                         </div>
                       </div>
 
-                      {/* Action Buttons */}
+                      {/* Action Buttons - always visible */}
                       <div className="flex items-center gap-2 flex-wrap">
-                        {isLoggedIn ? (
-                          <>
-                            <button
-                              onClick={() => startNegotiation(match)}
-                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] hover:shadow-lg transition"
-                            >
-                              <MessageSquareText size={14} />
-                              شروع مذاکره
-                            </button>
-                            <button
-                              onClick={() => toggleCompare(match.id)}
-                              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition ${
-                                compareList.includes(match.id)
-                                  ? 'bg-[#1E3A8A]/10 text-[#1E3A8A] border border-[#1E3A8A]'
-                                  : 'text-[#1E3A8A] border border-[#1E3A8A] hover:bg-[#1E3A8A]/5'
-                              }`}
-                            >
-                              <BarChart3 size={14} />
-                              {compareList.includes(match.id) ? 'انتخاب شده' : 'مقایسه'}
-                            </button>
-                            <button
-                              onClick={() => openDetails(match)}
-                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-slate-600 border border-slate-200 hover:bg-slate-50 transition"
-                            >
-                              <Eye size={14} />
-                              جزئیات
-                            </button>
-                            <button
-                              onClick={() => toggleFavorite(match.id)}
-                              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition ${
-                                favorites.includes(match.id)
-                                  ? 'text-red-500 bg-red-50'
-                                  : 'text-slate-400 hover:text-red-500 hover:bg-red-50'
-                              }`}
-                            >
-                              <Heart
-                                size={14}
-                                fill={favorites.includes(match.id) ? 'currentColor' : 'none'}
-                              />
-                            </button>
-                          </>
-                        ) : (
-                          <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 rounded-xl px-3 py-2">
-                            <Lock size={14} />
-                            برای مذاکره نیاز به
-                            <Link href="/login" className="font-bold text-[#1E3A8A] hover:underline">
-                              ورود
-                            </Link>
-                            است
-                          </div>
-                        )}
+                        <button
+                          onClick={() => startNegotiation(match)}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] hover:shadow-lg transition"
+                        >
+                          <MessageSquareText size={14} />
+                          شروع مذاکره
+                        </button>
+                        <button
+                          onClick={() => toggleCompare(match.id)}
+                          className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition ${
+                            compareList.includes(match.id)
+                              ? 'bg-[#1E3A8A]/10 text-[#1E3A8A] border border-[#1E3A8A]'
+                              : 'text-[#1E3A8A] border border-[#1E3A8A] hover:bg-[#1E3A8A]/5'
+                          }`}
+                        >
+                          <BarChart3 size={14} />
+                          {compareList.includes(match.id) ? 'انتخاب شده' : 'مقایسه'}
+                        </button>
+                        <button
+                          onClick={() => openDetails(match)}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-slate-600 border border-slate-200 hover:bg-slate-50 transition"
+                        >
+                          <Eye size={14} />
+                          جزئیات
+                        </button>
+                        <button
+                          onClick={() => toggleFavorite(match.id)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition ${
+                            favorites.includes(match.id)
+                              ? 'text-red-500 bg-red-50'
+                              : 'text-slate-400 hover:text-red-500 hover:bg-red-50'
+                          }`}
+                        >
+                          <Heart
+                            size={14}
+                            fill={favorites.includes(match.id) ? 'currentColor' : 'none'}
+                          />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -691,36 +653,27 @@ export default function MatchingPage() {
             </div>
 
             <div className="mt-6 flex gap-2">
-              {isLoggedIn ? (
-                <>
-                  <button
-                    onClick={() => {
-                      closeDetails();
-                      startNegotiation(selectedMatch);
-                    }}
-                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] text-white text-sm font-bold"
-                  >
-                    شروع مذاکره
-                  </button>
-                  <button
-                    onClick={() => {
-                      toggleCompare(selectedMatch.id);
-                    }}
-                    className={`flex-1 py-2.5 rounded-xl text-sm font-bold border ${
-                      compareList.includes(selectedMatch.id)
-                        ? 'bg-[#1E3A8A]/10 text-[#1E3A8A] border-[#1E3A8A]'
-                        : 'text-[#1E3A8A] border-[#1E3A8A]'
-                    }`}
-                  >
-                    {compareList.includes(selectedMatch.id) ? 'حذف از مقایسه' : 'افزودن به مقایسه'}
-                  </button>
-                </>
-              ) : (
-                <div className="w-full text-center text-xs text-amber-600 bg-amber-50 rounded-xl p-2">
-                  <Lock size={14} className="inline ml-1" />
-                  برای مذاکره نیاز به ورود دارید
-                </div>
-              )}
+              <button
+                onClick={() => {
+                  closeDetails();
+                  startNegotiation(selectedMatch);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] text-white text-sm font-bold"
+              >
+                شروع مذاکره
+              </button>
+              <button
+                onClick={() => {
+                  toggleCompare(selectedMatch.id);
+                }}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-bold border ${
+                  compareList.includes(selectedMatch.id)
+                    ? 'bg-[#1E3A8A]/10 text-[#1E3A8A] border-[#1E3A8A]'
+                    : 'text-[#1E3A8A] border-[#1E3A8A]'
+                }`}
+              >
+                {compareList.includes(selectedMatch.id) ? 'حذف از مقایسه' : 'افزودن به مقایسه'}
+              </button>
             </div>
           </div>
         </div>

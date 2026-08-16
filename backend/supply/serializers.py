@@ -1,43 +1,18 @@
-# ============================================================
-# این فایل Serializerهای مدل‌های Product و Supply را تعریف می‌کند
-# مسیر: backend/products/serializers.py
-# ============================================================
+# supply/serializers.py
 
-from django.core.files.base import ContentFile
-from django.core.files.storage import default_storage
 from rest_framework import serializers
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
+import logging
 
-from .models import Product, Supply, SupplyImage
+from products.models import Supply, SupplyImage
 
 
-# ============================================================
-# Product Serializer
-# مدل مربوطه: products.models.Product
-# ============================================================
-
-class ProductSerializer(serializers.ModelSerializer):
-
-    seller_name = serializers.CharField(
-        source='seller.username',
-        read_only=True,
-    )
-
-    class Meta:
-        model = Product
-        fields = '__all__'
-
-        read_only_fields = (
-            'id',
-            'seller',
-            'view_count',
-            'created_at',
-            'updated_at',
-        )
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
 # Supply Image Serializer
-# مدل مربوطه: products.models.SupplyImage
 # ============================================================
 
 class SupplyImageSerializer(serializers.ModelSerializer):
@@ -61,17 +36,12 @@ class SupplyImageSerializer(serializers.ModelSerializer):
 
 # ============================================================
 # Supply Serializer
-# مدل مربوطه: products.models.Supply
-#
-# نکته:
-# seller توسط فرانت ارسال نمی‌شود.
-# seller باید در ViewSet از request.user تعیین شود.
 # ============================================================
 
 class SupplySerializer(serializers.ModelSerializer):
 
     # --------------------------------------------------------
-    # نام فروشنده
+    # Seller
     # --------------------------------------------------------
 
     seller_name = serializers.CharField(
@@ -80,7 +50,7 @@ class SupplySerializer(serializers.ModelSerializer):
     )
 
     # --------------------------------------------------------
-    # تصاویر ذخیره‌شده عرضه
+    # Existing images
     # --------------------------------------------------------
 
     images = SupplyImageSerializer(
@@ -89,10 +59,7 @@ class SupplySerializer(serializers.ModelSerializer):
     )
 
     # --------------------------------------------------------
-    # تصاویر جدید
-    #
-    # فرانت فعلی:
-    # uploaded_images
+    # New images
     # --------------------------------------------------------
 
     uploaded_images = serializers.ListField(
@@ -104,13 +71,10 @@ class SupplySerializer(serializers.ModelSerializer):
     )
 
     # --------------------------------------------------------
-    # مستندات جدید
-    #
-    # فرانت فعلی:
-    # uploaded_documents
+    # New documents
     # --------------------------------------------------------
 
-    uploaded_documents = serializers.ListField(
+    documents_files = serializers.ListField(
         child=serializers.FileField(
             use_url=False
         ),
@@ -123,15 +87,58 @@ class SupplySerializer(serializers.ModelSerializer):
     # ========================================================
 
     class Meta:
+
         model = Supply
 
-        fields = '__all__'
+        fields = (
+            'id',
+
+            # seller
+            'seller',
+            'seller_name',
+
+            # main information
+            'title',
+            'supply_type',
+            'category',
+            'industry',
+            'technology',
+            'city',
+            'description',
+
+            # quantity / price
+            'quantity',
+            'unit',
+            'price',
+
+            # technology
+            'trl',
+
+            # documents
+            'documents',
+
+            # status
+            'status',
+
+            # timestamps
+            'created_at',
+            'updated_at',
+
+            # images
+            'images',
+            'uploaded_images',
+
+            # document uploads
+            'documents_files',
+        )
 
         read_only_fields = (
             'id',
             'seller',
+            'seller_name',
             'created_at',
             'updated_at',
+            'images',
         )
 
     # ========================================================
@@ -140,26 +147,24 @@ class SupplySerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
 
-        # ----------------------------------------------------
-        # فایل‌های آپلودی را از validated_data جدا می‌کنیم
-        # ----------------------------------------------------
-
         uploaded_images = validated_data.pop(
             'uploaded_images',
             []
         )
 
-        uploaded_documents = validated_data.pop(
-            'uploaded_documents',
+        documents_files = validated_data.pop(
+            'documents_files',
             []
         )
 
+        logger.info(
+            'Creating Supply | images=%s | documents=%s',
+            len(uploaded_images),
+            len(documents_files),
+        )
+
         # ----------------------------------------------------
-        # ایجاد Supply
-        #
-        # seller عمداً اینجا تعیین نمی‌شود.
-        # ViewSet باید serializer.save(seller=request.user)
-        # را انجام دهد.
+        # Create Supply
         # ----------------------------------------------------
 
         supply = Supply.objects.create(
@@ -167,51 +172,49 @@ class SupplySerializer(serializers.ModelSerializer):
         )
 
         # ----------------------------------------------------
-        # ذخیره تصاویر
+        # Save images
         # ----------------------------------------------------
 
-        for image in uploaded_images:
+        for img in uploaded_images:
 
             SupplyImage.objects.create(
                 supply=supply,
-                image=image,
+                image=img,
             )
 
         # ----------------------------------------------------
-        # ذخیره مستندات
+        # Save documents
         # ----------------------------------------------------
 
-        if uploaded_documents:
+        documents_urls = []
 
-            current_documents = (
-                list(supply.documents)
-                if supply.documents
-                else []
+        for doc in documents_files:
+
+            path = (
+                f'supplies/documents/'
+                f'{supply.seller.id}/'
+                f'{supply.id}/'
+                f'{doc.name}'
             )
 
-            for document in uploaded_documents:
+            saved_path = default_storage.save(
+                path,
+                ContentFile(doc.read()),
+            )
 
-                path = (
-                    f'supplies/documents/'
-                    f'{supply.seller_id}/'
-                    f'{supply.id}/'
-                    f'{document.name}'
-                )
+            url = default_storage.url(
+                saved_path
+            )
 
-                saved_path = default_storage.save(
-                    path,
-                    ContentFile(document.read()),
-                )
+            documents_urls.append(url)
 
-                document_url = default_storage.url(
-                    saved_path
-                )
+        # ----------------------------------------------------
+        # Save document URLs
+        # ----------------------------------------------------
 
-                current_documents.append(
-                    document_url
-                )
+        if documents_urls:
 
-            supply.documents = current_documents
+            supply.documents = documents_urls
 
             supply.save(
                 update_fields=['documents']
@@ -229,22 +232,18 @@ class SupplySerializer(serializers.ModelSerializer):
         validated_data
     ):
 
-        # ----------------------------------------------------
-        # فایل‌های جدید
-        # ----------------------------------------------------
-
         uploaded_images = validated_data.pop(
             'uploaded_images',
             []
         )
 
-        uploaded_documents = validated_data.pop(
-            'uploaded_documents',
+        documents_files = validated_data.pop(
+            'documents_files',
             []
         )
 
         # ----------------------------------------------------
-        # بروزرسانی فیلدهای عادی
+        # Update normal fields
         # ----------------------------------------------------
 
         for attr, value in validated_data.items():
@@ -258,51 +257,49 @@ class SupplySerializer(serializers.ModelSerializer):
         instance.save()
 
         # ----------------------------------------------------
-        # ذخیره تصاویر جدید
+        # Save new images
         # ----------------------------------------------------
 
-        for image in uploaded_images:
+        for img in uploaded_images:
 
             SupplyImage.objects.create(
                 supply=instance,
-                image=image,
+                image=img,
             )
 
         # ----------------------------------------------------
-        # ذخیره مستندات جدید
+        # Save new documents
         # ----------------------------------------------------
 
-        if uploaded_documents:
+        if documents_files:
 
-            current_documents = (
+            current_docs = (
                 list(instance.documents)
                 if instance.documents
                 else []
             )
 
-            for document in uploaded_documents:
+            for doc in documents_files:
 
                 path = (
                     f'supplies/documents/'
-                    f'{instance.seller_id}/'
+                    f'{instance.seller.id}/'
                     f'{instance.id}/'
-                    f'{document.name}'
+                    f'{doc.name}'
                 )
 
                 saved_path = default_storage.save(
                     path,
-                    ContentFile(document.read()),
+                    ContentFile(doc.read()),
                 )
 
-                document_url = default_storage.url(
+                url = default_storage.url(
                     saved_path
                 )
 
-                current_documents.append(
-                    document_url
-                )
+                current_docs.append(url)
 
-            instance.documents = current_documents
+            instance.documents = current_docs
 
             instance.save(
                 update_fields=['documents']

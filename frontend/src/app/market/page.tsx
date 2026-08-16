@@ -32,7 +32,6 @@ import {
   getRiskLabel,
   Product,
 } from '@/app/data/products';
-import { useAuthStore } from '@/store/auth-store';
 
 // ==================== Constants ====================
 
@@ -95,98 +94,6 @@ const provinces = [
   'کرمان',
 ];
 
-// ==================== Real Supply -> Marketplace Adapter ====================
-
-type SupplyApi = {
-  id: number | string;
-  title: string;
-  category: string;
-  industry?: string | null;
-  technology?: string | null;
-  city?: string | null;
-  description?: string | null;
-  quantity?: string | null;
-  unit?: string | null;
-  price?: string | number | null;
-  trl?: string | number | null;
-  documents?: string[];
-  status?: string;
-  seller_name?: string | null;
-  images?: Array<{
-    id: number | string;
-    image?: string | null;
-    caption?: string | null;
-    uploaded_at?: string;
-  }>;
-  created_at?: string;
-  updated_at?: string;
-};
-
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
-
-const API_ORIGIN = API_URL.replace(/\/api\/?$/, '');
-
-function resolveMediaUrl(url?: string | null): string {
-  if (!url) return '';
-  if (/^https?:\/\//i.test(url)) return url;
-  return `${API_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
-}
-
-function supplyCategoryToMarketplaceCategory(category?: string): 'product' | 'service' {
-  const value = (category || '').trim();
-  return value.includes('خدمت') ? 'service' : 'product';
-}
-
-function supplyToProduct(supply: SupplyApi): Product {
-  const trlNumber = Number.parseInt(String(supply.trl ?? '1'), 10);
-  const priceToman = Number(supply.price ?? 0);
-
-  // Marketplace prices are displayed/filtered in million تومان,
-  // while Supply.price is stored in تومان in the backend.
-  const priceInMillionToman = Number.isFinite(priceToman)
-    ? priceToman / 1_000_000
-    : 0;
-
-  const images = (supply.images || [])
-    .map((item) => resolveMediaUrl(item.image))
-    .filter(Boolean);
-
-  return {
-    id: `supply-${supply.id}`,
-    title: supply.title,
-    category: supplyCategoryToMarketplaceCategory(supply.category),
-    industry: supply.industry || 'سایر',
-    technology: supply.technology || 'سایر',
-    shortDescription:
-      supply.description || 'عرضه ثبت‌شده در بازار تحول',
-    trl: Number.isFinite(trlNumber) && trlNumber >= 1 && trlNumber <= 9
-      ? trlNumber
-      : 1,
-    mrl: 1,
-    price: priceInMillionToman,
-    priceType: 'fixed',
-    priceRange: undefined,
-    images,
-    tags: [
-      supply.category,
-      supply.unit,
-      supply.quantity ? `مقدار: ${supply.quantity}` : '',
-    ].filter(Boolean),
-    seller: {
-      name: supply.seller_name || 'فروشنده',
-      location: supply.city || 'نامشخص',
-      rating: 0,
-      verified: supply.status === 'approved' || supply.status === 'published',
-    },
-    viewCount: 0,
-    deliveryTime: '—',
-    riskLevel: 'low',
-    certifications: [],
-    createdAt: supply.created_at || new Date().toISOString(),
-  } as Product;
-}
-
 // ==================== Main Component ====================
 
 export default function MarketplacePage() {
@@ -197,11 +104,6 @@ export default function MarketplacePage() {
   const [compareList, setCompareList] = useState<string[]>([]);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [toast, setToast] = useState<string | null>(null);
-  const [realProducts, setRealProducts] = useState<Product[]>([]);
-  const [suppliesLoading, setSuppliesLoading] = useState(false);
-  const [suppliesError, setSuppliesError] = useState<string | null>(null);
-
-  const { accessToken } = useAuthStore();
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -241,76 +143,6 @@ export default function MarketplacePage() {
     }
   }, []);
 
-  // ==================== Load real Supplies ====================
-
-  useEffect(() => {
-    if (!mounted || !accessToken) {
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadSupplies = async () => {
-      setSuppliesLoading(true);
-      setSuppliesError(null);
-
-      try {
-        const response = await fetch(`${API_URL}/products/supplies/`, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-          cache: 'no-store',
-        });
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            throw new Error('نشست کاربری منقضی شده است.');
-          }
-          throw new Error(`خطا در دریافت عرضه‌ها (کد ${response.status})`);
-        }
-
-        const data = await response.json();
-
-        // DRF may return either a plain array or a paginated { results: [] } response.
-        const supplies: SupplyApi[] = Array.isArray(data)
-          ? data
-          : Array.isArray(data?.results)
-            ? data.results
-            : [];
-
-        if (!cancelled) {
-          setRealProducts(supplies.map(supplyToProduct));
-        }
-      } catch (error: any) {
-        console.error('❌ خطا در دریافت عرضه‌های واقعی:', error);
-
-        if (!cancelled) {
-          setSuppliesError(
-            error?.message || 'دریافت عرضه‌های ثبت‌شده با خطا مواجه شد.'
-          );
-          // Keep mockProducts visible even if the real API is unavailable.
-          setRealProducts([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setSuppliesLoading(false);
-        }
-      }
-    };
-
-    loadSupplies();
-
-    // Refresh when the user returns to the marketplace tab.
-    const handleFocus = () => loadSupplies();
-    window.addEventListener('focus', handleFocus);
-
-    return () => {
-      cancelled = true;
-      window.removeEventListener('focus', handleFocus);
-    };
-  }, [mounted, accessToken]);
-
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
@@ -319,7 +151,7 @@ export default function MarketplacePage() {
   // ==================== Filtered & Sorted Products ====================
 
   const filteredProducts = useMemo(() => {
-    let result = [...mockProducts, ...realProducts];
+    let result = [...mockProducts];
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -450,7 +282,6 @@ export default function MarketplacePage() {
     minRating,
     sortBy,
     selectedRisk,
-    realProducts,
   ]);
 
   // ==================== Actions ====================
@@ -919,23 +750,9 @@ export default function MarketplacePage() {
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500">
-                  {filteredProducts.length} مورد یافت شد
-                </span>
-
-                {suppliesLoading && (
-                  <span className="text-[11px] text-teal-600">
-                    در حال دریافت عرضه‌های واقعی...
-                  </span>
-                )}
-
-                {!suppliesLoading && realProducts.length > 0 && (
-                  <span className="text-[11px] text-emerald-600">
-                    {realProducts.length} عرضه ثبت‌شده
-                  </span>
-                )}
-              </div>
+              <span className="text-xs text-slate-500">
+                {filteredProducts.length} مورد یافت شد
+              </span>
             </div>
 
             {/* Mobile Filters */}
@@ -1025,12 +842,6 @@ export default function MarketplacePage() {
                     ))}
                   </select>
                 </div>
-              </div>
-            )}
-
-            {suppliesError && (
-              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
-                {suppliesError} — محصولات نمونه همچنان نمایش داده می‌شوند.
               </div>
             )}
 
