@@ -1,3 +1,4 @@
+# config/urls.py
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
@@ -7,7 +8,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from rest_framework import permissions
-from .views import dashboard_api, health_check
+from .views import health_check  # dashboard_api حذف شد
 
 
 def home(request):
@@ -56,20 +57,20 @@ urlpatterns = [
     path('api/reviews/', include('reviews.urls')),
     path('api/crm/', include('crm.urls')),
     path('api/marketing/', include('marketing.urls')),
-    path('api/analytics/', include('analytics.urls')),
     path('api/governance/', include('governance.urls')),
     path('api/core/', include('core.urls')),
     path('api/messages/', include('user_messages.urls')),
     path('api/wallet/', include('wallet.urls')),
 
-    # ✅ مسیرهای خاص (داشبورد و سلامت) را اینجا قرار دهید، قبل از negotiations
-    path('api/dashboard/', dashboard_api, name='dashboard_api'),
-    path('api/health/', health_check, name='health_check'),
+    # ✅ مسیر اصلی analytics (شامل dashboard, markettrends, kpis)
+    path('api/', include('analytics.urls')),
 
     # ⚠️ مسیر عمومی negotiations باید آخرین باشد
     path('api/', include('negotiations.urls')),
-]
 
+    # مسیر سلامت (بدون تغییر)
+    path('api/health/', health_check, name='health_check'),
+]
 
 if settings.DEBUG:
     try:

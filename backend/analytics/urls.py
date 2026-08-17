@@ -1,7 +1,12 @@
+from django.urls import path
 
-from rest_framework.routers import DefaultRouter
-from .views import MarketTrendViewSet, KPIViewSet
-router = DefaultRouter()
-router.register(r'trends', MarketTrendViewSet)
-router.register(r'kpis', KPIViewSet)
-urlpatterns = router.urls
+from .views import DashboardAPIView
+
+
+urlpatterns = [
+    path(
+        "dashboard/",
+        DashboardAPIView.as_view(),
+        name="dashboard",
+    ),
+]
