@@ -1,12 +1,13 @@
 # analytics/services.py
 
 import logging
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.db.models import Count, Q
 from django.utils import timezone
+
 
 logger = logging.getLogger(__name__)
 
@@ -14,26 +15,24 @@ User = get_user_model()
 
 
 # ============================================================
-# CONSTANTS
+# Dashboard constants
 # ============================================================
 
-PUBLISHED_SUPPLY_STATUS = "published"
-PUBLISHED_NEED_STATUS = "published"
+COMPLETED_CONTRACT_STATUS = "completed"
 
-NEGOTIATION_ACTIVE_STATUSES = [
-    "in_progress",
-    "awaiting_proposal",
-    "proposal_sent",
-    "under_review",
-]
+NEGOTIATION_STATUS_LABELS = {
+    "created": "ایجاد شده",
+    "in_progress": "در حال مذاکره",
+    "awaiting_proposal": "در انتظار پیشنهاد",
+    "proposal_sent": "پیشنهاد ارسال شده",
+    "under_review": "در حال بررسی",
+    "accepted": "پذیرفته شده",
+    "rejected": "رد شده",
+    "contracted": "تبدیل به قرارداد",
+}
 
-CONTRACT_SUCCESS_STATUSES = [
-    "signed",
-    "execution",
-    "completed",
-]
 
-PERSIAN_MONTHS = {
+JALALI_MONTH_NAMES = {
     1: "فروردین",
     2: "اردیبهشت",
     3: "خرداد",
@@ -50,25 +49,26 @@ PERSIAN_MONTHS = {
 
 
 # ============================================================
-# GREGORIAN -> JALALI
+# Gregorian -> Jalali
 # ============================================================
 
 def gregorian_to_jalali(gy, gm, gd):
     """
-    تبدیل دقیق تاریخ میلادی به شمسی.
+    تبدیل دقیق تاریخ میلادی به تاریخ شمسی.
 
-    این تابع از TruncMonth برای تعیین نام ماه استفاده نمی‌کند.
-    بنابراین مشکل January -> فروردین وجود نخواهد داشت.
+    نکته مهم:
+    این تابع صرفاً برای تبدیل تاریخ واقعی استفاده می‌شود.
+    هیچ نگاشت مصنوعی January -> فروردین وجود ندارد.
     """
 
     g_days_in_month = [
         31, 28, 31, 30, 31, 30,
-        31, 31, 30, 31, 30, 31
+        31, 31, 30, 31, 30, 31,
     ]
 
     j_days_in_month = [
         31, 31, 31, 31, 31, 31,
-        30, 30, 30, 30, 30, 29
+        30, 30, 30, 30, 30, 29,
     ]
 
     gy2 = gy - 1600
@@ -123,156 +123,163 @@ def gregorian_to_jalali(gy, gm, gd):
 
 
 # ============================================================
-# DATABASE EMPTY CHECK
+# User-specific QuerySets
 # ============================================================
 
-def has_real_dashboard_data():
+def get_user_negotiations(user):
     """
-    مشخص می‌کند آیا دیتابیس برای Dashboard داده عملیاتی دارد یا خیر.
+    فقط مذاکراتی که کاربر جاری یکی از طرفین آن است.
 
-    این تابع عمداً Exception را قورت نمی‌دهد.
-    اگر Database خراب باشد، باید خطای واقعی به View برسد
-    و نباید اشتباهاً Demo Mode فعال شود.
+    buyer = current user
+    یا
+    supplier = current user
+
+    هیچ مذاکره‌ای از کاربران دیگر وارد نمی‌شود.
     """
 
-    from products.models import Supply
-    from needs.models import Need
     from negotiations.models import Negotiation
+
+    return Negotiation.objects.filter(
+        Q(buyer_id=user.id)
+        | Q(supplier_id=user.id)
+    )
+
+
+def get_user_contracts(user):
+    """
+    فقط قراردادهایی که کاربر جاری خریدار یا عرضه‌کننده آن است.
+    """
+
     from contracts.models import Contract
 
-    return (
-        Supply.objects.exists()
-        or Need.objects.exists()
-        or Negotiation.objects.exists()
-        or Contract.objects.exists()
+    return Contract.objects.filter(
+        Q(buyer_id=user.id)
+        | Q(supplier_id=user.id)
     )
 
 
 # ============================================================
-# REAL STATS
+# User Statistics
 # ============================================================
 
-def get_stats(user=None):
+def get_stats(user):
     """
-    KPIهای اصلی Dashboard.
+    KPIهای شخصی Dashboard.
 
-    این اعداد همیشه از Database می‌آیند.
+    محصولات فعال:
+        عرضه‌هایی که متعلق به کاربر جاری هستند.
+
+    نیازهای فعال:
+        نیازهایی که متعلق به کاربر جاری هستند.
+
+    مذاکرات جاری:
+        فقط مذاکرات خود کاربر.
+
+    معاملات موفق:
+        فقط قراردادهای تکمیل‌شده خود کاربر.
     """
 
     from products.models import Supply
     from needs.models import Need
-    from negotiations.models import Negotiation
-    from contracts.models import Contract
 
-    return {
-        "totalProducts": Supply.objects.filter(
-            status=PUBLISHED_SUPPLY_STATUS
-        ).count(),
+    stats = {
+        "totalProducts": (
+            Supply.objects
+            .filter(
+                seller_id=user.id,
+                status="published",
+            )
+            .count()
+        ),
 
-        "activeNeeds": Need.objects.filter(
-            status=PUBLISHED_NEED_STATUS
-        ).count(),
+        "activeNeeds": (
+            Need.objects
+            .filter(
+                buyer_id=user.id,
+                status="published",
+            )
+            .count()
+        ),
 
-        "ongoingNegotiations": Negotiation.objects.filter(
-            status__in=NEGOTIATION_ACTIVE_STATUSES
-        ).count(),
+        "ongoingNegotiations": (
+            get_user_negotiations(user)
+            .filter(
+                is_active=True,
+            )
+            .count()
+        ),
 
-        "successfulDeals": Contract.objects.filter(
-            status__in=CONTRACT_SUCCESS_STATUSES
-        ).count(),
+        "successfulDeals": (
+            get_user_contracts(user)
+            .filter(
+                status=COMPLETED_CONTRACT_STATUS,
+            )
+            .count()
+        ),
     }
 
+    return stats
+
 
 # ============================================================
-# REAL INDUSTRY DATA
+# Monthly Deals
 # ============================================================
 
-def get_industry_distribution():
+def get_monthly_deals(user, months=6):
     """
-    توزیع واقعی صنایع بر اساس Supplyهای منتشرشده.
-    """
+    تعداد معاملات موفق کاربر در ماه‌های اخیر.
 
-    from products.models import Supply
+    تاریخ از signed_at واقعی قرارداد خوانده می‌شود.
 
-    queryset = (
-        Supply.objects
-        .filter(status=PUBLISHED_SUPPLY_STATUS)
-        .exclude(industry="")
-        .values("industry")
-        .annotate(count=Count("id"))
-        .order_by("-count")
-    )
+    برای نام ماه:
+        ابتدا تاریخ میلادی واقعی خوانده می‌شود
+        سپس به تاریخ شمسی تبدیل می‌شود.
 
-    result = []
-
-    for item in queryset:
-        industry = item.get("industry") or "سایر"
-        count = int(item.get("count") or 0)
-
-        if count > 0:
-            result.append({
-                "name": industry,
-                "value": count,
-            })
-
-    return result[:10]
-
-
-# ============================================================
-# REAL MONTHLY DEALS
-# ============================================================
-
-def get_monthly_deals(months=6):
-    """
-    روند واقعی معاملات.
-
-    نکته مهم:
-
-    TruncMonth فقط برای گروه‌بندی میلادی مناسب است.
-    نمی‌توان ماه میلادی را مستقیماً با نام ماه شمسی جایگزین کرد.
-
-    بنابراین تاریخ هر قرارداد ابتدا از Gregorian
-    به Jalali تبدیل می‌شود و سپس بر اساس سال و ماه شمسی
-    گروه‌بندی می‌شود.
+    بنابراین:
+        January هرگز به‌صورت ساده January -> فروردین نگاشت نمی‌شود.
     """
 
     from contracts.models import Contract
 
     now = timezone.now()
 
-    start_date = now - timedelta(days=30 * months)
+    start_date = now - timedelta(
+        days=30 * months
+    )
 
     contracts = (
         Contract.objects
         .filter(
-            status__in=CONTRACT_SUCCESS_STATUSES,
-            created_at__gte=start_date,
+            Q(buyer_id=user.id)
+            | Q(supplier_id=user.id),
+            status=COMPLETED_CONTRACT_STATUS,
+            signed_at__isnull=False,
+            signed_at__gte=start_date,
         )
         .values_list(
-            "id",
-            "created_at",
+            "signed_at",
+        )
+        .order_by(
             "signed_at",
         )
     )
 
     grouped = defaultdict(int)
 
-    for contract_id, created_at, signed_at in contracts:
+    for signed_at in contracts:
 
-        # برای معامله موفق، اگر تاریخ امضا موجود باشد
-        # همان تاریخ مبنا قرار می‌گیرد.
-        date_value = signed_at or created_at
-
-        if not date_value:
+        if not signed_at:
             continue
 
-        if timezone.is_aware(date_value):
-            date_value = timezone.localtime(date_value)
+        if timezone.is_aware(signed_at):
+            signed_at = timezone.localtime(
+                signed_at
+            )
 
         jy, jm, jd = gregorian_to_jalali(
-            date_value.year,
-            date_value.month,
-            date_value.day,
+            signed_at.year,
+            signed_at.month,
+            signed_at.day,
         )
 
         grouped[(jy, jm)] += 1
@@ -280,585 +287,419 @@ def get_monthly_deals(months=6):
     if not grouped:
         return []
 
-    sorted_items = sorted(
-        grouped.items(),
-        key=lambda item: item[0],
+    ordered_keys = sorted(
+        grouped.keys()
     )
 
-    selected = sorted_items[-months:]
+    selected_keys = ordered_keys[-months:]
 
-    result = []
-
-    for (jy, jm), count in selected:
-        result.append({
-            "month": PERSIAN_MONTHS[jm],
-            "deals": int(count),
-        })
-
-    return result
+    return [
+        {
+            "month": JALALI_MONTH_NAMES[
+                month
+            ],
+            "deals": grouped[
+                (year, month)
+            ],
+        }
+        for year, month in selected_keys
+    ]
 
 
 # ============================================================
-# REAL RECENT ACTIVITIES
+# Recent Activities
 # ============================================================
 
-def get_recent_activities(limit=10):
+def get_recent_activities(user, limit=10):
     """
-    آخرین فعالیت‌های واقعی سامانه.
+    آخرین مذاکرات مربوط به کاربر جاری.
 
-    ساختار خروجی دقیقاً با DashboardActivitySerializer
-    سازگار است.
+    این بخش عمداً فقط Negotiation است.
+
+    بنابراین:
+        عرضه‌های کاربران دیگر
+        نیازهای کاربران دیگر
+        قراردادهای کاربران دیگر
+
+    وارد این بخش نمی‌شوند.
     """
 
-    from products.models import Supply
-    from needs.models import Need
     from negotiations.models import Negotiation
-    from contracts.models import Contract
+
+    negotiations = (
+        get_user_negotiations(user)
+        .select_related(
+            "buyer",
+            "supplier",
+        )
+        .order_by(
+            "-updated_at",
+            "-created_at",
+        )[:limit]
+    )
 
     activities = []
 
-    # --------------------------------------------------------
-    # Supplies
-    # --------------------------------------------------------
+    for negotiation in negotiations:
 
-    supply_items = (
-        Supply.objects
-        .filter(status=PUBLISHED_SUPPLY_STATUS)
-        .select_related("seller")
-        .order_by("-created_at")[:limit]
-    )
+        if (
+            negotiation.buyer_id
+            == user.id
+        ):
+            other_user = (
+                negotiation.supplier
+            )
+        else:
+            other_user = (
+                negotiation.buyer
+            )
 
-    for supply in supply_items:
+        if other_user is None:
+            other_user_name = (
+                "طرف مذاکره"
+            )
+        else:
+            other_user_name = (
+                getattr(
+                    other_user,
+                    "company_name",
+                    None,
+                )
+                or other_user.get_full_name()
+                or other_user.username
+            )
 
-        seller = supply.seller
-
-        user_name = (
-            seller.get_full_name()
-            or getattr(seller, "company_name", "")
-            or seller.username
+        activity_time = (
+            negotiation.updated_at
+            or negotiation.created_at
         )
 
         activities.append({
-            "id": f"s_{supply.id}",
-            "type": "supply",
-            "title": supply.title,
-            "user": user_name,
-            "time": supply.created_at.isoformat(),
-            "_timestamp": supply.created_at,
-        })
-
-    # --------------------------------------------------------
-    # Needs
-    # --------------------------------------------------------
-
-    need_items = (
-        Need.objects
-        .filter(status=PUBLISHED_NEED_STATUS)
-        .select_related("buyer")
-        .order_by("-created_at")[:limit]
-    )
-
-    for need in need_items:
-
-        buyer = need.buyer
-
-        user_name = (
-            buyer.get_full_name()
-            or getattr(buyer, "company_name", "")
-            or buyer.username
-        )
-
-        activities.append({
-            "id": f"n_{need.id}",
-            "type": "need",
-            "title": need.title,
-            "user": user_name,
-            "time": need.created_at.isoformat(),
-            "_timestamp": need.created_at,
-        })
-
-    # --------------------------------------------------------
-    # Negotiations
-    # --------------------------------------------------------
-
-    negotiation_items = (
-        Negotiation.objects
-        .select_related("buyer")
-        .order_by("-created_at")[:limit]
-    )
-
-    for negotiation in negotiation_items:
-
-        buyer = negotiation.buyer
-
-        user_name = (
-            buyer.get_full_name()
-            or getattr(buyer, "company_name", "")
-            or buyer.username
-        )
-
-        activities.append({
-            "id": f"ng_{negotiation.id}",
+            "id": f"negotiation_{negotiation.id}",
             "type": "negotiation",
-            "title": f"مذاکره #{negotiation.id}",
-            "user": user_name,
-            "time": negotiation.created_at.isoformat(),
-            "_timestamp": negotiation.created_at,
+            "title": (
+                f"مذاکره #{negotiation.id}"
+            ),
+            "user": (
+                f"طرف مذاکره: "
+                f"{other_user_name}"
+            ),
+            "time": (
+                activity_time.isoformat()
+                if activity_time
+                else ""
+            ),
         })
 
-    # --------------------------------------------------------
-    # Contracts
-    # --------------------------------------------------------
+    return activities
 
-    contract_items = (
-        Contract.objects
-        .filter(status__in=CONTRACT_SUCCESS_STATUSES)
-        .select_related("buyer", "supplier")
-        .order_by("-created_at")[:limit]
-    )
 
-    for contract in contract_items:
+# ============================================================
+# Smart Negotiation Insights
+# ============================================================
 
-        buyer = contract.buyer
+def get_negotiation_insights(user):
+    """
+    تحلیل هوشمند وضعیت واقعی مذاکرات کاربر.
 
-        user_name = (
-            buyer.get_full_name()
-            or getattr(buyer, "company_name", "")
-            or buyer.username
+    این بخش Fake نیست.
+
+    هیچ درصد یا عدد ثابت در آن وجود ندارد.
+
+    درصدها از تعداد واقعی مذاکرات کاربر محاسبه می‌شوند.
+    """
+
+    negotiations = (
+        get_user_negotiations(user)
+        .values_list(
+            "status",
+            flat=True,
         )
-
-        date_value = contract.signed_at or contract.created_at
-
-        activities.append({
-            "id": f"c_{contract.id}",
-            "type": "deal",
-            "title": f"قرارداد #{contract.id}",
-            "user": user_name,
-            "time": date_value.isoformat(),
-            "_timestamp": date_value,
-        })
-
-    # --------------------------------------------------------
-    # Sort
-    # --------------------------------------------------------
-
-    activities.sort(
-        key=lambda item: item["_timestamp"],
-        reverse=True,
     )
 
-    # فیلد داخلی _timestamp برای Serializer ارسال نمی‌شود
+    statuses = list(
+        negotiations
+    )
+
+    total = len(statuses)
+
+    if total == 0:
+        return []
+
+    counts = Counter(
+        statuses
+    )
+
     result = []
 
-    for activity in activities[:limit]:
+    for status, count in counts.most_common():
+
+        percent = round(
+            (count / total) * 100
+        )
+
+        label = (
+            NEGOTIATION_STATUS_LABELS.get(
+                status,
+                status,
+            )
+        )
+
         result.append({
-            "id": activity["id"],
-            "type": activity["type"],
-            "title": activity["title"],
-            "user": activity["user"],
-            "time": activity["time"],
+            "label": label,
+            "value": count,
+            "percent": percent,
         })
 
     return result
 
 
 # ============================================================
-# SMART SUGGESTIONS
+# Smart Suggestions
 # ============================================================
 
-def get_smart_suggestions(user=None, limit=3):
+def get_smart_suggestions(user, limit=3):
     """
-    پیشنهادهای مبتنی بر داده واقعی.
+    پیشنهادهای هوشمند فقط بر اساس داده واقعی کاربر.
 
-    اگر داده واقعی کافی وجود نداشته باشد،
-    خروجی خالی است.
+    اگر داده کافی وجود نداشته باشد:
+        []
 
-    Demo Data در View و فقط در حالت Database Empty
-    اضافه خواهد شد.
+    برگردانده می‌شود.
+
+    هیچ متن Fake تولید نمی‌شود.
     """
 
     from needs.models import Need
-    from products.models import Supply
-    from analytics.models import MarketTrend
 
     suggestions = []
 
-    # --------------------------------------------------------
-    # Needs
-    # --------------------------------------------------------
+    user_need_industries = (
+        Need.objects
+        .filter(
+            buyer_id=user.id,
+            industry__isnull=False,
+        )
+        .values(
+            "industry_id",
+            "industry__name",
+        )
+        .annotate(
+            count=Count("id")
+        )
+        .order_by(
+            "-count"
+        )
+    )
 
-    try:
-        top_need = (
-            Need.objects
-            .filter(
-                status=PUBLISHED_NEED_STATUS,
-                industry__isnull=False,
+    for item in user_need_industries[:limit]:
+
+        industry_name = (
+            item.get(
+                "industry__name"
             )
-            .values("industry__name")
-            .annotate(count=Count("id"))
-            .order_by("-count")
-            .first()
         )
 
-        if top_need and top_need.get("industry__name"):
-            suggestions.append({
-                "title": f"فرصت در صنعت {top_need['industry__name']}",
-                "match": 92,
-                "reason": f"{top_need['count']} نیاز فعال در این صنعت",
-            })
+        if not industry_name:
+            continue
 
-    except Exception:
-        logger.exception("Error generating need-based suggestion")
+        count = int(
+            item.get("count") or 0
+        )
 
-    # --------------------------------------------------------
-    # Supply
-    # --------------------------------------------------------
-
-    if len(suggestions) < limit:
-
-        try:
-            supply = (
-                Supply.objects
-                .filter(status=PUBLISHED_SUPPLY_STATUS)
-                .order_by("-created_at")
-                .first()
-            )
-
-            if supply:
-                suggestions.append({
-                    "title": supply.title,
-                    "match": 88,
-                    "reason": (
-                        f"جدیدترین عرضه در حوزه "
-                        f"{supply.industry or 'عمومی'}"
-                    ),
-                })
-
-        except Exception:
-            logger.exception("Error generating supply suggestion")
-
-    # --------------------------------------------------------
-    # Market Trend
-    # --------------------------------------------------------
-
-    if len(suggestions) < limit:
-
-        try:
-            trend = (
-                MarketTrend.objects
-                .order_by("-created_at")
-                .first()
-            )
-
-            if trend:
-                suggestions.append({
-                    "title": trend.trend_name,
-                    "match": 80,
-                    "reason": (
-                        trend.description[:80]
-                        if trend.description
-                        else "روند جدید بازار"
-                    ),
-                })
-
-        except Exception:
-            logger.exception(
-                "Error generating market trend suggestion"
-            )
+        suggestions.append({
+            "title": (
+                f"تمرکز شما در حوزه "
+                f"{industry_name}"
+            ),
+            "match": min(
+                100,
+                50 + count * 10,
+            ),
+            "reason": (
+                f"بر اساس {count} "
+                f"نیاز ثبت‌شده شما"
+            ),
+        })
 
     return suggestions[:limit]
 
 
 # ============================================================
-# CONVERSION FUNNEL
+# Conversion Funnel
 # ============================================================
 
-def get_conversion_funnel():
+def get_conversion_funnel(user):
     """
-    قیف تبدیل واقعی.
+    قیف شخصی کاربر بر اساس مذاکرات واقعی.
 
-    اگر هیچ عرضه‌ای وجود نداشته باشد،
-    denominator صفر نمی‌شود.
+    مبنا:
+        کل مذاکرات
+        مذاکرات فعال
+        مذاکرات پذیرفته‌شده / قراردادی
+        قراردادهای تکمیل‌شده
     """
 
-    from products.models import Supply
-    from needs.models import Need
-    from negotiations.models import Negotiation
     from contracts.models import Contract
 
-    total_supplies = Supply.objects.filter(
-        status=PUBLISHED_SUPPLY_STATUS
-    ).count()
+    user_negotiations_qs = (
+        get_user_negotiations(user)
+    )
 
-    total_needs = Need.objects.filter(
-        status=PUBLISHED_NEED_STATUS
-    ).count()
+    total_negotiations = (
+        user_negotiations_qs.count()
+    )
 
-    total_negotiations = Negotiation.objects.count()
+    active_negotiations = (
+        user_negotiations_qs
+        .filter(
+            is_active=True
+        )
+        .count()
+    )
 
-    total_contracts = Contract.objects.filter(
-        status__in=CONTRACT_SUCCESS_STATUSES
-    ).count()
+    accepted_negotiations = (
+        user_negotiations_qs
+        .filter(
+            status__in=[
+                "accepted",
+                "contracted",
+            ]
+        )
+        .count()
+    )
 
-    if total_supplies > 0:
-        base = total_supplies
-    else:
-        base = max(
-            total_needs,
-            total_negotiations,
-            total_contracts,
-            1,
+    completed_contracts = (
+        Contract.objects
+        .filter(
+            Q(buyer_id=user.id)
+            | Q(supplier_id=user.id),
+            status=COMPLETED_CONTRACT_STATUS,
+        )
+        .count()
+    )
+
+    if total_negotiations == 0:
+        return []
+
+    def percentage(value):
+        return round(
+            (value / total_negotiations)
+            * 100
         )
 
     return [
         {
-            "label": "عرضه‌های منتشرشده",
-            "value": total_supplies,
-            "percent": 100 if total_supplies > 0 else 0,
-        },
-        {
-            "label": "نیازهای فعال",
-            "value": total_needs,
-            "percent": round(
-                total_needs / base * 100
-            ),
-        },
-        {
-            "label": "مذاکرات",
+            "label": "کل مذاکرات",
             "value": total_negotiations,
-            "percent": round(
-                total_negotiations / base * 100
+            "percent": 100,
+        },
+        {
+            "label": "مذاکرات فعال",
+            "value": active_negotiations,
+            "percent": percentage(
+                active_negotiations
             ),
         },
         {
-            "label": "معاملات موفق",
-            "value": total_contracts,
-            "percent": round(
-                total_contracts / base * 100
+            "label": "مذاکرات پذیرفته‌شده",
+            "value": accepted_negotiations,
+            "percent": percentage(
+                accepted_negotiations
+            ),
+        },
+        {
+            "label": "قراردادهای تکمیل‌شده",
+            "value": completed_contracts,
+            "percent": percentage(
+                completed_contracts
             ),
         },
     ]
 
 
 # ============================================================
-# TOP SUPPLIERS
+# Top Counterparties
 # ============================================================
 
-def get_top_suppliers(limit=5):
+def get_top_suppliers(user, limit=5):
     """
-    تأمین‌کنندگان واقعی بر اساس تعداد قراردادهای موفق.
+    برای حفظ سازگاری API نام تابع همان get_top_suppliers است.
+
+    اما داده کاملاً شخصی است.
+
+    اگر کاربر خریدار باشد:
+        طرف‌های معامله = supplier
+
+    اگر کاربر supplier باشد:
+        طرف‌های معامله = buyer
+
+    بنابراین اطلاعات کاربران دیگر به‌صورت عمومی نمایش داده نمی‌شود.
     """
 
-    queryset = (
-        User.objects
+    from contracts.models import Contract
+
+    contracts = (
+        get_user_contracts(user)
         .filter(
-            contracts_as_supplier__status__in=CONTRACT_SUCCESS_STATUSES
+            status=COMPLETED_CONTRACT_STATUS
         )
-        .annotate(
-            deals_count=Count(
-                "contracts_as_supplier",
-                filter=Q(
-                    contracts_as_supplier__status__in=
-                    CONTRACT_SUCCESS_STATUSES
-                ),
-            )
+        .select_related(
+            "buyer",
+            "supplier",
         )
-        .filter(
-            deals_count__gt=0
-        )
-        .order_by("-deals_count")
-        .distinct()[:limit]
     )
+
+    counterparties = Counter()
+
+    names = {}
+
+    for contract in contracts:
+
+        if (
+            contract.buyer_id
+            == user.id
+        ):
+            counterparty = (
+                contract.supplier
+            )
+        else:
+            counterparty = (
+                contract.buyer
+            )
+
+        if counterparty is None:
+            continue
+
+        counterparties[
+            counterparty.id
+        ] += 1
+
+        names[
+            counterparty.id
+        ] = (
+            getattr(
+                counterparty,
+                "company_name",
+                None,
+            )
+            or counterparty.get_full_name()
+            or counterparty.username
+        )
 
     result = []
 
-    for user in queryset:
-
-        deals = int(user.deals_count)
-
-        if deals >= 10:
-            score = 4.9
-        elif deals >= 6:
-            score = 4.7
-        elif deals >= 3:
-            score = 4.5
-        else:
-            score = 4.2
-
-        name = (
-            getattr(user, "company_name", "")
-            or user.get_full_name()
-            or user.username
-        )
+    for user_id, deals in counterparties.most_common(
+        limit
+    ):
 
         result.append({
-            "name": name,
-            "score": score,
+            "name": names.get(
+                user_id,
+                "طرف معامله",
+            ),
+            "score": 0.0,
             "deals": deals,
         })
 
     return result
-
-
-# ============================================================
-# DEMO DATA
-# ============================================================
-
-# این داده‌ها فقط زمانی استفاده می‌شوند که تمام موجودیت‌های
-# عملیاتی Dashboard در Database صفر باشند.
-#
-# KPIهای اصلی هرگز از این بخش استفاده نمی‌کنند.
-
-DEMO_INDUSTRY_DATA = [
-    {
-        "name": "نفت و گاز",
-        "value": 45,
-    },
-    {
-        "name": "فناوری اطلاعات",
-        "value": 38,
-    },
-    {
-        "name": "سلامت",
-        "value": 29,
-    },
-    {
-        "name": "کشاورزی",
-        "value": 22,
-    },
-    {
-        "name": "خودروسازی",
-        "value": 18,
-    },
-    {
-        "name": "سایر",
-        "value": 33,
-    },
-]
-
-
-DEMO_MONTHLY_DEALS = [
-    {
-        "month": "فروردین",
-        "deals": 12,
-    },
-    {
-        "month": "اردیبهشت",
-        "deals": 19,
-    },
-    {
-        "month": "خرداد",
-        "deals": 15,
-    },
-    {
-        "month": "تیر",
-        "deals": 27,
-    },
-    {
-        "month": "مرداد",
-        "deals": 31,
-    },
-    {
-        "month": "شهریور",
-        "deals": 25,
-    },
-]
-
-
-DEMO_RECENT_ACTIVITIES = [
-    {
-        "id": "demo_1",
-        "type": "supply",
-        "title": "سامانه مدیریت انرژی هوشمند",
-        "user": "شرکت فناوران انرژی",
-        "time": "نمونه",
-    },
-    {
-        "id": "demo_2",
-        "type": "need",
-        "title": "بهینه‌سازی مصرف آب در صنایع",
-        "user": "سازمان آب منطقه‌ای",
-        "time": "نمونه",
-    },
-    {
-        "id": "demo_3",
-        "type": "negotiation",
-        "title": "مذاکره برای تأمین تجهیزات",
-        "user": "پتروشیمی",
-        "time": "نمونه",
-    },
-    {
-        "id": "demo_4",
-        "type": "deal",
-        "title": "انعقاد قرارداد همکاری",
-        "user": "شرکت دانش‌بنیان",
-        "time": "نمونه",
-    },
-]
-
-
-DEMO_SMART_SUGGESTIONS = [
-    {
-        "title": "همکاری با عرضه‌کننده باتری",
-        "match": 92,
-        "reason": "داده نمونه برای نمایش داشبورد",
-    },
-    {
-        "title": "پروژه کاهش مصرف انرژی",
-        "match": 85,
-        "reason": "داده نمونه برای نمایش داشبورد",
-    },
-    {
-        "title": "دوره آموزشی مدیریت ریسک",
-        "match": 78,
-        "reason": "داده نمونه برای نمایش داشبورد",
-    },
-]
-
-
-DEMO_CONVERSION_FUNNEL = [
-    {
-        "label": "بازدید از صفحه",
-        "value": 2450,
-        "percent": 100,
-    },
-    {
-        "label": "ثبت درخواست",
-        "value": 980,
-        "percent": 40,
-    },
-    {
-        "label": "مذاکره",
-        "value": 340,
-        "percent": 14,
-    },
-    {
-        "label": "انعقاد قرارداد",
-        "value": 156,
-        "percent": 6,
-    },
-]
-
-
-DEMO_TOP_SUPPLIERS = [
-    {
-        "name": "شرکت صنایع نوین",
-        "score": 4.9,
-        "deals": 28,
-    },
-    {
-        "name": "تجهیزات پیشرو",
-        "score": 4.8,
-        "deals": 24,
-    },
-    {
-        "name": "فناوران پایدار",
-        "score": 4.7,
-        "deals": 22,
-    },
-    {
-        "name": "سیستم‌های هوشمند",
-        "score": 4.6,
-        "deals": 19,
-    },
-]
