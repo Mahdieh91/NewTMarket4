@@ -814,30 +814,34 @@ export default function DashboardPage() {
 
           <div className="flex items-center gap-4">
 
-            <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/20">
+           <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#1E3A8A] to-[#14B8A6] p-1 shadow-lg border border-white/20 shrink-0">
 
-              {!logoError ? (
+  <div className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden">
 
-                <Image
-                  src="/logo.png"
-                  alt="بازار تحول"
-                  width={48}
-                  height={48}
-                  className="object-contain"
-                  onError={() =>
-                    setLogoError(true)
-                  }
-                />
+    {!logoError ? (
 
-              ) : (
+      <Image
+        src="/logo.png"
+        alt="بازار تحول"
+        width={48}
+        height={48}
+        className="w-full h-full object-contain p-1"
+        onError={() =>
+          setLogoError(true)
+        }
+      />
 
-                <span className="font-black text-xl">
-                  ب ت
-                </span>
+    ) : (
 
-              )}
+      <span className="font-black text-xl text-[#1E3A8A]">
+        ب ت
+      </span>
 
-            </div>
+    )}
+
+  </div>
+
+</div>
 
 
             <div>
