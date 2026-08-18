@@ -25,36 +25,28 @@ class NegotiationConsumer(
     async def connect(self):
 
         self.nego_id = (
-            self.scope[
-                'url_route'
-            ][
-                'kwargs'
-            ][
-                'nego_id'
-            ]
+            self.scope['url_route']['kwargs']['nego_id']
         )
 
         self.room_group_name = (
             f'negotiation_{self.nego_id}'
         )
 
-        self.user = self.scope.get(
-            'user'
-        )
+        self.user = self.scope.get('user')
 
         if (
             not self.user
             or not self.user.is_authenticated
         ):
-            await self.close(
-                code=4001
-            )
+
+            await self.close(code=4001)
+
             return
 
         if not await self.has_access():
-            await self.close(
-                code=4003
-            )
+
+            await self.close(code=4003)
+
             return
 
         await self.channel_layer.group_add(
@@ -62,20 +54,16 @@ class NegotiationConsumer(
             self.channel_name,
         )
 
-        subprotocol = (
-            'jwt'
-            if self.scope.get(
-                'jwt_authenticated'
-            )
-            else None
-        )
-
         await self.accept(
-            subprotocol=subprotocol
+            subprotocol=(
+                'jwt'
+                if self.scope.get('jwt_authenticated')
+                else None
+            )
         )
 
         print(
-            f'✅ WebSocket connected: '
+            f'✅ WebSocket connected '
             f'user={self.user.id} '
             f'negotiation={self.nego_id}'
         )
@@ -89,10 +77,18 @@ class NegotiationConsumer(
             self,
             'room_group_name'
         ):
+
             await self.channel_layer.group_discard(
                 self.room_group_name,
                 self.channel_name,
             )
+
+        print(
+            f'🔌 WebSocket disconnected '
+            f'user={getattr(self.user, "id", None)} '
+            f'negotiation={getattr(self, "nego_id", None)} '
+            f'code={close_code}'
+        )
 
     async def receive(
         self,
@@ -101,30 +97,20 @@ class NegotiationConsumer(
 
         try:
 
-            data = json.loads(
-                text_data
-            )
+            data = json.loads(text_data)
 
             message_type = data.get(
                 'type',
                 'message'
             )
 
-            if (
-                message_type
-                == 'message'
-            ):
-                await self.handle_message(
-                    data
-                )
+            if message_type == 'message':
 
-            elif (
-                message_type
-                == 'status_update'
-            ):
-                await self.handle_status_update(
-                    data
-                )
+                await self.handle_message(data)
+
+            elif message_type == 'status_update':
+
+                await self.handle_status_update(data)
 
             else:
 
@@ -162,10 +148,16 @@ class NegotiationConsumer(
             )
         ).strip()
 
-        validation = (
-            validate_negotiation_message(
-                text
+        if not text:
+
+            await self.send_error(
+                'پیام نمی‌تواند خالی باشد.'
             )
+
+            return
+
+        validation = (
+            validate_negotiation_message(text)
         )
 
         if not validation.allowed:
@@ -181,9 +173,7 @@ class NegotiationConsumer(
         try:
 
             message_data = (
-                await self.save_message(
-                    text
-                )
+                await self.save_message(text)
             )
 
         except NegotiationAccessError:
@@ -227,9 +217,7 @@ class NegotiationConsumer(
         await self.channel_layer.group_send(
             self.room_group_name,
             {
-                'type':
-                    'chat_message',
-
+                'type': 'chat_message',
                 'message': message_data,
             },
         )
@@ -239,9 +227,7 @@ class NegotiationConsumer(
         data,
     ):
 
-        new_status = data.get(
-            'status'
-        )
+        new_status = data.get('status')
 
         allowed = {
             'accepted',
@@ -292,11 +278,8 @@ class NegotiationConsumer(
         await self.channel_layer.group_send(
             self.room_group_name,
             {
-                'type':
-                    'status_updated',
-
-                'status':
-                    negotiation.status,
+                'type': 'status_updated',
+                'status': negotiation.status,
             },
         )
 
@@ -320,11 +303,8 @@ class NegotiationConsumer(
         await self.send(
             text_data=json.dumps(
                 {
-                    'type':
-                        'status_updated',
-
-                    'status':
-                        event['status'],
+                    'type': 'status_updated',
+                    'status': event['status'],
                 },
                 ensure_ascii=False,
             )
@@ -338,11 +318,8 @@ class NegotiationConsumer(
         await self.send(
             text_data=json.dumps(
                 {
-                    'type':
-                        'error',
-
-                    'error':
-                        message,
+                    'type': 'error',
+                    'error': message,
                 },
                 ensure_ascii=False,
             )
@@ -364,13 +341,9 @@ class NegotiationConsumer(
             return False
 
         return (
-            negotiation.buyer_id
-            == self.user.id
-
+            negotiation.buyer_id == self.user.id
             or
-
-            negotiation.supplier_id
-            == self.user.id
+            negotiation.supplier_id == self.user.id
         )
 
     @database_sync_to_async
@@ -385,20 +358,12 @@ class NegotiationConsumer(
             )
         )
 
-        # -------------------------------------------------
-        # دوباره بررسی دسترسی
-        # -------------------------------------------------
-
         if self.user.id not in {
             negotiation.buyer_id,
             negotiation.supplier_id,
         }:
 
             raise NegotiationAccessError()
-
-        # -------------------------------------------------
-        # مذاکره بسته
-        # -------------------------------------------------
 
         if negotiation.status in {
             'rejected',
@@ -409,25 +374,15 @@ class NegotiationConsumer(
                 'این مذاکره به پایان رسیده است.'
             )
 
-        # -------------------------------------------------
-        # Save real message
-        # -------------------------------------------------
-
         message = Message.objects.create(
             negotiation=negotiation,
             sender=self.user,
             text=text,
         )
 
-        # -------------------------------------------------
-        # First message
-        # -------------------------------------------------
-
         if negotiation.status == 'created':
 
-            negotiation.status = (
-                'in_progress'
-            )
+            negotiation.status = 'in_progress'
 
             negotiation.save(
                 update_fields=[
@@ -437,11 +392,9 @@ class NegotiationConsumer(
             )
 
         return {
-            'type':
-                'message',
+            'type': 'message',
 
-            'id':
-                message.id,
+            'id': message.id,
 
             'negotiation_id':
                 negotiation.id,
@@ -452,7 +405,12 @@ class NegotiationConsumer(
             'sender_name':
                 (
                     message.sender.get_full_name()
-                    or message.sender.username
+                    or
+                    getattr(
+                        message.sender,
+                        'username',
+                        ''
+                    )
                 ),
 
             'text':
@@ -460,6 +418,9 @@ class NegotiationConsumer(
 
             'timestamp':
                 message.timestamp.isoformat(),
+
+            'read_at':
+                None,
 
             'file':
                 (
@@ -470,7 +431,6 @@ class NegotiationConsumer(
 
             'file_name':
                 message.file_name,
-
         }
 
     @database_sync_to_async
@@ -492,10 +452,6 @@ class NegotiationConsumer(
 
             raise NegotiationAccessError()
 
-        # -----------------------------------------------
-        # وضعیت نهایی rejected/contracted
-        # -----------------------------------------------
-
         if negotiation.status in {
             'rejected',
             'contracted',
@@ -505,26 +461,27 @@ class NegotiationConsumer(
                 'این مذاکره قبلاً به پایان رسیده است.'
             )
 
-        # -----------------------------------------------
-        # contracted فقط supplier
-        # -----------------------------------------------
-
         if (
             new_status == 'contracted'
             and
-            negotiation.supplier_id
-            != self.user.id
+            negotiation.supplier_id != self.user.id
         ):
 
             raise NegotiationAccessError()
 
-        negotiation.status = (
-            new_status
-        )
+        negotiation.status = new_status
+
+        if new_status in {
+            'rejected',
+            'contracted',
+        }:
+
+            negotiation.is_active = False
 
         negotiation.save(
             update_fields=[
                 'status',
+                'is_active',
                 'updated_at',
             ]
         )

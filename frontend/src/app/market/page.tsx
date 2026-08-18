@@ -32,6 +32,7 @@ import {
   getRiskLabel,
   Product,
 } from '@/app/data/products';
+
 import { useAuthStore } from '@/store/auth-store';
 
 // ==================== Constants ====================
@@ -95,7 +96,15 @@ const provinces = [
   'کرمان',
 ];
 
-// ==================== Real Supply -> Marketplace Adapter ====================
+// ==================== API ====================
+
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  'http://127.0.0.1:8000/api';
+
+const API_ORIGIN = API_URL.replace(/\/api\/?$/, '');
+
+// ==================== Supply API ====================
 
 type SupplyApi = {
   id: number | string;
@@ -122,126 +131,254 @@ type SupplyApi = {
   updated_at?: string;
 };
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+// ==================== Helpers ====================
 
-const API_ORIGIN = API_URL.replace(/\/api\/?$/, '');
+function resolveMediaUrl(
+  url?: string | null
+): string {
+  if (!url) {
+    return '';
+  }
 
-function resolveMediaUrl(url?: string | null): string {
-  if (!url) return '';
-  if (/^https?:\/\//i.test(url)) return url;
-  return `${API_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
+  if (/^https?:\/\//i.test(url)) {
+    return url;
+  }
+
+  return `${API_ORIGIN}${
+    url.startsWith('/') ? '' : '/'
+  }${url}`;
 }
 
-function supplyCategoryToMarketplaceCategory(category?: string): 'product' | 'service' {
+function supplyCategoryToMarketplaceCategory(
+  category?: string
+): 'product' | 'service' {
   const value = (category || '').trim();
-  return value.includes('خدمت') ? 'service' : 'product';
+
+  return value.includes('خدمت')
+    ? 'service'
+    : 'product';
 }
 
-function supplyToProduct(supply: SupplyApi): Product {
-  const trlNumber = Number.parseInt(String(supply.trl ?? '1'), 10);
-  const priceToman = Number(supply.price ?? 0);
+// ==================== Supply -> Product ====================
 
-  // Marketplace prices are displayed/filtered in million تومان,
-  // while Supply.price is stored in تومان in the backend.
-  const priceInMillionToman = Number.isFinite(priceToman)
-    ? priceToman / 1_000_000
-    : 0;
+type MarketplaceProduct = Product & {
+  supplyId?: number;
+};
 
-  const images = (supply.images || [])
-    .map((item) => resolveMediaUrl(item.image))
+function supplyToProduct(
+  supply: SupplyApi
+): MarketplaceProduct {
+  const trlNumber = Number.parseInt(
+    String(supply.trl ?? '1'),
+    10
+  );
+
+  const priceToman = Number(
+    supply.price ?? 0
+  );
+
+  const priceInMillionToman =
+    Number.isFinite(priceToman)
+      ? priceToman / 1_000_000
+      : 0;
+
+  const images = (
+    supply.images || []
+  )
+    .map((item) =>
+      resolveMediaUrl(item.image)
+    )
     .filter(Boolean);
 
   return {
     id: `supply-${supply.id}`,
+
+    // مهم:
+    // شناسه واقعی Supply را جداگانه نگه می‌داریم.
+    supplyId: Number(supply.id),
+
     title: supply.title,
-    category: supplyCategoryToMarketplaceCategory(supply.category),
-    industry: supply.industry || 'سایر',
-    technology: supply.technology || 'سایر',
+
+    category:
+      supplyCategoryToMarketplaceCategory(
+        supply.category
+      ),
+
+    industry:
+      supply.industry || 'سایر',
+
+    technology:
+      supply.technology || 'سایر',
+
     shortDescription:
-      supply.description || 'عرضه ثبت‌شده در بازار تحول',
-    trl: Number.isFinite(trlNumber) && trlNumber >= 1 && trlNumber <= 9
-      ? trlNumber
-      : 1,
+      supply.description ||
+      'عرضه ثبت‌شده در بازار تحول',
+
+    trl:
+      Number.isFinite(trlNumber) &&
+      trlNumber >= 1 &&
+      trlNumber <= 9
+        ? trlNumber
+        : 1,
+
     mrl: 1,
+
     price: priceInMillionToman,
+
     priceType: 'fixed',
+
     priceRange: undefined,
+
     images,
+
     tags: [
       supply.category,
       supply.unit,
-      supply.quantity ? `مقدار: ${supply.quantity}` : '',
+      supply.quantity
+        ? `مقدار: ${supply.quantity}`
+        : '',
     ].filter(Boolean),
+
     seller: {
-      name: supply.seller_name || 'فروشنده',
-      location: supply.city || 'نامشخص',
+      name:
+        supply.seller_name ||
+        'فروشنده',
+
+      location:
+        supply.city ||
+        'نامشخص',
+
       rating: 0,
-      verified: supply.status === 'approved' || supply.status === 'published',
+
+      verified:
+        supply.status === 'approved' ||
+        supply.status === 'published',
     },
+
     viewCount: 0,
+
     deliveryTime: '—',
+
     riskLevel: 'low',
+
     certifications: [],
-    createdAt: supply.created_at || new Date().toISOString(),
+
+    createdAt:
+      supply.created_at ||
+      new Date().toISOString(),
   } as Product;
 }
 
 // ==================== Main Component ====================
 
 export default function MarketplacePage() {
-  const [mounted, setMounted] = useState(false);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [showFilters, setShowFilters] = useState(true);
-  const [showCompare, setShowCompare] = useState(false);
-  const [compareList, setCompareList] = useState<string[]>([]);
-  const [favorites, setFavorites] = useState<string[]>([]);
-  const [toast, setToast] = useState<string | null>(null);
-  const [realProducts, setRealProducts] = useState<Product[]>([]);
-  const [suppliesLoading, setSuppliesLoading] = useState(false);
-  const [suppliesError, setSuppliesError] = useState<string | null>(null);
+  const [mounted, setMounted] =
+    useState(false);
 
-  const { accessToken } = useAuthStore();
+  const [viewMode, setViewMode] =
+    useState<'grid' | 'list'>('grid');
 
-  // Filters
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedIndustry, setSelectedIndustry] = useState('all');
-  const [selectedTechnology, setSelectedTechnology] = useState('all');
+  const [showFilters, setShowFilters] =
+    useState(true);
 
-  const [selectedCategory, setSelectedCategory] = useState<
-    'all' | 'product' | 'service'
-  >('all');
+  const [showCompare, setShowCompare] =
+    useState(false);
 
-  const [selectedTRL, setSelectedTRL] = useState<number>(0);
-  const [selectedMRL, setSelectedMRL] = useState<number>(0);
-  const [maxPrice, setMaxPrice] = useState<number>(5000);
-  const [selectedProvince, setSelectedProvince] = useState('all');
-  const [selectedCertification, setSelectedCertification] = useState('all');
-  const [minRating, setMinRating] = useState(0);
+  const [compareList, setCompareList] =
+    useState<string[]>([]);
 
-  const [sortBy, setSortBy] = useState<
-    'newest' | 'popular' | 'price-asc' | 'price-desc' | 'rating'
-  >('newest');
+  const [favorites, setFavorites] =
+    useState<string[]>([]);
 
-  const [selectedRisk, setSelectedRisk] = useState<
-    'all' | 'low' | 'medium' | 'high'
-  >('all');
+  const [toast, setToast] =
+    useState<string | null>(null);
+
+  const [isNegotiating, setIsNegotiating] =
+    useState(false);
+
+  const [realProducts, setRealProducts] =
+    useState<Product[]>([]);
+
+  const [suppliesLoading, setSuppliesLoading] =
+    useState(false);
+
+  const [suppliesError, setSuppliesError] =
+    useState<string | null>(null);
+
+  const {
+    accessToken,
+  } = useAuthStore();
+
+  // ==================== Filters ====================
+
+  const [searchQuery, setSearchQuery] =
+    useState('');
+
+  const [selectedIndustry, setSelectedIndustry] =
+    useState('all');
+
+  const [selectedTechnology, setSelectedTechnology] =
+    useState('all');
+
+  const [selectedCategory, setSelectedCategory] =
+    useState<
+      'all' | 'product' | 'service'
+    >('all');
+
+  const [selectedTRL, setSelectedTRL] =
+    useState<number>(0);
+
+  const [selectedMRL, setSelectedMRL] =
+    useState<number>(0);
+
+  const [maxPrice, setMaxPrice] =
+    useState<number>(5000);
+
+  const [selectedProvince, setSelectedProvince] =
+    useState('all');
+
+  const [selectedCertification, setSelectedCertification] =
+    useState('all');
+
+  const [minRating, setMinRating] =
+    useState(0);
+
+  const [sortBy, setSortBy] =
+    useState<
+      | 'newest'
+      | 'popular'
+      | 'price-asc'
+      | 'price-desc'
+      | 'rating'
+    >('newest');
+
+  const [selectedRisk, setSelectedRisk] =
+    useState<
+      'all' | 'low' | 'medium' | 'high'
+    >('all');
+
+  // ==================== Mount ====================
 
   useEffect(() => {
     setMounted(true);
 
-    const savedFavorites = localStorage.getItem('marketplace_favorites');
+    const savedFavorites =
+      localStorage.getItem(
+        'marketplace_favorites'
+      );
 
     if (savedFavorites) {
       try {
-        setFavorites(JSON.parse(savedFavorites));
+        setFavorites(
+          JSON.parse(savedFavorites)
+        );
       } catch {
         setFavorites([]);
       }
     }
   }, []);
 
-  // ==================== Load real Supplies ====================
+  // ==================== Load Supplies ====================
 
   useEffect(() => {
     if (!mounted || !accessToken) {
@@ -255,41 +392,59 @@ export default function MarketplacePage() {
       setSuppliesError(null);
 
       try {
-        const response = await fetch(`${API_URL}/products/supplies/`, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-          cache: 'no-store',
-        });
+        const response = await fetch(
+          `${API_URL}/products/supplies/`,
+          {
+            method: 'GET',
+            headers: {
+              Authorization:
+                `Bearer ${accessToken}`,
+            },
+            cache: 'no-store',
+          }
+        );
 
         if (!response.ok) {
           if (response.status === 401) {
-            throw new Error('نشست کاربری منقضی شده است.');
+            throw new Error(
+              'نشست کاربری منقضی شده است.'
+            );
           }
-          throw new Error(`خطا در دریافت عرضه‌ها (کد ${response.status})`);
+
+          throw new Error(
+            `خطا در دریافت عرضه‌ها (کد ${response.status})`
+          );
         }
 
-        const data = await response.json();
+        const data =
+          await response.json();
 
-        // DRF may return either a plain array or a paginated { results: [] } response.
-        const supplies: SupplyApi[] = Array.isArray(data)
-          ? data
-          : Array.isArray(data?.results)
-            ? data.results
-            : [];
+        const supplies: SupplyApi[] =
+          Array.isArray(data)
+            ? data
+            : Array.isArray(data?.results)
+              ? data.results
+              : [];
 
         if (!cancelled) {
-          setRealProducts(supplies.map(supplyToProduct));
+          setRealProducts(
+            supplies.map(
+              supplyToProduct
+            )
+          );
         }
       } catch (error: any) {
-        console.error('❌ خطا در دریافت عرضه‌های واقعی:', error);
+        console.error(
+          '❌ خطا در دریافت عرضه‌های واقعی:',
+          error
+        );
 
         if (!cancelled) {
           setSuppliesError(
-            error?.message || 'دریافت عرضه‌های ثبت‌شده با خطا مواجه شد.'
+            error?.message ||
+            'دریافت عرضه‌های ثبت‌شده با خطا مواجه شد.'
           );
-          // Keep mockProducts visible even if the real API is unavailable.
+
           setRealProducts([]);
         }
       } finally {
@@ -301,167 +456,506 @@ export default function MarketplacePage() {
 
     loadSupplies();
 
-    // Refresh when the user returns to the marketplace tab.
-    const handleFocus = () => loadSupplies();
-    window.addEventListener('focus', handleFocus);
+    const handleFocus = () =>
+      loadSupplies();
+
+    window.addEventListener(
+      'focus',
+      handleFocus
+    );
 
     return () => {
       cancelled = true;
-      window.removeEventListener('focus', handleFocus);
+
+      window.removeEventListener(
+        'focus',
+        handleFocus
+      );
     };
-  }, [mounted, accessToken]);
-
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2500);
-  };
-
-  // ==================== Filtered & Sorted Products ====================
-
-  const filteredProducts = useMemo(() => {
-    let result = [...mockProducts, ...realProducts];
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-
-      result = result.filter(
-        (p) =>
-          p.title.toLowerCase().includes(q) ||
-          p.shortDescription.toLowerCase().includes(q) ||
-          p.tags.some((t) => t.toLowerCase().includes(q)) ||
-          p.seller.name.toLowerCase().includes(q)
-      );
-    }
-
-    if (selectedIndustry !== 'all') {
-      result = result.filter((p) => p.industry === selectedIndustry);
-    }
-
-    if (selectedTechnology !== 'all') {
-      result = result.filter((p) => p.technology === selectedTechnology);
-    }
-
-    if (selectedCategory !== 'all') {
-      result = result.filter((p) => p.category === selectedCategory);
-    }
-
-    if (selectedTRL > 0) {
-      result = result.filter((p) => p.trl >= selectedTRL);
-    }
-
-    if (selectedMRL > 0) {
-      result = result.filter((p) => p.mrl >= selectedMRL);
-    }
-
-    result = result.filter((p) => {
-      const effectivePrice =
-        p.priceType === 'range' && p.priceRange
-          ? p.priceRange.min
-          : p.price;
-
-      return effectivePrice <= maxPrice;
-    });
-
-    if (selectedProvince !== 'all') {
-      result = result.filter(
-        (p) => p.seller.location === selectedProvince
-      );
-    }
-
-    if (selectedCertification !== 'all') {
-      if (selectedCertification === 'has') {
-        result = result.filter((p) => p.certifications.length > 0);
-      }
-
-      if (selectedCertification === 'none') {
-        result = result.filter((p) => p.certifications.length === 0);
-      }
-    }
-
-    if (minRating > 0) {
-      result = result.filter((p) => p.seller.rating >= minRating);
-    }
-
-    if (selectedRisk !== 'all') {
-      result = result.filter((p) => p.riskLevel === selectedRisk);
-    }
-
-    switch (sortBy) {
-      case 'newest':
-        result.sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() -
-            new Date(a.createdAt).getTime()
-        );
-        break;
-
-      case 'popular':
-        result.sort((a, b) => b.viewCount - a.viewCount);
-        break;
-
-      case 'price-asc':
-        result.sort((a, b) => {
-          const priceA =
-            a.priceType === 'range' && a.priceRange
-              ? a.priceRange.min
-              : a.price;
-
-          const priceB =
-            b.priceType === 'range' && b.priceRange
-              ? b.priceRange.min
-              : b.price;
-
-          return priceA - priceB;
-        });
-        break;
-
-      case 'price-desc':
-        result.sort((a, b) => {
-          const priceA =
-            a.priceType === 'range' && a.priceRange
-              ? a.priceRange.min
-              : a.price;
-
-          const priceB =
-            b.priceType === 'range' && b.priceRange
-              ? b.priceRange.min
-              : b.price;
-
-          return priceB - priceA;
-        });
-        break;
-
-      case 'rating':
-        result.sort((a, b) => b.seller.rating - a.seller.rating);
-        break;
-    }
-
-    return result;
   }, [
-    searchQuery,
-    selectedIndustry,
-    selectedTechnology,
-    selectedCategory,
-    selectedTRL,
-    selectedMRL,
-    maxPrice,
-    selectedProvince,
-    selectedCertification,
-    minRating,
-    sortBy,
-    selectedRisk,
-    realProducts,
+    mounted,
+    accessToken,
   ]);
 
-  // ==================== Actions ====================
+  // ==================== Toast ====================
 
-  const toggleFavorite = (id: string) => {
+  const showToast = (
+    msg: string
+  ) => {
+    setToast(msg);
+
+    setTimeout(
+      () => setToast(null),
+      2500
+    );
+  };
+
+  // =========================================================
+  // Start / Open Negotiation
+  // =========================================================
+  //
+  // این بخش اصلاح اصلی است.
+  //
+  // product.id = supply-102
+  // اما این مقدار negotiation_id نیست.
+  //
+  // ما فقط supplyId را به Backend می‌فرستیم.
+  //
+  // Backend بر اساس:
+  // current user + supply + supplier
+  // مذاکره موجود را پیدا می‌کند یا مذاکره جدید می‌سازد.
+  //
+  // سپس negotiation.id واقعی را برمی‌گرداند.
+  // =========================================================
+
+  const handleStartNegotiation = async (product: MarketplaceProduct) => {
+  if (!accessToken) {
+    window.location.href =
+      '/login?next=' + encodeURIComponent(`/market/${product.id}`);
+    return;
+  }
+
+  // شناسه واقعی Supply در داده‌های API در supplyId نگهداری می‌شود.
+  // product.id شناسه نمایشی بازار مانند supply-120 است و نباید به‌عنوان
+  // شناسه عددی Supply با حدس یا تبدیل رشته‌ای استفاده شود.
+  let supplyId: number | null = null;
+
+  if (
+    product.supplyId !== undefined &&
+    product.supplyId !== null &&
+    Number.isInteger(product.supplyId) &&
+    product.supplyId > 0
+  ) {
+    supplyId = product.supplyId;
+  } else {
+    const match = String(product.id).match(/^supply-(\d+)$/);
+
+    if (match) {
+      const parsedId = Number(match[1]);
+
+      if (Number.isSafeInteger(parsedId) && parsedId > 0) {
+        supplyId = parsedId;
+      }
+    }
+  }
+
+  if (supplyId === null) {
+    console.error('❌ شناسه واقعی عرضه پیدا نشد:', {
+      productId: product.id,
+      supplyId: product.supplyId,
+      product,
+    });
+
+    showToast('شناسه عرضه معتبر نیست.');
+    return;
+  }
+
+  setIsNegotiating(true);
+
+  try {
+    /*
+     * ایجاد یا بازیابی مذاکره مخصوص همین:
+     *
+     * Supply
+     * +
+     * کاربر فعلی
+     * +
+     * فروشنده Supply
+     *
+     * بنابراین اگر Supply شماره 102 با سه خریدار مختلف
+     * مذاکره داشته باشد، هر خریدار مذاکره خودش را خواهد داشت.
+     */
+
+    const response = await fetch(`${API_URL}/negotiations/`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        supply: supplyId,
+      }),
+    });
+
+    const responseText = await response.text();
+
+    let data: any = {};
+
+    try {
+      data = responseText ? JSON.parse(responseText) : {};
+    } catch {
+      data = {
+        detail: responseText || 'پاسخ نامعتبر از سرور دریافت شد.',
+      };
+    }
+
+    if (!response.ok) {
+      console.error('❌ Start negotiation failed:', {
+        status: response.status,
+        data,
+      });
+
+      if (response.status === 401) {
+        showToast('نشست کاربری شما منقضی شده است.');
+        return;
+      }
+
+      if (response.status === 403) {
+        showToast(
+          data?.detail ||
+            'شما اجازه شروع این مذاکره را ندارید.'
+        );
+        return;
+      }
+
+      if (response.status === 400) {
+        showToast(
+          data?.detail ||
+            data?.message ||
+            'امکان شروع مذاکره برای این عرضه وجود ندارد.'
+        );
+        return;
+      }
+
+      if (response.status === 405) {
+        console.error(
+          '❌ Backend route does not allow POST /negotiations/.'
+        );
+
+        showToast(
+          'مسیر ایجاد مذاکره در Backend تنظیم نشده است.'
+        );
+        return;
+      }
+
+      showToast(
+        data?.detail ||
+          data?.message ||
+          `خطا در شروع مذاکره (${response.status})`
+      );
+
+      return;
+    }
+
+    /*
+     * Backend باید Negotiation واقعی را برگرداند.
+     * شناسه مذاکره را از پاسخ می‌گیریم، نه از Supply.
+     */
+    const negotiationId =
+      data?.id ??
+      data?.negotiation_id ??
+      data?.data?.id ??
+      data?.data?.negotiation_id;
+
+    if (!negotiationId) {
+      console.error(
+        '❌ Negotiation created but no negotiation ID returned:',
+        data
+      );
+
+      showToast(
+        'مذاکره ایجاد شد اما شناسه مذاکره از سرور دریافت نشد.'
+      );
+
+      return;
+    }
+
+    console.log('✅ Negotiation ready:', {
+      negotiationId,
+      supplyId,
+      data,
+    });
+
+    /*
+     * از اینجا به بعد دیگر با Supply کار نداریم.
+     *
+     * صفحه مذاکره باید با ID خود مذاکره باز شود.
+     */
+    window.location.href = `/negotiation/${negotiationId}`;
+  } catch (error: any) {
+    console.error('❌ Start negotiation error:', error);
+
+    showToast(
+      error?.message ||
+        'در برقراری ارتباط با سرور برای شروع مذاکره خطایی رخ داد.'
+    );
+  } finally {
+    setIsNegotiating(false);
+  }
+};
+
+  // ==================== Filtered Products ====================
+
+  const filteredProducts =
+    useMemo(() => {
+      let result = [
+        ...mockProducts,
+        ...realProducts,
+      ];
+
+      if (searchQuery.trim()) {
+        const q =
+          searchQuery.toLowerCase();
+
+        result =
+          result.filter(
+            (p) =>
+              p.title
+                .toLowerCase()
+                .includes(q) ||
+
+              p.shortDescription
+                .toLowerCase()
+                .includes(q) ||
+
+              p.tags.some((t) =>
+                t
+                  .toLowerCase()
+                  .includes(q)
+              ) ||
+
+              p.seller.name
+                .toLowerCase()
+                .includes(q)
+          );
+      }
+
+      if (
+        selectedIndustry !== 'all'
+      ) {
+        result =
+          result.filter(
+            (p) =>
+              p.industry ===
+              selectedIndustry
+          );
+      }
+
+      if (
+        selectedTechnology !== 'all'
+      ) {
+        result =
+          result.filter(
+            (p) =>
+              p.technology ===
+              selectedTechnology
+          );
+      }
+
+      if (
+        selectedCategory !== 'all'
+      ) {
+        result =
+          result.filter(
+            (p) =>
+              p.category ===
+              selectedCategory
+          );
+      }
+
+      if (selectedTRL > 0) {
+        result =
+          result.filter(
+            (p) =>
+              p.trl >= selectedTRL
+          );
+      }
+
+      if (selectedMRL > 0) {
+        result =
+          result.filter(
+            (p) =>
+              p.mrl >= selectedMRL
+          );
+      }
+
+      result =
+        result.filter((p) => {
+          const effectivePrice =
+            p.priceType ===
+              'range' &&
+            p.priceRange
+              ? p.priceRange.min
+              : p.price;
+
+          return (
+            effectivePrice <=
+            maxPrice
+          );
+        });
+
+      if (
+        selectedProvince !== 'all'
+      ) {
+        result =
+          result.filter(
+            (p) =>
+              p.seller.location ===
+              selectedProvince
+          );
+      }
+
+      if (
+        selectedCertification !==
+        'all'
+      ) {
+        if (
+          selectedCertification ===
+          'has'
+        ) {
+          result =
+            result.filter(
+              (p) =>
+                p.certifications
+                  .length > 0
+            );
+        }
+
+        if (
+          selectedCertification ===
+          'none'
+        ) {
+          result =
+            result.filter(
+              (p) =>
+                p.certifications
+                  .length === 0
+            );
+        }
+      }
+
+      if (minRating > 0) {
+        result =
+          result.filter(
+            (p) =>
+              p.seller.rating >=
+              minRating
+          );
+      }
+
+      if (
+        selectedRisk !== 'all'
+      ) {
+        result =
+          result.filter(
+            (p) =>
+              p.riskLevel ===
+              selectedRisk
+          );
+      }
+
+      switch (sortBy) {
+        case 'newest':
+          result.sort(
+            (a, b) =>
+              new Date(
+                b.createdAt
+              ).getTime() -
+              new Date(
+                a.createdAt
+              ).getTime()
+          );
+          break;
+
+        case 'popular':
+          result.sort(
+            (a, b) =>
+              b.viewCount -
+              a.viewCount
+          );
+          break;
+
+        case 'price-asc':
+          result.sort(
+            (a, b) => {
+              const priceA =
+                a.priceType ===
+                  'range' &&
+                a.priceRange
+                  ? a.priceRange.min
+                  : a.price;
+
+              const priceB =
+                b.priceType ===
+                  'range' &&
+                b.priceRange
+                  ? b.priceRange.min
+                  : b.price;
+
+              return (
+                priceA - priceB
+              );
+            }
+          );
+          break;
+
+        case 'price-desc':
+          result.sort(
+            (a, b) => {
+              const priceA =
+                a.priceType ===
+                  'range' &&
+                a.priceRange
+                  ? a.priceRange.min
+                  : a.price;
+
+              const priceB =
+                b.priceType ===
+                  'range' &&
+                b.priceRange
+                  ? b.priceRange.min
+                  : b.price;
+
+              return (
+                priceB - priceA
+              );
+            }
+          );
+          break;
+
+        case 'rating':
+          result.sort(
+            (a, b) =>
+              b.seller.rating -
+              a.seller.rating
+          );
+          break;
+      }
+
+      return result;
+    }, [
+      searchQuery,
+      selectedIndustry,
+      selectedTechnology,
+      selectedCategory,
+      selectedTRL,
+      selectedMRL,
+      maxPrice,
+      selectedProvince,
+      selectedCertification,
+      minRating,
+      sortBy,
+      selectedRisk,
+      realProducts,
+    ]);
+
+  // ==================== Favorites ====================
+
+  const toggleFavorite = (
+    id: string
+  ) => {
     setFavorites((prev) => {
-      const next = prev.includes(id)
-        ? prev.filter((f) => f !== id)
-        : [...prev, id];
+      const next =
+        prev.includes(id)
+          ? prev.filter(
+              (f) => f !== id
+            )
+          : [...prev, id];
 
-      localStorage.setItem('marketplace_favorites', JSON.stringify(next));
+      localStorage.setItem(
+        'marketplace_favorites',
+        JSON.stringify(next)
+      );
 
       showToast(
         prev.includes(id)
@@ -473,22 +967,39 @@ export default function MarketplacePage() {
     });
   };
 
-  const toggleCompare = (id: string) => {
+  // ==================== Compare ====================
+
+  const toggleCompare = (
+    id: string
+  ) => {
     setCompareList((prev) => {
       if (prev.includes(id)) {
-        showToast('از لیست مقایسه حذف شد');
-        return prev.filter((c) => c !== id);
+        showToast(
+          'از لیست مقایسه حذف شد'
+        );
+
+        return prev.filter(
+          (c) => c !== id
+        );
       }
 
       if (prev.length >= 4) {
-        showToast('حداکثر ۴ محصول قابل مقایسه است');
+        showToast(
+          'حداکثر ۴ محصول قابل مقایسه است'
+        );
+
         return prev;
       }
 
-      showToast('به لیست مقایسه اضافه شد');
+      showToast(
+        'به لیست مقایسه اضافه شد'
+      );
+
       return [...prev, id];
     });
   };
+
+  // ==================== Clear Filters ====================
 
   const clearAllFilters = () => {
     setSearchQuery('');
@@ -518,6 +1029,8 @@ export default function MarketplacePage() {
     selectedRisk !== 'all',
   ].filter(Boolean).length;
 
+  // ==================== Loading ====================
+
   if (!mounted) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-white">
@@ -526,7 +1039,9 @@ export default function MarketplacePage() {
             <ShoppingCart className="w-8 h-8 text-white" />
           </div>
 
-          <p className="text-slate-500">در حال بارگذاری بازار...</p>
+          <p className="text-slate-500">
+            در حال بارگذاری بازار...
+          </p>
         </div>
       </div>
     );
@@ -536,38 +1051,48 @@ export default function MarketplacePage() {
     <div
       className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#f0fdfa]"
       style={{
-        fontFamily: "'Vazir', 'Vazirmatn', 'Iran Sans', Tahoma, sans-serif",
+        fontFamily:
+          "'Vazir', 'Vazirmatn', 'Iran Sans', Tahoma, sans-serif",
       }}
       dir="rtl"
     >
       {/* Toast */}
+
       {toast && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-[#1E3A8A] text-white px-6 py-3 rounded-2xl shadow-lg flex items-center gap-2 animate-bounce">
           <CheckCircle size={16} />
-          <span className="text-sm font-bold">{toast}</span>
+
+          <span className="text-sm font-bold">
+            {toast}
+          </span>
         </div>
       )}
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="flex gap-6">
-          {/* ==================== Sidebar Filters ==================== */}
+
+          {/* ==================== Sidebar ==================== */}
 
           {showFilters && (
             <aside className="hidden lg:block w-72 flex-shrink-0">
               <div className="sticky top-24 space-y-4">
                 <div className="rounded-2xl border border-slate-200 bg-white p-5">
+
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
                       <SlidersHorizontal
                         size={16}
                         className="text-[#1E3A8A]"
                       />
+
                       فیلترها
                     </h3>
 
                     {activeFilterCount > 0 && (
                       <button
-                        onClick={clearAllFilters}
+                        onClick={
+                          clearAllFilters
+                        }
                         className="text-xs text-red-500 hover:text-red-700 font-medium"
                       >
                         حذف همه
@@ -575,7 +1100,6 @@ export default function MarketplacePage() {
                     )}
                   </div>
 
-                  {/* Search */}
                   <div className="mb-4">
                     <label className="text-xs font-bold text-slate-600 mb-1.5 block">
                       جستجو
@@ -590,14 +1114,17 @@ export default function MarketplacePage() {
                       <input
                         type="text"
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onChange={(e) =>
+                          setSearchQuery(
+                            e.target.value
+                          )
+                        }
                         placeholder="عنوان، برچسب، فروشنده..."
                         className="w-full pl-3 pr-9 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none focus:border-[#1E3A8A] focus:ring-1 focus:ring-[#1E3A8A20]"
                       />
                     </div>
                   </div>
 
-                  {/* Category */}
                   <div className="mb-4">
                     <label className="text-xs font-bold text-slate-600 mb-1.5 block">
                       نوع
@@ -605,17 +1132,29 @@ export default function MarketplacePage() {
 
                     <div className="flex gap-1">
                       {[
-                        { value: 'all', label: 'همه' },
-                        { value: 'product', label: 'محصول' },
-                        { value: 'service', label: 'خدمت' },
+                        {
+                          value: 'all',
+                          label: 'همه',
+                        },
+                        {
+                          value: 'product',
+                          label: 'محصول',
+                        },
+                        {
+                          value: 'service',
+                          label: 'خدمت',
+                        },
                       ].map((opt) => (
                         <button
                           key={opt.value}
                           onClick={() =>
-                            setSelectedCategory(opt.value as any)
+                            setSelectedCategory(
+                              opt.value as any
+                            )
                           }
                           className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${
-                            selectedCategory === opt.value
+                            selectedCategory ===
+                            opt.value
                               ? 'bg-[#1E3A8A] text-white'
                               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                           }`}
@@ -626,7 +1165,6 @@ export default function MarketplacePage() {
                     </div>
                   </div>
 
-                  {/* Industry */}
                   <div className="mb-4">
                     <label className="text-xs font-bold text-slate-600 mb-1.5 block">
                       صنعت
@@ -634,20 +1172,30 @@ export default function MarketplacePage() {
 
                     <select
                       value={selectedIndustry}
-                      onChange={(e) => setSelectedIndustry(e.target.value)}
+                      onChange={(e) =>
+                        setSelectedIndustry(
+                          e.target.value
+                        )
+                      }
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
                     >
-                      <option value="all">همه صنایع</option>
+                      <option value="all">
+                        همه صنایع
+                      </option>
 
-                      {industries.map((ind) => (
-                        <option key={ind} value={ind}>
-                          {ind}
-                        </option>
-                      ))}
+                      {industries.map(
+                        (ind) => (
+                          <option
+                            key={ind}
+                            value={ind}
+                          >
+                            {ind}
+                          </option>
+                        )
+                      )}
                     </select>
                   </div>
 
-                  {/* Technology */}
                   <div className="mb-4">
                     <label className="text-xs font-bold text-slate-600 mb-1.5 block">
                       فناوری
@@ -656,21 +1204,29 @@ export default function MarketplacePage() {
                     <select
                       value={selectedTechnology}
                       onChange={(e) =>
-                        setSelectedTechnology(e.target.value)
+                        setSelectedTechnology(
+                          e.target.value
+                        )
                       }
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
                     >
-                      <option value="all">همه فناوری‌ها</option>
+                      <option value="all">
+                        همه فناوری‌ها
+                      </option>
 
-                      {technologies.map((tech) => (
-                        <option key={tech} value={tech}>
-                          {tech}
-                        </option>
-                      ))}
+                      {technologies.map(
+                        (tech) => (
+                          <option
+                            key={tech}
+                            value={tech}
+                          >
+                            {tech}
+                          </option>
+                        )
+                      )}
                     </select>
                   </div>
 
-                  {/* TRL */}
                   <div className="mb-4">
                     <label className="text-xs font-bold text-slate-600 mb-1.5 block">
                       حداقل TRL
@@ -679,21 +1235,31 @@ export default function MarketplacePage() {
                     <select
                       value={selectedTRL}
                       onChange={(e) =>
-                        setSelectedTRL(Number(e.target.value))
+                        setSelectedTRL(
+                          Number(
+                            e.target.value
+                          )
+                        )
                       }
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
                     >
-                      <option value={0}>همه</option>
+                      <option value={0}>
+                        همه
+                      </option>
 
-                      {trlLevels.map((t) => (
-                        <option key={t.value} value={t.value}>
-                          {t.label}
-                        </option>
-                      ))}
+                      {trlLevels.map(
+                        (t) => (
+                          <option
+                            key={t.value}
+                            value={t.value}
+                          >
+                            {t.label}
+                          </option>
+                        )
+                      )}
                     </select>
                   </div>
 
-                  {/* MRL */}
                   <div className="mb-4">
                     <label className="text-xs font-bold text-slate-600 mb-1.5 block">
                       حداقل MRL
@@ -702,25 +1268,37 @@ export default function MarketplacePage() {
                     <select
                       value={selectedMRL}
                       onChange={(e) =>
-                        setSelectedMRL(Number(e.target.value))
+                        setSelectedMRL(
+                          Number(
+                            e.target.value
+                          )
+                        )
                       }
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
                     >
-                      <option value={0}>همه</option>
+                      <option value={0}>
+                        همه
+                      </option>
 
-                      {mrlLevels.map((m) => (
-                        <option key={m.value} value={m.value}>
-                          {m.label}
-                        </option>
-                      ))}
+                      {mrlLevels.map(
+                        (m) => (
+                          <option
+                            key={m.value}
+                            value={m.value}
+                          >
+                            {m.label}
+                          </option>
+                        )
+                      )}
                     </select>
                   </div>
 
-                  {/* Max Price */}
                   <div className="mb-4">
                     <label className="text-xs font-bold text-slate-600 mb-1.5 block">
                       حداکثر قیمت (میلیون تومان):{' '}
-                      {maxPrice.toLocaleString('fa-IR')}
+                      {maxPrice.toLocaleString(
+                        'fa-IR'
+                      )}
                     </label>
 
                     <input
@@ -730,13 +1308,19 @@ export default function MarketplacePage() {
                       step={100}
                       value={maxPrice}
                       onChange={(e) =>
-                        setMaxPrice(Math.max(0, Number(e.target.value)))
+                        setMaxPrice(
+                          Math.max(
+                            0,
+                            Number(
+                              e.target.value
+                            )
+                          )
+                        )
                       }
                       className="w-full accent-[#1E3A8A]"
                     />
                   </div>
 
-                  {/* Province */}
                   <div className="mb-4">
                     <label className="text-xs font-bold text-slate-600 mb-1.5 block">
                       استان فروشنده
@@ -745,43 +1329,63 @@ export default function MarketplacePage() {
                     <select
                       value={selectedProvince}
                       onChange={(e) =>
-                        setSelectedProvince(e.target.value)
+                        setSelectedProvince(
+                          e.target.value
+                        )
                       }
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
                     >
-                      <option value="all">همه استان‌ها</option>
+                      <option value="all">
+                        همه استان‌ها
+                      </option>
 
-                      {provinces.map((prov) => (
-                        <option key={prov} value={prov}>
-                          {prov}
-                        </option>
-                      ))}
+                      {provinces.map(
+                        (prov) => (
+                          <option
+                            key={prov}
+                            value={prov}
+                          >
+                            {prov}
+                          </option>
+                        )
+                      )}
                     </select>
                   </div>
 
-                  {/* Certification */}
                   <div className="mb-4">
                     <label className="text-xs font-bold text-slate-600 mb-1.5 block">
                       گواهینامه
                     </label>
 
                     <select
-                      value={selectedCertification}
+                      value={
+                        selectedCertification
+                      }
                       onChange={(e) =>
-                        setSelectedCertification(e.target.value)
+                        setSelectedCertification(
+                          e.target.value
+                        )
                       }
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
                     >
-                      <option value="all">همه</option>
-                      <option value="has">دارای گواهینامه</option>
-                      <option value="none">بدون گواهینامه</option>
+                      <option value="all">
+                        همه
+                      </option>
+
+                      <option value="has">
+                        دارای گواهینامه
+                      </option>
+
+                      <option value="none">
+                        بدون گواهینامه
+                      </option>
                     </select>
                   </div>
 
-                  {/* Min Rating */}
                   <div className="mb-4">
                     <label className="text-xs font-bold text-slate-600 mb-1.5 block">
-                      حداقل امتیاز فروشنده: {minRating}
+                      حداقل امتیاز فروشنده:{' '}
+                      {minRating}
                     </label>
 
                     <input
@@ -791,13 +1395,16 @@ export default function MarketplacePage() {
                       step={0.5}
                       value={minRating}
                       onChange={(e) =>
-                        setMinRating(Number(e.target.value))
+                        setMinRating(
+                          Number(
+                            e.target.value
+                          )
+                        )
                       }
                       className="w-full accent-[#D4A547]"
                     />
                   </div>
 
-                  {/* Risk */}
                   <div className="mb-4">
                     <label className="text-xs font-bold text-slate-600 mb-1.5 block">
                       سطح ریسک
@@ -805,18 +1412,33 @@ export default function MarketplacePage() {
 
                     <div className="flex gap-1">
                       {[
-                        { value: 'all', label: 'همه' },
-                        { value: 'low', label: 'کم' },
-                        { value: 'medium', label: 'متوسط' },
-                        { value: 'high', label: 'زیاد' },
+                        {
+                          value: 'all',
+                          label: 'همه',
+                        },
+                        {
+                          value: 'low',
+                          label: 'کم',
+                        },
+                        {
+                          value: 'medium',
+                          label: 'متوسط',
+                        },
+                        {
+                          value: 'high',
+                          label: 'زیاد',
+                        },
                       ].map((opt) => (
                         <button
                           key={opt.value}
                           onClick={() =>
-                            setSelectedRisk(opt.value as any)
+                            setSelectedRisk(
+                              opt.value as any
+                            )
                           }
                           className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${
-                            selectedRisk === opt.value
+                            selectedRisk ===
+                            opt.value
                               ? 'bg-[#1E3A8A] text-white'
                               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                           }`}
@@ -826,6 +1448,7 @@ export default function MarketplacePage() {
                       ))}
                     </div>
                   </div>
+
                 </div>
               </div>
             </aside>
@@ -834,8 +1457,9 @@ export default function MarketplacePage() {
           {/* ==================== Main Content ==================== */}
 
           <div className="flex-1 min-w-0">
-            {/* Header */}
+
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#1E3A8A] via-[#1E3A8A] to-[#14B8A6] p-6 sm:p-8 text-white mb-6">
+
               <div className="absolute inset-0 opacity-10">
                 <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
 
@@ -854,18 +1478,29 @@ export default function MarketplacePage() {
             </div>
 
             {/* Toolbar */}
+
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+
               <div className="flex items-center gap-2 flex-wrap">
+
                 <button
-                  onClick={() => setShowFilters(!showFilters)}
+                  onClick={() =>
+                    setShowFilters(
+                      !showFilters
+                    )
+                  }
                   className="lg:hidden inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50"
                 >
                   <Filter size={14} />
+
                   فیلترها
 
-                  {activeFilterCount > 0 && (
+                  {activeFilterCount >
+                    0 && (
                     <span className="w-5 h-5 rounded-full bg-[#1E3A8A] text-white text-xs flex items-center justify-center">
-                      {activeFilterCount}
+                      {
+                        activeFilterCount
+                      }
                     </span>
                   )}
                 </button>
@@ -873,22 +1508,42 @@ export default function MarketplacePage() {
                 <select
                   value={sortBy}
                   onChange={(e) =>
-                    setSortBy(e.target.value as any)
+                    setSortBy(
+                      e.target.value as any
+                    )
                   }
                   className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 bg-white outline-none cursor-pointer"
                 >
-                  <option value="newest">جدیدترین</option>
-                  <option value="popular">پربازدیدترین</option>
-                  <option value="price-asc">قیمت: کم به زیاد</option>
-                  <option value="price-desc">قیمت: زیاد به کم</option>
-                  <option value="rating">بالاترین امتیاز</option>
+                  <option value="newest">
+                    جدیدترین
+                  </option>
+
+                  <option value="popular">
+                    پربازدیدترین
+                  </option>
+
+                  <option value="price-asc">
+                    قیمت: کم به زیاد
+                  </option>
+
+                  <option value="price-desc">
+                    قیمت: زیاد به کم
+                  </option>
+
+                  <option value="rating">
+                    بالاترین امتیاز
+                  </option>
                 </select>
 
                 <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
+
                   <button
-                    onClick={() => setViewMode('grid')}
+                    onClick={() =>
+                      setViewMode('grid')
+                    }
                     className={`p-1.5 rounded-lg transition ${
-                      viewMode === 'grid'
+                      viewMode ===
+                      'grid'
                         ? 'bg-white shadow text-[#1E3A8A]'
                         : 'text-slate-400'
                     }`}
@@ -897,31 +1552,50 @@ export default function MarketplacePage() {
                   </button>
 
                   <button
-                    onClick={() => setViewMode('list')}
+                    onClick={() =>
+                      setViewMode('list')
+                    }
                     className={`p-1.5 rounded-lg transition ${
-                      viewMode === 'list'
+                      viewMode ===
+                      'list'
                         ? 'bg-white shadow text-[#1E3A8A]'
                         : 'text-slate-400'
                     }`}
                   >
                     <List size={16} />
                   </button>
+
                 </div>
 
-                {compareList.length > 0 && (
+                {compareList.length >
+                  0 && (
                   <button
-                    onClick={() => setShowCompare(true)}
+                    onClick={() =>
+                      setShowCompare(
+                        true
+                      )
+                    }
                     className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#14B8A6] text-white text-xs font-bold hover:bg-[#14B8A6]/90 transition"
                   >
                     <Scale size={14} />
-                    مقایسه ({compareList.length})
+
+                    مقایسه (
+                    {
+                      compareList.length
+                    }
+                    )
                   </button>
                 )}
+
               </div>
 
               <div className="flex items-center gap-2">
+
                 <span className="text-xs text-slate-500">
-                  {filteredProducts.length} مورد یافت شد
+                  {
+                    filteredProducts.length
+                  }{' '}
+                  مورد یافت شد
                 </span>
 
                 {suppliesLoading && (
@@ -930,100 +1604,164 @@ export default function MarketplacePage() {
                   </span>
                 )}
 
-                {!suppliesLoading && realProducts.length > 0 && (
-                  <span className="text-[11px] text-emerald-600">
-                    {realProducts.length} عرضه ثبت‌شده
-                  </span>
-                )}
+                {!suppliesLoading &&
+                  realProducts.length >
+                    0 && (
+                    <span className="text-[11px] text-emerald-600">
+                      {
+                        realProducts.length
+                      }{' '}
+                      عرضه ثبت‌شده
+                    </span>
+                  )}
+
               </div>
             </div>
 
             {/* Mobile Filters */}
+
             {showFilters && (
               <div className="lg:hidden mb-4 rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+
                 <div className="flex items-center justify-between">
+
                   <h3 className="text-sm font-extrabold text-slate-900">
                     فیلترها
                   </h3>
 
-                  {activeFilterCount > 0 && (
+                  {activeFilterCount >
+                    0 && (
                     <button
-                      onClick={clearAllFilters}
+                      onClick={
+                        clearAllFilters
+                      }
                       className="text-xs text-red-500 font-medium"
                     >
                       حذف همه
                     </button>
                   )}
+
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
+
                   <input
                     type="text"
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={(e) =>
+                      setSearchQuery(
+                        e.target.value
+                      )
+                    }
                     placeholder="جستجو..."
                     className="col-span-2 px-3 py-2 rounded-xl border border-slate-200 text-xs outline-none"
                   />
 
                   <select
-                    value={selectedCategory}
+                    value={
+                      selectedCategory
+                    }
                     onChange={(e) =>
-                      setSelectedCategory(e.target.value as any)
+                      setSelectedCategory(
+                        e.target.value as any
+                      )
                     }
                     className="px-2 py-2 rounded-xl border border-slate-200 text-xs outline-none"
                   >
-                    <option value="all">نوع: همه</option>
-                    <option value="product">محصول</option>
-                    <option value="service">خدمت</option>
+                    <option value="all">
+                      نوع: همه
+                    </option>
+
+                    <option value="product">
+                      محصول
+                    </option>
+
+                    <option value="service">
+                      خدمت
+                    </option>
                   </select>
 
                   <select
-                    value={selectedIndustry}
+                    value={
+                      selectedIndustry
+                    }
                     onChange={(e) =>
-                      setSelectedIndustry(e.target.value)
+                      setSelectedIndustry(
+                        e.target.value
+                      )
                     }
                     className="px-2 py-2 rounded-xl border border-slate-200 text-xs outline-none"
                   >
-                    <option value="all">صنعت: همه</option>
+                    <option value="all">
+                      صنعت: همه
+                    </option>
 
-                    {industries.map((ind) => (
-                      <option key={ind} value={ind}>
-                        {ind}
-                      </option>
-                    ))}
+                    {industries.map(
+                      (ind) => (
+                        <option
+                          key={ind}
+                          value={ind}
+                        >
+                          {ind}
+                        </option>
+                      )
+                    )}
                   </select>
 
                   <select
-                    value={selectedTechnology}
+                    value={
+                      selectedTechnology
+                    }
                     onChange={(e) =>
-                      setSelectedTechnology(e.target.value)
+                      setSelectedTechnology(
+                        e.target.value
+                      )
                     }
                     className="px-2 py-2 rounded-xl border border-slate-200 text-xs outline-none"
                   >
-                    <option value="all">فناوری: همه</option>
+                    <option value="all">
+                      فناوری: همه
+                    </option>
 
-                    {technologies.map((tech) => (
-                      <option key={tech} value={tech}>
-                        {tech}
-                      </option>
-                    ))}
+                    {technologies.map(
+                      (tech) => (
+                        <option
+                          key={tech}
+                          value={tech}
+                        >
+                          {tech}
+                        </option>
+                      )
+                    )}
                   </select>
 
                   <select
-                    value={selectedProvince}
+                    value={
+                      selectedProvince
+                    }
                     onChange={(e) =>
-                      setSelectedProvince(e.target.value)
+                      setSelectedProvince(
+                        e.target.value
+                      )
                     }
                     className="px-2 py-2 rounded-xl border border-slate-200 text-xs outline-none"
                   >
-                    <option value="all">استان: همه</option>
+                    <option value="all">
+                      استان: همه
+                    </option>
 
-                    {provinces.map((prov) => (
-                      <option key={prov} value={prov}>
-                        {prov}
-                      </option>
-                    ))}
+                    {provinces.map(
+                      (prov) => (
+                        <option
+                          key={prov}
+                          value={prov}
+                        >
+                          {prov}
+                        </option>
+                      )
+                    )}
                   </select>
+
                 </div>
               </div>
             )}
@@ -1034,11 +1772,17 @@ export default function MarketplacePage() {
               </div>
             )}
 
-            {/* Product Grid/List */}
-            {filteredProducts.length === 0 ? (
+            {/* Products */}
+
+            {filteredProducts.length ===
+            0 ? (
               <div className="text-center py-16">
+
                 <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-slate-100 flex items-center justify-center">
-                  <Package size={32} className="text-slate-400" />
+                  <Package
+                    size={32}
+                    className="text-slate-400"
+                  />
                 </div>
 
                 <h3 className="text-lg font-bold text-slate-700 mb-2">
@@ -1050,207 +1794,342 @@ export default function MarketplacePage() {
                 </p>
 
                 <button
-                  onClick={clearAllFilters}
+                  onClick={
+                    clearAllFilters
+                  }
                   className="px-4 py-2 rounded-xl bg-[#1E3A8A] text-white text-sm font-bold hover:bg-[#1E3A8A]/90"
                 >
                   حذف همه فیلترها
                 </button>
+
               </div>
-            ) : viewMode === 'grid' ? (
+            ) : viewMode ===
+              'grid' ? (
+
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                {filteredProducts.map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    isFavorite={favorites.includes(product.id)}
-                    isCompared={compareList.includes(product.id)}
-                    onToggleFavorite={() =>
-                      toggleFavorite(product.id)
-                    }
-                    onToggleCompare={() =>
-                      toggleCompare(product.id)
-                    }
-                  />
-                ))}
+
+                {filteredProducts.map(
+                  (product) => (
+                    <ProductCard
+                      key={product.id}
+                      product={product}
+                      isFavorite={favorites.includes(
+                        product.id
+                      )}
+                      isCompared={compareList.includes(
+                        product.id
+                      )}
+                      onToggleFavorite={() =>
+                        toggleFavorite(
+                          product.id
+                        )
+                      }
+                      onToggleCompare={() =>
+                        toggleCompare(
+                          product.id
+                        )
+                      }
+                      onStartNegotiation={() =>
+                        handleStartNegotiation(
+                          product
+                        )
+                      }
+                    />
+                  )
+                )}
+
               </div>
+
             ) : (
+
               <div className="space-y-3">
-                {filteredProducts.map((product) => (
-                  <ProductListItem
-                    key={product.id}
-                    product={product}
-                    isFavorite={favorites.includes(product.id)}
-                    isCompared={compareList.includes(product.id)}
-                    onToggleFavorite={() =>
-                      toggleFavorite(product.id)
-                    }
-                    onToggleCompare={() =>
-                      toggleCompare(product.id)
-                    }
-                  />
-                ))}
+
+                {filteredProducts.map(
+                  (product) => (
+                    <ProductListItem
+                      key={product.id}
+                      product={product}
+                      isFavorite={favorites.includes(
+                        product.id
+                      )}
+                      isCompared={compareList.includes(
+                        product.id
+                      )}
+                      onToggleFavorite={() =>
+                        toggleFavorite(
+                          product.id
+                        )
+                      }
+                      onToggleCompare={() =>
+                        toggleCompare(
+                          product.id
+                        )
+                      }
+                      onStartNegotiation={() =>
+                        handleStartNegotiation(
+                          product
+                        )
+                      }
+                    />
+                  )
+                )}
+
               </div>
             )}
+
           </div>
         </div>
 
-        {/* ==================== Compare Modal ==================== */}
+        {/* ==================== Compare ==================== */}
 
-        {showCompare && compareList.length >= 2 && (
-          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[85vh] overflow-y-auto p-6 shadow-2xl">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
-                  <Scale size={20} className="text-[#1E3A8A]" />
-                  مقایسه محصولات
-                </h2>
+        {showCompare &&
+          compareList.length >= 2 && (
+            <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
 
-                <button
-                  onClick={() => setShowCompare(false)}
-                  className="p-2 rounded-xl hover:bg-slate-100"
-                >
-                  <X size={20} className="text-slate-500" />
-                </button>
-              </div>
+              <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[85vh] overflow-y-auto p-6 shadow-2xl">
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200">
-                      <th className="py-3 px-4 text-right text-slate-500 font-medium min-w-[120px]">
-                        معیار
-                      </th>
+                <div className="flex items-center justify-between mb-6">
 
-                      {compareList.map((id) => {
-                        const p = mockProducts.find(
-                          (pp) => pp.id === id
-                        );
+                  <h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
 
-                        if (!p) return null;
+                    <Scale
+                      size={20}
+                      className="text-[#1E3A8A]"
+                    />
 
-                        return (
-                          <th
-                            key={id}
-                            className="py-3 px-4 text-center min-w-[180px]"
-                          >
-                            <p className="font-bold text-slate-800 text-xs">
-                              {p.title}
-                            </p>
+                    مقایسه محصولات
 
-                            <button
-                              onClick={() => toggleCompare(id)}
-                              className="mt-1 text-xs text-red-500"
-                            >
-                              حذف
-                            </button>
-                          </th>
-                        );
-                      })}
-                    </tr>
-                  </thead>
+                  </h2>
 
-                  <tbody>
-                    {[
-                      {
-                        label: 'قیمت',
-                        render: (p: Product) => formatPrice(p),
-                      },
-                      {
-                        label: 'TRL',
-                        render: (p: Product) => `${p.trl}/۹`,
-                      },
-                      {
-                        label: 'MRL',
-                        render: (p: Product) => `${p.mrl}/۹`,
-                      },
-                      {
-                        label: 'زمان تحویل',
-                        render: (p: Product) => p.deliveryTime,
-                      },
-                      {
-                        label: 'فروشنده',
-                        render: (p: Product) => p.seller.name,
-                      },
-                      {
-                        label: 'امتیاز فروشنده',
-                        render: (p: Product) =>
-                          `${p.seller.rating}/۵`,
-                      },
-                      {
-                        label: 'تعداد فروش',
-                        render: (p: Product) =>
-                          `${p.seller.totalSales} عدد`,
-                      },
-                      {
-                        label: 'ریسک اجرا',
-                        render: (p: Product) =>
-                          getRiskLabel(p.riskLevel),
-                      },
-                      {
-                        label: 'خدمات پس از فروش',
-                        render: (p: Product) =>
-                          p.afterSalesService
-                            ? '✅ دارد'
-                            : '❌ ندارد',
-                      },
-                      {
-                        label: 'وضعیت مالکیت فکری',
-                        render: (p: Product) =>
-                          p.ipStatus === 'registered'
-                            ? 'ثبت شده'
-                            : p.ipStatus === 'pending'
-                            ? 'در حال ثبت'
-                            : 'ندارد',
-                      },
-                      {
-                        label: 'گواهینامه‌ها',
-                        render: (p: Product) =>
-                          p.certifications.length > 0
-                            ? p.certifications.join('، ')
-                            : 'ندارد',
-                      },
-                    ].map((row, i) => (
-                      <tr
-                        key={i}
-                        className="border-b border-slate-100"
-                      >
-                        <td className="py-3 px-4 font-medium text-slate-700">
-                          {row.label}
-                        </td>
+                  <button
+                    onClick={() =>
+                      setShowCompare(
+                        false
+                      )
+                    }
+                    className="p-2 rounded-xl hover:bg-slate-100"
+                  >
+                    <X
+                      size={20}
+                      className="text-slate-500"
+                    />
+                  </button>
 
-                        {compareList.map((id) => {
-                          const p = mockProducts.find(
-                            (pp) => pp.id === id
-                          );
+                </div>
 
-                          if (!p) {
+                <div className="overflow-x-auto">
+
+                  <table className="w-full text-sm">
+
+                    <thead>
+                      <tr className="border-b border-slate-200">
+
+                        <th className="py-3 px-4 text-right text-slate-500 font-medium min-w-[120px]">
+                          معیار
+                        </th>
+
+                        {compareList.map(
+                          (id) => {
+                            const p =
+                              mockProducts.find(
+                                (pp) =>
+                                  pp.id ===
+                                  id
+                              );
+
+                            if (!p)
+                              return null;
+
                             return (
-                              <td
+                              <th
                                 key={id}
-                                className="py-3 px-4 text-center"
+                                className="py-3 px-4 text-center min-w-[180px]"
                               >
-                                -
-                              </td>
+                                <p className="font-bold text-slate-800 text-xs">
+                                  {
+                                    p.title
+                                  }
+                                </p>
+
+                                <button
+                                  onClick={() =>
+                                    toggleCompare(
+                                      id
+                                    )
+                                  }
+                                  className="mt-1 text-xs text-red-500"
+                                >
+                                  حذف
+                                </button>
+                              </th>
                             );
                           }
+                        )}
 
-                          return (
-                            <td
-                              key={id}
-                              className="py-3 px-4 text-center text-slate-600"
-                            >
-                              {row.render(p)}
-                            </td>
-                          );
-                        })}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+
+                    <tbody>
+
+                      {[
+                        {
+                          label: 'قیمت',
+                          render: (
+                            p: Product
+                          ) =>
+                            formatPrice(
+                              p
+                            ),
+                        },
+                        {
+                          label: 'TRL',
+                          render: (
+                            p: Product
+                          ) =>
+                            `${p.trl}/۹`,
+                        },
+                        {
+                          label: 'MRL',
+                          render: (
+                            p: Product
+                          ) =>
+                            `${p.mrl}/۹`,
+                        },
+                        {
+                          label: 'زمان تحویل',
+                          render: (
+                            p: Product
+                          ) =>
+                            p.deliveryTime,
+                        },
+                        {
+                          label: 'فروشنده',
+                          render: (
+                            p: Product
+                          ) =>
+                            p.seller.name,
+                        },
+                        {
+                          label: 'امتیاز فروشنده',
+                          render: (
+                            p: Product
+                          ) =>
+                            `${p.seller.rating}/۵`,
+                        },
+                        {
+                          label: 'تعداد فروش',
+                          render: (
+                            p: Product
+                          ) =>
+                            `${p.seller.totalSales} عدد`,
+                        },
+                        {
+                          label: 'ریسک اجرا',
+                          render: (
+                            p: Product
+                          ) =>
+                            getRiskLabel(
+                              p.riskLevel
+                            ),
+                        },
+                        {
+                          label: 'خدمات پس از فروش',
+                          render: (
+                            p: Product
+                          ) =>
+                            p.afterSalesService
+                              ? '✅ دارد'
+                              : '❌ ندارد',
+                        },
+                        {
+                          label: 'وضعیت مالکیت فکری',
+                          render: (
+                            p: Product
+                          ) =>
+                            p.ipStatus ===
+                            'registered'
+                              ? 'ثبت شده'
+                              : p.ipStatus ===
+                                'pending'
+                                ? 'در حال ثبت'
+                                : 'ندارد',
+                        },
+                        {
+                          label: 'گواهینامه‌ها',
+                          render: (
+                            p: Product
+                          ) =>
+                            p.certifications
+                              .length >
+                            0
+                              ? p.certifications.join(
+                                  '، '
+                                )
+                              : 'ندارد',
+                        },
+                      ].map(
+                        (row, i) => (
+                          <tr
+                            key={i}
+                            className="border-b border-slate-100"
+                          >
+
+                            <td className="py-3 px-4 font-medium text-slate-700">
+                              {
+                                row.label
+                              }
+                            </td>
+
+                            {compareList.map(
+                              (id) => {
+                                const p =
+                                  mockProducts.find(
+                                    (
+                                      pp
+                                    ) =>
+                                      pp.id ===
+                                      id
+                                  );
+
+                                if (!p) {
+                                  return (
+                                    <td
+                                      key={id}
+                                      className="py-3 px-4 text-center"
+                                    >
+                                      -
+                                    </td>
+                                  );
+                                }
+
+                                return (
+                                  <td
+                                    key={id}
+                                    className="py-3 px-4 text-center text-slate-600"
+                                  >
+                                    {row.render(
+                                      p
+                                    )}
+                                  </td>
+                                );
+                              }
+                            )}
+
+                          </tr>
+                        )
+                      )}
+
+                    </tbody>
+
+                  </table>
+
+                </div>
+
               </div>
+
             </div>
-          </div>
-        )}
+          )}
+
       </main>
 
       <footer className="border-t border-slate-200 bg-white py-6 mt-8">
@@ -1264,7 +2143,9 @@ export default function MarketplacePage() {
   );
 }
 
-// ==================== Product Card ====================
+// =========================================================
+// Product Card
+// =========================================================
 
 function ProductCard({
   product,
@@ -1272,19 +2153,23 @@ function ProductCard({
   isCompared,
   onToggleFavorite,
   onToggleCompare,
+  onStartNegotiation,
 }: {
   product: Product;
   isFavorite: boolean;
   isCompared: boolean;
   onToggleFavorite: () => void;
   onToggleCompare: () => void;
+  onStartNegotiation: () => void;
 }) {
-  const productImage = product.images?.[0];
+  const productImage =
+    product.images?.[0];
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white hover:shadow-lg hover:border-[#1E3A8A20] transition-all group overflow-hidden">
-      {/* Product Image */}
+
       <div className="h-40 bg-gradient-to-br from-[#1E3A8A10] to-[#14B8A610] flex items-center justify-center relative overflow-hidden">
+
         {productImage ? (
           <Image
             src={productImage}
@@ -1295,11 +2180,20 @@ function ProductCard({
           />
         ) : (
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] flex items-center justify-center opacity-80">
-            {product.category === 'service' ? (
-              <Wrench size={28} className="text-white" />
+
+            {product.category ===
+            'service' ? (
+              <Wrench
+                size={28}
+                className="text-white"
+              />
             ) : (
-              <Package size={28} className="text-white" />
+              <Package
+                size={28}
+                className="text-white"
+              />
             )}
+
           </div>
         )}
 
@@ -1307,8 +2201,8 @@ function ProductCard({
           <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/10 pointer-events-none" />
         )}
 
-        {/* Favorite and Compare Buttons */}
         <div className="absolute top-2 left-2 flex gap-1 z-10">
+
           <button
             type="button"
             onClick={(e) => {
@@ -1325,7 +2219,11 @@ function ProductCard({
           >
             <Heart
               size={14}
-              fill={isFavorite ? 'currentColor' : 'none'}
+              fill={
+                isFavorite
+                  ? 'currentColor'
+                  : 'none'
+              }
             />
           </button>
 
@@ -1345,33 +2243,43 @@ function ProductCard({
           >
             <Scale size={14} />
           </button>
+
         </div>
 
-        {/* Category Badge */}
         <div className="absolute top-2 right-2 flex gap-1 z-10">
+
           <span
             className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-              product.category === 'service'
+              product.category ===
+              'service'
                 ? 'bg-purple-100 text-purple-700'
                 : 'bg-blue-100 text-blue-700'
             }`}
           >
-            {product.category === 'service' ? 'خدمت' : 'محصول'}
+            {product.category ===
+            'service'
+              ? 'خدمت'
+              : 'محصول'}
           </span>
+
         </div>
+
       </div>
 
-      {/* Product Details */}
       <div className="p-4">
+
         <h3 className="text-sm font-extrabold text-slate-900 mb-1 line-clamp-2 group-hover:text-[#1E3A8A] transition">
           {product.title}
         </h3>
 
         <p className="text-xs text-slate-500 line-clamp-2 mb-3">
-          {product.shortDescription}
+          {
+            product.shortDescription
+          }
         </p>
 
         <div className="flex flex-wrap gap-1 mb-3">
+
           <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">
             {product.industry}
           </span>
@@ -1387,38 +2295,58 @@ function ProductCard({
           >
             TRL {product.trl}
           </span>
+
         </div>
 
         <div className="flex items-center justify-between mb-3">
+
           <span className="text-sm font-extrabold text-[#1E3A8A]">
-            {formatPrice(product)}
+            {formatPrice(
+              product
+            )}
           </span>
 
           <div className="flex items-center gap-1">
+
             <Star
               size={14}
               className="text-[#D4A547] fill-[#D4A547]"
             />
 
             <span className="text-xs font-bold text-slate-600">
-              {product.seller.rating}
+              {
+                product.seller
+                  .rating
+              }
             </span>
+
           </div>
+
         </div>
 
         <div className="flex items-center justify-between text-xs text-slate-500 mb-3">
+
           <span className="flex items-center gap-1">
             <MapPin size={12} />
-            {product.seller.location}
+
+            {
+              product.seller
+                .location
+            }
           </span>
 
           <span className="flex items-center gap-1">
             <Eye size={12} />
-            {product.viewCount}
+
+            {
+              product.viewCount
+            }
           </span>
+
         </div>
 
         <div className="flex gap-2">
+
           <Link
             href={`/market/${product.id}`}
             className="flex-1 py-2 rounded-xl bg-[#1E3A8A] text-white text-xs font-bold text-center hover:bg-[#1E3A8A]/90 transition"
@@ -1426,20 +2354,29 @@ function ProductCard({
             مشاهده و درخواست
           </Link>
 
-          <Link
-            href={`/negotiation/${product.id}`}
+          <button
+            type="button"
+            onClick={
+              onStartNegotiation
+            }
             className="p-2 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-[#1E3A8A] transition"
-            title="ارسال پیام"
+            title="شروع مذاکره"
           >
-            <MessageCircle size={14} />
-          </Link>
+            <MessageCircle
+              size={14}
+            />
+          </button>
+
         </div>
+
       </div>
     </div>
   );
 }
 
-// ==================== Product List Item ====================
+// =========================================================
+// Product List Item
+// =========================================================
 
 function ProductListItem({
   product,
@@ -1447,20 +2384,25 @@ function ProductListItem({
   isCompared,
   onToggleFavorite,
   onToggleCompare,
+  onStartNegotiation,
 }: {
   product: Product;
   isFavorite: boolean;
   isCompared: boolean;
   onToggleFavorite: () => void;
   onToggleCompare: () => void;
+  onStartNegotiation: () => void;
 }) {
-  const productImage = product.images?.[0];
+  const productImage =
+    product.images?.[0];
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white hover:shadow-md hover:border-[#1E3A8A20] transition-all group p-4">
+
       <div className="flex items-start gap-4">
-        {/* Product Image */}
+
         <div className="relative w-20 h-20 rounded-xl bg-gradient-to-br from-[#1E3A8A10] to-[#14B8A610] overflow-hidden flex-shrink-0">
+
           {productImage ? (
             <Image
               src={productImage}
@@ -1471,31 +2413,50 @@ function ProductListItem({
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
-              {product.category === 'service' ? (
-                <Wrench size={22} className="text-[#1E3A8A]" />
+
+              {product.category ===
+              'service' ? (
+                <Wrench
+                  size={22}
+                  className="text-[#1E3A8A]"
+                />
               ) : (
-                <Package size={22} className="text-[#1E3A8A]" />
+                <Package
+                  size={22}
+                  className="text-[#1E3A8A]"
+                />
               )}
+
             </div>
           )}
+
         </div>
 
         <div className="flex-1 min-w-0">
+
           <div className="flex items-start justify-between gap-2">
+
             <div>
+
               <h3 className="text-sm font-extrabold text-slate-900 group-hover:text-[#1E3A8A] transition">
                 {product.title}
               </h3>
 
               <p className="text-xs text-slate-500 mt-0.5">
-                {product.shortDescription}
+                {
+                  product.shortDescription
+                }
               </p>
+
             </div>
 
             <div className="flex items-center gap-1 flex-shrink-0">
+
               <button
                 type="button"
-                onClick={onToggleFavorite}
+                onClick={
+                  onToggleFavorite
+                }
                 className={`p-1.5 rounded-lg transition ${
                   isFavorite
                     ? 'text-red-500'
@@ -1505,13 +2466,19 @@ function ProductListItem({
               >
                 <Heart
                   size={14}
-                  fill={isFavorite ? 'currentColor' : 'none'}
+                  fill={
+                    isFavorite
+                      ? 'currentColor'
+                      : 'none'
+                  }
                 />
               </button>
 
               <button
                 type="button"
-                onClick={onToggleCompare}
+                onClick={
+                  onToggleCompare
+                }
                 className={`p-1.5 rounded-lg transition ${
                   isCompared
                     ? 'text-[#14B8A6]'
@@ -1521,10 +2488,13 @@ function ProductListItem({
               >
                 <Scale size={14} />
               </button>
+
             </div>
+
           </div>
 
           <div className="flex flex-wrap items-center gap-2 mt-2">
+
             <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">
               {product.industry}
             </span>
@@ -1546,49 +2516,74 @@ function ProductListItem({
                 product.riskLevel
               )}`}
             >
-              {getRiskLabel(product.riskLevel)}
+              {getRiskLabel(
+                product.riskLevel
+              )}
             </span>
 
-            {product.seller.verified && (
+            {product.seller
+              .verified && (
               <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
                 <Shield size={12} />
                 تأیید شده
               </span>
             )}
+
           </div>
 
           <div className="flex items-center justify-between mt-3">
+
             <div className="flex items-center gap-4 text-xs text-slate-500">
+
               <span className="flex items-center gap-1">
                 <MapPin size={12} />
-                {product.seller.location}
+
+                {
+                  product.seller
+                    .location
+                }
               </span>
 
               <span className="flex items-center gap-1">
                 <Eye size={12} />
-                {product.viewCount}
+
+                {
+                  product.viewCount
+                }
               </span>
 
               <span className="flex items-center gap-1">
                 <Clock size={12} />
-                {product.deliveryTime}
+
+                {
+                  product.deliveryTime
+                }
               </span>
+
             </div>
 
             <div className="flex items-center gap-3">
+
               <div className="flex items-center gap-1">
+
                 <Star
                   size={14}
                   className="text-[#D4A547] fill-[#D4A547]"
                 />
 
                 <span className="text-xs font-bold text-slate-600">
-                  {product.seller.rating}
+                  {
+                    product.seller
+                      .rating
+                  }
                 </span>
+
               </div>
 
               <span className="text-sm font-extrabold text-[#1E3A8A]">
-                {formatPrice(product)}
+                {formatPrice(
+                  product
+                )}
               </span>
 
               <Link
@@ -1597,8 +2592,24 @@ function ProductListItem({
               >
                 مشاهده
               </Link>
+
+              <button
+                type="button"
+                onClick={
+                  onStartNegotiation
+                }
+                className="p-2 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-[#1E3A8A] transition"
+                title="شروع مذاکره"
+              >
+                <MessageCircle
+                  size={14}
+                />
+              </button>
+
             </div>
+
           </div>
+
         </div>
       </div>
     </div>

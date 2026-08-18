@@ -38,9 +38,7 @@ class Negotiation(models.Model):
         default='created',
     )
 
-    context_meta = models.JSONField(
-        default=dict,
-    )
+    context_meta = models.JSONField(default=dict)
 
     context_title = models.CharField(
         max_length=255,
@@ -53,30 +51,14 @@ class Negotiation(models.Model):
         blank=True,
     )
 
-    is_active = models.BooleanField(
-        default=True,
-    )
+    is_active = models.BooleanField(default=True)
 
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-    )
+    created_at = models.DateTimeField(auto_now_add=True)
 
-    updated_at = models.DateTimeField(
-        auto_now=True,
-    )
+    updated_at = models.DateTimeField(auto_now=True)
 
     @property
     def product(self):
-        """
-        Backward-compatible alias.
-
-        بخش‌هایی از پروژه قدیمی ممکن است هنوز
-        negotiation.product را صدا بزنند.
-        چون Supply همان عرضه واقعی این سیستم است،
-        Supply را برمی‌گردانیم.
-
-        این property فیلد دیتابیسی جدید ایجاد نمی‌کند.
-        """
         return self.supply
 
     def __str__(self):
@@ -118,9 +100,7 @@ class Message(models.Model):
         blank=True,
     )
 
-    timestamp = models.DateTimeField(
-        auto_now_add=True,
-    )
+    timestamp = models.DateTimeField(auto_now_add=True)
 
     read_at = models.DateTimeField(
         null=True,

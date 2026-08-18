@@ -24,6 +24,7 @@ class NegotiationViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+
         user = self.request.user
 
         return (
@@ -48,14 +49,6 @@ class NegotiationViewSet(viewsets.ModelViewSet):
     @transaction.atomic
     def create(self, request):
 
-        # -------------------------------------------------
-        # supply canonical است.
-        #
-        # برای backward compatibility:
-        # supply / supply_id / product
-        # پذیرفته می‌شوند.
-        # -------------------------------------------------
-
         supply_id = (
             request.data.get('supply')
             or request.data.get('supply_id')
@@ -65,13 +58,13 @@ class NegotiationViewSet(viewsets.ModelViewSet):
         if not supply_id:
             return Response(
                 {
-                    'error':
-                        'supply id required'
+                    'error': 'supply id required'
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
+
             supply = (
                 Supply.objects
                 .select_related('seller')
@@ -79,19 +72,16 @@ class NegotiationViewSet(viewsets.ModelViewSet):
             )
 
         except Supply.DoesNotExist:
+
             return Response(
                 {
-                    'error':
-                        'supply not found'
+                    'error': 'supply not found'
                 },
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # -------------------------------------------------
-        # جلوگیری از مذاکره با خود
-        # -------------------------------------------------
-
         if request.user.id == supply.seller_id:
+
             return Response(
                 {
                     'error':
@@ -99,10 +89,6 @@ class NegotiationViewSet(viewsets.ModelViewSet):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        # -------------------------------------------------
-        # مذاکره فعال موجود؟
-        # -------------------------------------------------
 
         existing = (
             Negotiation.objects
@@ -119,6 +105,7 @@ class NegotiationViewSet(viewsets.ModelViewSet):
         )
 
         if existing:
+
             return Response(
                 NegotiationSerializer(
                     existing,
@@ -128,10 +115,6 @@ class NegotiationViewSet(viewsets.ModelViewSet):
                 ).data,
                 status=status.HTTP_200_OK,
             )
-
-        # -------------------------------------------------
-        # Create
-        # -------------------------------------------------
 
         negotiation = Negotiation.objects.create(
             supply=supply,
@@ -165,16 +148,12 @@ class MessageViewSet(viewsets.ModelViewSet):
 
         user = self.request.user
 
-        return (
+        queryset = (
             Message.objects
             .filter(
-                Q(
-                    negotiation__buyer=user
-                )
+                Q(negotiation__buyer=user)
                 |
-                Q(
-                    negotiation__supplier=user
-                )
+                Q(negotiation__supplier=user)
             )
             .select_related(
                 'negotiation',
@@ -186,6 +165,18 @@ class MessageViewSet(viewsets.ModelViewSet):
             )
         )
 
+        negotiation_id = self.request.query_params.get(
+            'negotiation'
+        )
+
+        if negotiation_id:
+
+            queryset = queryset.filter(
+                negotiation_id=negotiation_id
+            )
+
+        return queryset
+
     def perform_create(self, serializer):
 
         negotiation = (
@@ -196,39 +187,27 @@ class MessageViewSet(viewsets.ModelViewSet):
 
         user = self.request.user
 
-        # -------------------------------------------------
-        # Access
-        # -------------------------------------------------
-
         if user.id not in {
             negotiation.buyer_id,
             negotiation.supplier_id,
         }:
+
             raise PermissionDenied(
                 'شما عضو این مذاکره نیستید.'
             )
-
-        # -------------------------------------------------
-        # Closed negotiations
-        # -------------------------------------------------
 
         if negotiation.status in {
             'rejected',
             'contracted',
         }:
+
             raise ValidationError({
                 'negotiation':
                     'این مذاکره به پایان رسیده است.'
             })
 
-        # -------------------------------------------------
-        # File name
-        # -------------------------------------------------
-
         uploaded_file = (
-            self.request.FILES.get(
-                'file'
-            )
+            self.request.FILES.get('file')
         )
 
         file_name = (
@@ -242,11 +221,8 @@ class MessageViewSet(viewsets.ModelViewSet):
             file_name=file_name,
         )
 
-        # -------------------------------------------------
-        # First message
-        # -------------------------------------------------
-
         if negotiation.status == 'created':
+
             negotiation.status = 'in_progress'
 
             negotiation.save(
