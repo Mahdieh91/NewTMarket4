@@ -1,6 +1,8 @@
-// src/app/execution/[id]/page.tsx
+// src/app/execution/[contractId]/page.tsx
+
 'use client';
 
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -10,111 +12,957 @@ import {
   Play,
   Calendar,
   User,
+  AlertTriangle,
+  RefreshCw,
+  Package,
+  FileText,
 } from 'lucide-react';
 
-const mockExecutions = [
-  {
-    id: 1,
-    title: 'تحلیل نیازمندی‌ها',
-    description: 'بررسی نیازهای کارفرما و تدوین سند نیازمندی‌ها',
-    status: 'completed',
-    progress: 100,
-    plannedStart: '۱۴۰۲/۰۴/۰۱',
-    plannedEnd: '۱۴۰۲/۰۴/۱۵',
-    actualStart: '۱۴۰۲/۰۴/۰۱',
-    actualEnd: '۱۴۰۲/۰۴/۱۴',
-    responsible: 'مهندس احمدی',
-  },
-  {
-    id: 2,
-    title: 'توسعه ماژول اصلی',
-    description: 'پیاده‌سازی هسته اصلی سیستم و تست‌های واحد',
-    status: 'in_progress',
-    progress: 65,
-    plannedStart: '۱۴۰۲/۰۴/۱۶',
-    plannedEnd: '۱۴۰۲/۰۵/۱۰',
-    responsible: 'علی محمدی',
-  },
-  {
-    id: 3,
-    title: 'تحویل نهایی و استقرار',
-    description: 'نصب، راه‌اندازی، آموزش و تحویل نهایی',
-    status: 'not_started',
-    progress: 0,
-    plannedStart: '۱۴۰۲/۰۵/۱۱',
-    plannedEnd: '۱۴۰۲/۰۵/۳۰',
-    responsible: 'تیم فنی',
-  },
-];
+import {
+  API_URL,
+  authenticatedFetch,
+} from '@/store/auth-store';
 
-const statusIcon = (status: string) => {
-  switch (status) {
-    case 'completed': return <CheckCircle size={16} className="text-emerald-500" />;
-    case 'in_progress': return <Play size={16} className="text-blue-500" />;
-    case 'delayed': return <Clock size={16} className="text-red-500" />;
-    default: return <Clock size={16} className="text-slate-400" />;
-  }
-};
+interface Execution {
+  id: number;
+  contract: number;
+  status: string;
+  progress_percent: number;
+  start_date: string | null;
+  expected_end_date: string | null;
+  actual_end_date: string | null;
+  final_score: string | number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
-const statusLabel = (status: string) => {
-  switch (status) {
-    case 'completed': return 'تکمیل شده';
-    case 'in_progress': return 'در حال انجام';
-    case 'not_started': return 'شروع نشده';
-    case 'delayed': return 'تأخیر';
-    default: return status;
+interface UserSummary {
+  id?: number | string;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  company_name?: string;
+}
+
+interface Contract {
+  id: number;
+  buyer?: number | string | UserSummary | null;
+  supplier?: number | string | UserSummary | null;
+  terms?: string | null;
+  total_value?: string | number | null;
+  status?: string | null;
+  contract_file?: string | null;
+  signed_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface Milestone {
+  id: number;
+  contract: number;
+  title: string;
+  description: string | null;
+  due_date: string | null;
+  status:
+    | 'not_started'
+    | 'in_progress'
+    | 'awaiting_approval'
+    | 'needs_revision'
+    | 'completed'
+    | string;
+  deliverables: string | null;
+  completed_at: string | null;
+}
+
+interface ApiListResponse<T> {
+  results?: T[];
+  count?: number;
+  next?: string | null;
+  previous?: string | null;
+}
+
+function normalizeNumber(value: unknown): number {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
   }
-};
+
+  if (typeof value === 'string') {
+    const parsed = Number(
+      value.replace(/,/g, '').trim()
+    );
+
+    return Number.isFinite(parsed)
+      ? parsed
+      : 0;
+  }
+
+  return 0;
+}
+
+function formatNumber(value: unknown): string {
+  return new Intl.NumberFormat('fa-IR').format(
+    normalizeNumber(value)
+  );
+}
+
+function formatDate(
+  value: string | null | undefined
+): string {
+  if (!value) {
+    return 'ثبت نشده';
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat('fa-IR').format(date);
+}
+
+function getUserDisplayName(
+  value:
+    | number
+    | string
+    | UserSummary
+    | null
+    | undefined
+): string {
+  if (value === null || value === undefined) {
+    return 'ثبت نشده';
+  }
+
+  if (typeof value === 'object') {
+    if (value.company_name?.trim()) {
+      return value.company_name.trim();
+    }
+
+    const fullName =
+      `${value.first_name || ''} ${
+        value.last_name || ''
+      }`.trim();
+
+    if (fullName) {
+      return fullName;
+    }
+
+    if (value.username) {
+      return value.username;
+    }
+
+    if (value.email) {
+      return value.email;
+    }
+
+    if (value.id !== undefined) {
+      return `کاربر ${value.id}`;
+    }
+  }
+
+  return String(value);
+}
+
+function stripHtml(
+  value: string | null | undefined
+): string {
+  if (!value) {
+    return '';
+  }
+
+  if (typeof window === 'undefined') {
+    return value
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  const div = document.createElement('div');
+  div.innerHTML = value;
+
+  return (div.textContent || div.innerText || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getContractTitle(
+  contract: Contract | null
+): string {
+  if (!contract) {
+    return 'اجرای قرارداد';
+  }
+
+  const terms = stripHtml(contract.terms);
+
+  if (terms) {
+    return terms.length > 120
+      ? `${terms.substring(0, 120)}...`
+      : terms;
+  }
+
+  return `قرارداد #${contract.id}`;
+}
+
+function getExecutionStatusLabel(
+  status: string
+): string {
+  const map: Record<string, string> = {
+    not_started: 'شروع نشده',
+    in_progress: 'در حال انجام',
+    awaiting_approval: 'در انتظار تأیید',
+    needs_revision: 'نیازمند اصلاح',
+    completed: 'تکمیل شده',
+    suspended: 'متوقف شده',
+    disputed: 'وارد اختلاف شده',
+  };
+
+  return map[status] || status;
+}
+
+function getExecutionStatusColor(
+  status: string
+): string {
+  switch (status) {
+    case 'not_started':
+      return 'bg-slate-100 text-slate-600';
+
+    case 'in_progress':
+      return 'bg-blue-100 text-blue-700';
+
+    case 'awaiting_approval':
+      return 'bg-amber-100 text-amber-700';
+
+    case 'needs_revision':
+      return 'bg-red-100 text-red-700';
+
+    case 'completed':
+      return 'bg-emerald-100 text-emerald-700';
+
+    case 'suspended':
+      return 'bg-slate-200 text-slate-600';
+
+    case 'disputed':
+      return 'bg-red-100 text-red-700';
+
+    default:
+      return 'bg-slate-100 text-slate-600';
+  }
+}
+
+function getMilestoneStatusIcon(
+  status: string
+) {
+  switch (status) {
+    case 'completed':
+      return (
+        <CheckCircle
+          size={16}
+          className="text-emerald-500"
+        />
+      );
+
+    case 'in_progress':
+      return (
+        <Play
+          size={16}
+          className="text-blue-500"
+        />
+      );
+
+    case 'awaiting_approval':
+      return (
+        <Clock
+          size={16}
+          className="text-amber-500"
+        />
+      );
+
+    case 'needs_revision':
+      return (
+        <AlertTriangle
+          size={16}
+          className="text-red-500"
+        />
+      );
+
+    default:
+      return (
+        <Clock
+          size={16}
+          className="text-slate-400"
+        />
+      );
+  }
+}
+
+function getMilestoneStatusLabel(
+  status: string
+): string {
+  const map: Record<string, string> = {
+    completed: 'تکمیل شده',
+    in_progress: 'در حال انجام',
+    not_started: 'شروع نشده',
+    awaiting_approval: 'در انتظار تأیید',
+    needs_revision: 'نیازمند اصلاح',
+  };
+
+  return map[status] || status;
+}
+
+function getMilestoneStatusColor(
+  status: string
+): string {
+  switch (status) {
+    case 'completed':
+      return 'bg-emerald-100 text-emerald-700';
+
+    case 'in_progress':
+      return 'bg-blue-100 text-blue-700';
+
+    case 'awaiting_approval':
+      return 'bg-amber-100 text-amber-700';
+
+    case 'needs_revision':
+      return 'bg-red-100 text-red-700';
+
+    default:
+      return 'bg-slate-100 text-slate-600';
+  }
+}
 
 export default function ExecutionPage() {
   const params = useParams();
-  const contractId = params?.id as string; // دقت: پارامتر [id] است
+
+  const contractId = useMemo(() => {
+    const value = params?.contractId;
+
+    if (Array.isArray(value)) {
+      return value[0] || '';
+    }
+
+    return typeof value === 'string'
+      ? value
+      : '';
+  }, [params]);
+
+  const [execution, setExecution] =
+    useState<Execution | null>(null);
+
+  const [contract, setContract] =
+    useState<Contract | null>(null);
+
+  const [milestones, setMilestones] =
+    useState<Milestone[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState<string | null>(null);
+
+  const loadExecution = useCallback(
+    async () => {
+      if (!contractId) {
+        setError(
+          'شناسه قرارداد معتبر نیست.'
+        );
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+
+        const numericContractId =
+          Number(contractId);
+
+        if (
+          !Number.isInteger(
+            numericContractId
+          ) ||
+          numericContractId <= 0
+        ) {
+          throw new Error(
+            'شناسه قرارداد معتبر نیست.'
+          );
+        }
+
+        /*
+         * Contract را مستقیماً می‌گیریم.
+         */
+        const contractResponse =
+          await authenticatedFetch(
+            `${API_URL}/contracts/${numericContractId}/`
+          );
+
+        if (!contractResponse.ok) {
+          if (
+            contractResponse.status === 404
+          ) {
+            throw new Error(
+              'قرارداد موردنظر پیدا نشد.'
+            );
+          }
+
+          if (
+            contractResponse.status === 401
+          ) {
+            throw new Error(
+              'نشست کاربری شما معتبر نیست. لطفاً دوباره وارد شوید.'
+            );
+          }
+
+          throw new Error(
+            `دریافت قرارداد ناموفق بود. کد خطا: ${contractResponse.status}`
+          );
+        }
+
+        const contractData =
+          (await contractResponse.json()) as Contract;
+
+        setContract(contractData);
+
+        /*
+         * ExecutionViewSet فعلی بر اساس status
+         * فیلتر دارد ولی filterset_fields شامل contract نیست.
+         *
+         * بنابراین برای جلوگیری از تغییر Backend،
+         * Executionها را می‌گیریم و Execution مربوط
+         * به همین Contract را پیدا می‌کنیم.
+         */
+        const executionResponse =
+          await authenticatedFetch(
+            `${API_URL}/execution/`
+          );
+
+        if (!executionResponse.ok) {
+          throw new Error(
+            `دریافت وضعیت اجرا ناموفق بود. کد خطا: ${executionResponse.status}`
+          );
+        }
+
+        const executionData =
+          (await executionResponse.json()) as
+            | Execution[]
+            | ApiListResponse<Execution>;
+
+        const executions =
+          Array.isArray(executionData)
+            ? executionData
+            : Array.isArray(
+                  executionData.results
+                )
+              ? executionData.results
+              : [];
+
+        const currentExecution =
+          executions.find(
+            (item) =>
+              Number(item.contract) ===
+              numericContractId
+          ) || null;
+
+        if (!currentExecution) {
+          throw new Error(
+            'برای این قرارداد هنوز رکورد اجرای پروژه ثبت نشده است.'
+          );
+        }
+
+        setExecution(currentExecution);
+
+        /*
+         * Milestoneهای همین Contract
+         */
+        const milestoneResponse =
+          await authenticatedFetch(
+            `${API_URL}/milestones/?contract=${numericContractId}`
+          );
+
+        if (!milestoneResponse.ok) {
+          if (
+            milestoneResponse.status ===
+            404
+          ) {
+            setMilestones([]);
+            return;
+          }
+
+          throw new Error(
+            `دریافت مراحل پروژه ناموفق بود. کد خطا: ${milestoneResponse.status}`
+          );
+        }
+
+        const milestoneData =
+          (await milestoneResponse.json()) as
+            | Milestone[]
+            | ApiListResponse<Milestone>;
+
+        const milestoneList =
+          Array.isArray(milestoneData)
+            ? milestoneData
+            : Array.isArray(
+                  milestoneData.results
+                )
+              ? milestoneData.results
+              : [];
+
+        setMilestones(milestoneList);
+      } catch (err) {
+        console.error(
+          '❌ Failed to load execution details:',
+          err
+        );
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'خطا در دریافت اطلاعات اجرای پروژه'
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [contractId]
+  );
+
+  useEffect(() => {
+    loadExecution();
+  }, [loadExecution]);
+
+  const completedMilestones =
+    milestones.filter(
+      (item) =>
+        item.status === 'completed'
+    ).length;
+
+  const progress = Math.min(
+    100,
+    Math.max(
+      0,
+      normalizeNumber(
+        execution?.progress_percent
+      )
+    )
+  );
+
+  if (loading) {
+    return (
+      <div
+        className="min-h-screen bg-gradient-to-br from-slate-50 to-white p-4 md:p-6"
+        dir="rtl"
+        style={{
+          fontFamily:
+            "'Vazir', 'Vazirmatn', 'Iran Sans', Tahoma, sans-serif",
+        }}
+      >
+        <div className="max-w-5xl mx-auto">
+          <div className="h-5 w-40 bg-slate-200 rounded animate-pulse mb-6" />
+
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 animate-pulse">
+            <div className="h-6 bg-slate-200 rounded w-1/2" />
+            <div className="h-4 bg-slate-100 rounded w-1/3 mt-4" />
+            <div className="h-3 bg-slate-100 rounded-full mt-6" />
+          </div>
+
+          <div className="space-y-4 mt-5">
+            {[1, 2, 3].map((item) => (
+              <div
+                key={item}
+                className="bg-white rounded-2xl border border-slate-200 p-5 animate-pulse"
+              >
+                <div className="h-5 bg-slate-200 rounded w-1/2" />
+                <div className="h-3 bg-slate-100 rounded w-3/4 mt-4" />
+                <div className="h-3 bg-slate-100 rounded w-1/3 mt-4" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !execution) {
+    return (
+      <div
+        className="min-h-screen bg-gradient-to-br from-slate-50 to-white p-4 md:p-6"
+        dir="rtl"
+        style={{
+          fontFamily:
+            "'Vazir', 'Vazirmatn', 'Iran Sans', Tahoma, sans-serif",
+        }}
+      >
+        <div className="max-w-5xl mx-auto">
+          <Link
+            href="/execution"
+            className="flex items-center gap-1 text-slate-500 hover:text-[#1E3A8A] mb-6 text-sm"
+          >
+            <ArrowRight size={16} />
+            بازگشت به پروژه‌ها
+          </Link>
+
+          <div className="bg-white border border-red-200 rounded-2xl p-10 text-center">
+            <AlertTriangle
+              size={44}
+              className="mx-auto text-red-400 mb-4"
+            />
+
+            <h1 className="text-lg font-extrabold text-slate-800 mb-2">
+              اطلاعات اجرا در دسترس نیست
+            </h1>
+
+            <p className="text-sm text-slate-500 mb-6">
+              {error ||
+                'رکورد اجرای این قرارداد پیدا نشد.'}
+            </p>
+
+            <button
+              type="button"
+              onClick={loadExecution}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1E3A8A] text-white text-sm font-bold hover:bg-[#172F70] transition"
+            >
+              <RefreshCw size={15} />
+              تلاش مجدد
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
       className="min-h-screen bg-gradient-to-br from-slate-50 to-white p-4 md:p-6"
       dir="rtl"
-      style={{ fontFamily: "'Vazir', 'Vazirmatn', 'Iran Sans', Tahoma, sans-serif" }}
+      style={{
+        fontFamily:
+          "'Vazir', 'Vazirmatn', 'Iran Sans', Tahoma, sans-serif",
+      }}
     >
       <div className="max-w-5xl mx-auto">
-        <Link
-          href={`/contract/${contractId}`}
-          className="flex items-center gap-1 text-slate-500 hover:text-[#1E3A8A] mb-4 text-sm"
-        >
-          <ArrowRight size={16} />
-          بازگشت به قرارداد
-        </Link>
+        <div className="flex items-center justify-between mb-5">
+          <Link
+            href="/execution"
+            className="flex items-center gap-1 text-slate-500 hover:text-[#1E3A8A] text-sm"
+          >
+            <ArrowRight size={16} />
+            بازگشت به پروژه‌ها
+          </Link>
 
-        <h1 className="text-2xl font-extrabold text-slate-900 mb-6">اجرای پروژه</h1>
+          <button
+            type="button"
+            onClick={loadExecution}
+            title="به‌روزرسانی"
+            className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:text-[#1E3A8A] hover:border-[#1E3A8A]/30 transition"
+          >
+            <RefreshCw size={16} />
+          </button>
+        </div>
 
-        <div className="space-y-4">
-          {mockExecutions.map((exec) => (
-            <div key={exec.id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-2">
-                  {statusIcon(exec.status)}
-                  <h3 className="text-lg font-bold text-slate-800">{exec.title}</h3>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
-                    {statusLabel(exec.status)}
-                  </span>
-                </div>
-                <span className="text-sm font-bold text-[#1E3A8A]">{exec.progress}٪</span>
-              </div>
-              <p className="text-sm text-slate-600 mt-2">{exec.description}</p>
-              <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-500">
-                <span className="flex items-center gap-1"><Calendar size={12} /> شروع: {exec.plannedStart}</span>
-                <span className="flex items-center gap-1"><Calendar size={12} /> پایان: {exec.plannedEnd}</span>
-                <span className="flex items-center gap-1"><User size={12} /> مسئول: {exec.responsible}</span>
-              </div>
-              <div className="w-full bg-slate-100 rounded-full h-2 mt-3">
-                <div
-                  className={`h-2 rounded-full ${exec.progress === 100 ? 'bg-emerald-500' : 'bg-blue-500'}`}
-                  style={{ width: `${exec.progress}%` }}
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm mb-6">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-5">
+            <div className="flex items-start gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] flex items-center justify-center flex-shrink-0">
+                <Package
+                  size={27}
+                  className="text-white"
                 />
               </div>
+
+              <div>
+                <h1 className="text-xl font-extrabold text-slate-900">
+                  {getContractTitle(
+                    contract
+                  )}
+                </h1>
+
+                <p className="text-xs text-slate-500 mt-2">
+                  قرارداد #{contractId}
+                </p>
+
+                <div className="flex flex-wrap gap-3 mt-4">
+                  <span className="text-xs text-slate-500 flex items-center gap-1">
+                    <User size={13} />
+
+                    خریدار:{' '}
+                    {getUserDisplayName(
+                      contract?.buyer
+                    )}
+                  </span>
+
+                  <span className="text-xs text-slate-500 flex items-center gap-1">
+                    <User size={13} />
+
+                    فروشنده:{' '}
+                    {getUserDisplayName(
+                      contract?.supplier
+                    )}
+                  </span>
+                </div>
+              </div>
             </div>
-          ))}
+
+            <span
+              className={`self-start px-3 py-1.5 rounded-full text-xs font-bold ${getExecutionStatusColor(
+                execution.status
+              )}`}
+            >
+              {getExecutionStatusLabel(
+                execution.status
+              )}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+            <div className="bg-slate-50 rounded-xl p-4">
+              <p className="text-xs text-slate-400">
+                پیشرفت
+              </p>
+
+              <p className="text-xl font-black text-[#1E3A8A] mt-1">
+                {formatNumber(progress)}٪
+              </p>
+            </div>
+
+            <div className="bg-slate-50 rounded-xl p-4">
+              <p className="text-xs text-slate-400">
+                مبلغ قرارداد
+              </p>
+
+              <p className="text-sm font-black text-slate-800 mt-2">
+                {formatNumber(
+                  contract?.total_value
+                )}
+              </p>
+
+              <p className="text-[10px] text-slate-400 mt-1">
+                تومان
+              </p>
+            </div>
+
+            <div className="bg-slate-50 rounded-xl p-4">
+              <p className="text-xs text-slate-400">
+                شروع اجرا
+              </p>
+
+              <p className="text-sm font-bold text-slate-800 mt-2">
+                {formatDate(
+                  execution.start_date
+                )}
+              </p>
+            </div>
+
+            <div className="bg-slate-50 rounded-xl p-4">
+              <p className="text-xs text-slate-400">
+                پایان پیش‌بینی‌شده
+              </p>
+
+              <p className="text-sm font-bold text-slate-800 mt-2">
+                {formatDate(
+                  execution.expected_end_date
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-slate-600">
+                میزان پیشرفت پروژه
+              </span>
+
+              <span className="text-xs font-black text-[#1E3A8A]">
+                {formatNumber(progress)}٪
+              </span>
+            </div>
+
+            <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  progress === 100
+                    ? 'bg-emerald-500'
+                    : 'bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6]'
+                }`}
+                style={{
+                  width: `${progress}%`,
+                }}
+              />
+            </div>
+          </div>
+
+          {execution.actual_end_date && (
+            <div className="mt-4 flex items-center gap-2 text-xs text-emerald-600">
+              <CheckCircle size={14} />
+
+              پایان واقعی:{' '}
+              {formatDate(
+                execution.actual_end_date
+              )}
+            </div>
+          )}
         </div>
+
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-extrabold text-slate-900">
+              مراحل اجرای پروژه
+            </h2>
+
+            <p className="text-xs text-slate-400 mt-1">
+              {formatNumber(
+                completedMilestones
+              )}{' '}
+              از{' '}
+              {formatNumber(
+                milestones.length
+              )}{' '}
+              مرحله تکمیل شده
+            </p>
+          </div>
+
+          <FileText
+            size={22}
+            className="text-[#1E3A8A]"
+          />
+        </div>
+
+        {milestones.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center">
+            <Clock
+              size={40}
+              className="mx-auto text-slate-300 mb-3"
+            />
+
+            <p className="text-sm text-slate-500">
+              هنوز مرحله‌ای برای این قرارداد ثبت نشده است.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {milestones.map(
+              (milestone, index) => {
+                const isCompleted =
+                  milestone.status ===
+                  'completed';
+
+                return (
+                  <div
+                    key={milestone.id}
+                    className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                            isCompleted
+                              ? 'bg-emerald-50'
+                              : 'bg-slate-50'
+                          }`}
+                        >
+                          {getMilestoneStatusIcon(
+                            milestone.status
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[10px] font-bold text-slate-400">
+                              مرحله{' '}
+                              {formatNumber(
+                                index + 1
+                              )}
+                            </span>
+
+                            <h3 className="text-base font-bold text-slate-800">
+                              {milestone.title}
+                            </h3>
+
+                            <span
+                              className={`text-[10px] px-2 py-1 rounded-full font-bold ${getMilestoneStatusColor(
+                                milestone.status
+                              )}`}
+                            >
+                              {getMilestoneStatusLabel(
+                                milestone.status
+                              )}
+                            </span>
+                          </div>
+
+                          {milestone.description && (
+                            <p className="text-sm text-slate-600 mt-2 leading-7">
+                              {
+                                milestone.description
+                              }
+                            </p>
+                          )}
+
+                          <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-500">
+                            <span className="flex items-center gap-1">
+                              <Calendar
+                                size={12}
+                              />
+
+                              سررسید:{' '}
+                              {formatDate(
+                                milestone.due_date
+                              )}
+                            </span>
+
+                            {milestone.completed_at && (
+                              <span className="flex items-center gap-1 text-emerald-600">
+                                <CheckCircle
+                                  size={12}
+                                />
+
+                                تکمیل:{' '}
+                                {formatDate(
+                                  milestone.completed_at
+                                )}
+                              </span>
+                            )}
+                          </div>
+
+                          {milestone.deliverables && (
+                            <a
+                              href={
+                                milestone.deliverables
+                              }
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(event) =>
+                                event.stopPropagation()
+                              }
+                              className="inline-flex items-center gap-1 mt-3 text-xs font-bold text-[#1E3A8A] hover:underline"
+                            >
+                              <FileText
+                                size={13}
+                              />
+                              مشاهده خروجی مرحله
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+            )}
+          </div>
+        )}
+
+        {execution.notes && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 mt-6">
+            <h2 className="text-sm font-extrabold text-slate-800 mb-2">
+              یادداشت‌های اجرا
+            </h2>
+
+            <p className="text-sm text-slate-600 leading-7 whitespace-pre-wrap">
+              {execution.notes}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
