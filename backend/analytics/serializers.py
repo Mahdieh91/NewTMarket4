@@ -9,9 +9,7 @@ from .models import MarketTrend, KPI
 # Market Trend
 # ============================================================
 
-class MarketTrendSerializer(
-    serializers.ModelSerializer
-):
+class MarketTrendSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MarketTrend
@@ -22,9 +20,7 @@ class MarketTrendSerializer(
 # KPI
 # ============================================================
 
-class KPISerializer(
-    serializers.ModelSerializer
-):
+class KPISerializer(serializers.ModelSerializer):
 
     class Meta:
         model = KPI
@@ -32,51 +28,35 @@ class KPISerializer(
 
 
 # ============================================================
-# Dashboard serializers
+# Dashboard
 # ============================================================
 
-class DashboardStatsSerializer(
-    serializers.Serializer
-):
+class DashboardStatsSerializer(serializers.Serializer):
 
-    totalProducts = (
-        serializers.IntegerField()
-    )
+    totalProducts = serializers.IntegerField()
 
-    activeNeeds = (
-        serializers.IntegerField()
-    )
+    activeNeeds = serializers.IntegerField()
 
-    ongoingNegotiations = (
-        serializers.IntegerField()
-    )
+    ongoingNegotiations = serializers.IntegerField()
 
-    successfulDeals = (
-        serializers.IntegerField()
-    )
+    successfulDeals = serializers.IntegerField()
 
 
-class DashboardIndustrySerializer(
-    serializers.Serializer
-):
+class DashboardIndustrySerializer(serializers.Serializer):
 
     name = serializers.CharField()
 
     value = serializers.IntegerField()
 
 
-class DashboardMonthlyDealSerializer(
-    serializers.Serializer
-):
+class DashboardMonthlyDealSerializer(serializers.Serializer):
 
     month = serializers.CharField()
 
     deals = serializers.IntegerField()
 
 
-class DashboardActivitySerializer(
-    serializers.Serializer
-):
+class DashboardActivitySerializer(serializers.Serializer):
 
     id = serializers.CharField()
 
@@ -88,105 +68,97 @@ class DashboardActivitySerializer(
         allow_blank=True
     )
 
-    time = serializers.CharField()
+    time = serializers.CharField(
+        allow_blank=True
+    )
 
 
-class DashboardSuggestionSerializer(
-    serializers.Serializer
-):
+class DashboardSuggestionSerializer(serializers.Serializer):
 
     title = serializers.CharField()
 
-    match = serializers.IntegerField()
+    match = serializers.IntegerField(
+        min_value=0,
+        max_value=100
+    )
 
     reason = serializers.CharField()
 
 
-class DashboardFunnelSerializer(
-    serializers.Serializer
-):
+class DashboardFunnelSerializer(serializers.Serializer):
 
     label = serializers.CharField()
 
-    value = serializers.IntegerField()
+    value = serializers.IntegerField(
+        min_value=0
+    )
 
-    percent = serializers.IntegerField()
+    percent = serializers.IntegerField(
+        min_value=0,
+        max_value=100
+    )
 
 
-class DashboardSupplierSerializer(
-    serializers.Serializer
-):
+class DashboardSupplierSerializer(serializers.Serializer):
 
     name = serializers.CharField()
 
-    score = serializers.FloatField()
+    score = serializers.FloatField(
+        min_value=0
+    )
 
-    deals = serializers.IntegerField()
+    deals = serializers.IntegerField(
+        min_value=0
+    )
 
 
-class DashboardNegotiationInsightSerializer(
-    serializers.Serializer
-):
+class DashboardNegotiationInsightSerializer(serializers.Serializer):
 
     label = serializers.CharField()
 
-    value = serializers.IntegerField()
+    value = serializers.IntegerField(
+        min_value=0
+    )
 
-    percent = serializers.IntegerField()
+    percent = serializers.IntegerField(
+        min_value=0,
+        max_value=100
+    )
 
 
 # ============================================================
 # Main Dashboard serializer
 # ============================================================
 
-class DashboardSerializer(
-    serializers.Serializer
-):
+class DashboardSerializer(serializers.Serializer):
 
-    stats = (
-        DashboardStatsSerializer()
+    stats = DashboardStatsSerializer()
+
+    # حفظ برای backward compatibility
+    industryData = DashboardIndustrySerializer(
+        many=True
     )
 
-    # برای حفظ سازگاری API قبلی نگه داشته شده.
-    # Dashboard دیگر این داده را نمایش نمی‌دهد.
-    industryData = (
-        DashboardIndustrySerializer(
-            many=True
-        )
+    monthlyDeals = DashboardMonthlyDealSerializer(
+        many=True
     )
 
-    monthlyDeals = (
-        DashboardMonthlyDealSerializer(
-            many=True
-        )
+    recentActivities = DashboardActivitySerializer(
+        many=True
     )
 
-    recentActivities = (
-        DashboardActivitySerializer(
-            many=True
-        )
+    smartSuggestions = DashboardSuggestionSerializer(
+        many=True
     )
 
-    smartSuggestions = (
-        DashboardSuggestionSerializer(
-            many=True
-        )
+    conversionFunnel = DashboardFunnelSerializer(
+        many=True
     )
 
-    conversionFunnel = (
-        DashboardFunnelSerializer(
-            many=True
-        )
+    topSuppliers = DashboardSupplierSerializer(
+        many=True
     )
 
-    topSuppliers = (
-        DashboardSupplierSerializer(
-            many=True
-        )
-    )
-
-    negotiationInsights = (
-        DashboardNegotiationInsightSerializer(
-            many=True
-        )
+    negotiationInsights = DashboardNegotiationInsightSerializer(
+        many=True
     )

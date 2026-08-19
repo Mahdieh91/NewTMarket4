@@ -2,30 +2,20 @@
 
 import logging
 
-from django_filters.rest_framework import (
-    DjangoFilterBackend,
-)
+from django_filters.rest_framework import DjangoFilterBackend
 
 from rest_framework import (
-    viewsets,
-    permissions,
     filters,
+    permissions,
     status,
+    viewsets,
 )
 
-from rest_framework.permissions import (
-    IsAuthenticated,
-)
-
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-
 from rest_framework.views import APIView
 
-
-from .models import (
-    MarketTrend,
-    KPI,
-)
+from .models import MarketTrend, KPI
 
 from .serializers import (
     MarketTrendSerializer,
@@ -51,17 +41,11 @@ logger = logging.getLogger(__name__)
 # Market Trends
 # ============================================================
 
-class MarketTrendViewSet(
-    viewsets.ModelViewSet
-):
+class MarketTrendViewSet(viewsets.ModelViewSet):
 
-    queryset = (
-        MarketTrend.objects.all()
-    )
+    queryset = MarketTrend.objects.all()
 
-    serializer_class = (
-        MarketTrendSerializer
-    )
+    serializer_class = MarketTrendSerializer
 
     permission_classes = [
         permissions.IsAuthenticated
@@ -79,6 +63,8 @@ class MarketTrendViewSet(
 
     search_fields = [
         "industry__name",
+        "trend_name",
+        "description",
     ]
 
     ordering_fields = "__all__"
@@ -88,9 +74,7 @@ class MarketTrendViewSet(
 # KPI
 # ============================================================
 
-class KPIViewSet(
-    viewsets.ModelViewSet
-):
+class KPIViewSet(viewsets.ModelViewSet):
 
     queryset = KPI.objects.all()
 
@@ -134,93 +118,42 @@ class DashboardAPIView(APIView):
         try:
 
             data = {
-                # -----------------------------
-                # User-specific statistics
-                # -----------------------------
-                "stats": get_stats(
-                    user
-                ),
+                "stats": get_stats(user),
 
-                # -----------------------------
-                # Kept for backward compatibility
-                # -----------------------------
+                # حفظ برای backward compatibility
                 "industryData": [],
 
-                # -----------------------------
-                # User-specific completed deals
-                # -----------------------------
-                "monthlyDeals": (
-                    get_monthly_deals(
-                        user,
-                        months=6,
-                    )
+                "monthlyDeals": get_monthly_deals(
+                    user,
+                    months=6,
                 ),
 
-                # -----------------------------
-                # User-specific negotiations
-                # -----------------------------
-                "recentActivities": (
-                    get_recent_activities(
-                        user,
-                        limit=10,
-                    )
+                "recentActivities": get_recent_activities(
+                    user,
+                    limit=10,
                 ),
 
-                # -----------------------------
-                # User-specific suggestions
-                # -----------------------------
-                "smartSuggestions": (
-                    get_smart_suggestions(
-                        user,
-                        limit=3,
-                    )
+                "smartSuggestions": get_smart_suggestions(
+                    user,
+                    limit=3,
                 ),
 
-                # -----------------------------
-                # User-specific funnel
-                # -----------------------------
-                "conversionFunnel": (
-                    get_conversion_funnel(
-                        user,
-                    )
+                "conversionFunnel": get_conversion_funnel(
+                    user,
                 ),
 
-                # -----------------------------
-                # User-specific counterparties
-                #
-                # Name kept as topSuppliers
-                # to avoid breaking frontend/API.
-                # -----------------------------
-                "topSuppliers": (
-                    get_top_suppliers(
-                        user,
-                        limit=5,
-                    )
+                "topSuppliers": get_top_suppliers(
+                    user,
+                    limit=5,
                 ),
 
-                # -----------------------------
-                # New intelligent chart
-                # -----------------------------
-                "negotiationInsights": (
-                    get_negotiation_insights(
-                        user,
-                    )
+                "negotiationInsights": get_negotiation_insights(
+                    user,
                 ),
             }
 
-            # ------------------------------------------------
-            # IMPORTANT
-            #
-            # اینجا data ورودی جدید نیست.
-            # data قبلاً توسط serviceها ساخته شده است.
-            #
-            # بنابراین باید instance استفاده شود، نه data=.
-            # ------------------------------------------------
-
-            serializer = (
-                DashboardSerializer(
-                    instance=data
-                )
+            serializer = DashboardSerializer(
+                instance=data
             )
 
             return Response(
@@ -228,7 +161,7 @@ class DashboardAPIView(APIView):
                 status=status.HTTP_200_OK,
             )
 
-        except Exception as exc:
+        except Exception:
 
             logger.exception(
                 "[Dashboard] Unexpected error"
@@ -236,14 +169,9 @@ class DashboardAPIView(APIView):
 
             return Response(
                 {
-                    "detail":
-                        "خطا در دریافت اطلاعات داشبورد",
-                    "error":
-                        str(exc)
-                        if logger
-                        else None,
+                    "detail": (
+                        "خطا در دریافت اطلاعات داشبورد"
+                    )
                 },
-                status=(
-                    status.HTTP_500_INTERNAL_SERVER_ERROR
-                ),
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
