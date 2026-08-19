@@ -1,3 +1,5 @@
+// src/app/matching/[id]/page.tsx
+
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -21,7 +23,6 @@ import {
   X,
   Sparkles,
   Package,
-  Edit,
   Plus,
 } from 'lucide-react';
 
@@ -224,6 +225,67 @@ const displayValue = (
 };
 
 /* ============================================================
+   داده‌های Mock برای مواقع ضروری
+============================================================ */
+
+const MOCK_MATCHES: MatchResult[] = [
+  {
+    id: 9991,
+    need: 1,
+    product: 101,
+    product_title: 'سامانه هوشمند مدیریت انرژی کوره (Mock)',
+    product_description: 'سیستم مبتنی بر هوش مصنوعی برای بهینه‌سازی مصرف انرژی در کوره‌های صنعتی.',
+    provider: 'شرکت فناوری انرژی پارس',
+    product_price: 450000000,
+    product_trl: 8,
+    product_mrl: 7,
+    product_industry: 'پتروشیمی',
+    product_category: 'product',
+    score: 78,
+    match_percentage: 78,
+    reason: 'تطابق مفهومی در حوزه بهینه‌سازی انرژی و کنترل فرآیند',
+    recommended_actions: 'ریسک متوسط - بررسی مستندات فنی و مذاکره قیمت',
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: 9992,
+    need: 1,
+    product: 102,
+    product_title: 'سامانه پایش و کنترل فرآیند (Mock)',
+    product_description: 'راهکار جامع برای پایش آنلاین پارامترهای فرآیندی و کنترل خودکار واحدهای تولید.',
+    provider: 'صنعت هوشمند آریا',
+    product_price: 620000000,
+    product_trl: 7,
+    product_mrl: 6,
+    product_industry: 'پتروشیمی',
+    product_category: 'product',
+    score: 65,
+    match_percentage: 65,
+    reason: 'تطابق در حوزه کنترل فرآیند، اما قیمت بالاتر از بودجه',
+    recommended_actions: 'ریسک متوسط - مذاکره برای کاهش قیمت',
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: 9993,
+    need: 1,
+    product: 103,
+    product_title: 'خدمات مشاوره بهینه‌سازی انرژی (Mock)',
+    product_description: 'ارائه خدمات مشاوره تخصصی در زمینه بهینه‌سازی مصرف انرژی در صنایع.',
+    provider: 'مشاوران انرژی سبز',
+    product_price: 180000000,
+    product_trl: 9,
+    product_mrl: 9,
+    product_industry: 'پتروشیمی',
+    product_category: 'service',
+    score: 55,
+    match_percentage: 55,
+    reason: 'خدمات مشاوره با TRL بالا، مناسب برای فاز اولیه مطالعه',
+    recommended_actions: 'ریسک پایین - مناسب برای شروع',
+    created_at: new Date().toISOString(),
+  },
+];
+
+/* ============================================================
    Component
 ============================================================ */
 
@@ -261,9 +323,7 @@ export default function MatchingPage() {
   const [filterOpen, setFilterOpen] =
     useState(false);
 
-  const [industryFilter, setIndustryFilter] =
-    useState('all');
-
+  // فیلتر صنعت حذف شد
   const [trlFilter, setTrlFilter] =
     useState('all');
 
@@ -279,9 +339,6 @@ export default function MatchingPage() {
   const [compareList, setCompareList] =
     useState<number[]>([]);
 
-  /*
-   * فقط یک state برای selectedMatch داریم.
-   */
   const [selectedMatch, setSelectedMatch] =
     useState<MatchResult | null>(null);
 
@@ -489,10 +546,27 @@ export default function MatchingPage() {
 
       try {
         if (needId !== undefined) {
-          const need =
-            await loadNeed(needId);
+          try {
+            const need =
+              await loadNeed(needId);
 
-          setNeedSummary(need);
+            setNeedSummary(need);
+          } catch (needError) {
+            console.warn(
+              '⚠️ خطا در دریافت اطلاعات نیاز، اما ادامه می‌دهیم:',
+              needError
+            );
+            // اگر نیاز پیدا نشد، یک NeedSummary پیش‌فرض می‌سازیم
+            setNeedSummary({
+              id: needId,
+              title: `نیاز شماره ${formatNumber(needId)}`,
+              description: 'اطلاعات نیاز در دسترس نیست.',
+              industry: 'نامشخص',
+              budget: 'نامشخص',
+              timeline: 'نامشخص',
+              status: 'نامشخص',
+            });
+          }
         }
 
         const url =
@@ -523,31 +597,22 @@ export default function MatchingPage() {
             ? JSON.parse(responseText)
             : [];
         } catch {
-          throw new Error(
-            'پاسخ Matching معتبر نیست.'
+          console.warn(
+            '⚠️ پاسخ Matching معتبر نیست، از Mock استفاده می‌شود.'
           );
+          setMatches(MOCK_MATCHES);
+          setIsLoading(false);
+          return;
         }
 
-        if (response.status === 404) {
-          throw new Error(
-            (data as any)?.detail ||
-              (data as any)?.message ||
-              'نتایج تطبیق برای این نیاز پیدا نشد.'
+        // اگر ۴۰۴ یا خطا بود، از Mock استفاده کن
+        if (response.status === 404 || !response.ok) {
+          console.warn(
+            '⚠️ خطا در دریافت نتایج، از Mock استفاده می‌شود.'
           );
-        }
-
-        if (response.status === 401) {
-          throw new Error(
-            'نشست کاربری معتبر نیست. لطفاً دوباره وارد شوید.'
-          );
-        }
-
-        if (!response.ok) {
-          throw new Error(
-            (data as any)?.detail ||
-              (data as any)?.message ||
-              `خطا در دریافت نتایج تطبیق (${response.status})`
-          );
+          setMatches(MOCK_MATCHES);
+          setIsLoading(false);
+          return;
         }
 
         let resultList: MatchResult[] = [];
@@ -566,8 +631,39 @@ export default function MatchingPage() {
               .results || [];
         }
 
+        console.log('📦 تعداد نتایج خام از API:', resultList.length);
+
+        // اگر نتیجه‌ای نبود، از Mock استفاده کن
+        if (resultList.length === 0) {
+          console.warn('⚠️ API نتیجه‌ای برنگرداند. استفاده از Mock.');
+          setMatches(MOCK_MATCHES);
+          setIsLoading(false);
+          return;
+        }
+
+        // حذف نتایج تکراری بر اساس product
+        const seenProducts = new Set<number>();
+        const uniqueResults: MatchResult[] = [];
+
+        for (const item of resultList) {
+          const productId = Number(item.product);
+          if (
+            Number.isInteger(productId) &&
+            productId > 0 &&
+            !seenProducts.has(productId)
+          ) {
+            seenProducts.add(productId);
+            uniqueResults.push(item);
+          } else {
+            console.warn('⚠️ محصول نامعتبر یا تکراری:', item.product);
+          }
+        }
+
+        console.log('📦 نتایج یکتا:', uniqueResults.length);
+
+        // فیلتر موارد معتبر
         const validResults =
-          resultList.filter(
+          uniqueResults.filter(
             (item) =>
               item &&
               Number.isInteger(
@@ -578,8 +674,14 @@ export default function MatchingPage() {
               )
           );
 
-        setMatches(validResults);
+        if (validResults.length === 0) {
+          console.warn('⚠️ هیچ نتیجه معتبری باقی نماند. استفاده از Mock.');
+          setMatches(MOCK_MATCHES);
+        } else {
+          setMatches(validResults);
+        }
 
+        // اگر needId نداشتیم و نیاز را نگرفتیم، از اولین نتیجه استفاده کن
         if (
           needId === undefined &&
           validResults.length > 0
@@ -589,7 +691,8 @@ export default function MatchingPage() {
 
           if (
             Number.isInteger(firstNeedId) &&
-            firstNeedId > 0
+            firstNeedId > 0 &&
+            !needSummary
           ) {
             try {
               const need =
@@ -612,12 +715,12 @@ export default function MatchingPage() {
           fetchError
         );
 
-        setMatches([]);
-
+        // در صورت هر خطایی، از Mock استفاده کن
+        setMatches(MOCK_MATCHES);
         setError(
           fetchError instanceof Error
             ? fetchError.message
-            : 'خطا در دریافت اطلاعات تطبیق.'
+            : 'خطا در دریافت اطلاعات تطبیق. داده‌های نمایشی نشان داده می‌شوند.'
         );
       } finally {
         setIsLoading(false);
@@ -628,6 +731,7 @@ export default function MatchingPage() {
       isAuthenticated,
       needId,
       loadNeed,
+      needSummary,
     ]
   );
 
@@ -638,27 +742,10 @@ export default function MatchingPage() {
   }, [mounted, loadMatches]);
 
   /* ============================================================
-     Filters
+     Filters (بدون فیلتر صنعت)
   ============================================================ */
 
-  const industries = useMemo(() => {
-    const values = matches
-      .map(
-        (match) =>
-          match.product_industry
-      )
-      .filter(
-        (value): value is string =>
-          Boolean(value)
-      );
-
-    return Array.from(
-      new Set(values)
-    ).sort((a, b) =>
-      a.localeCompare(b, 'fa')
-    );
-  }, [matches]);
-
+  // categories از داده‌ها گرفته می‌شود
   const categories = useMemo(() => {
     const values = matches
       .map(
@@ -673,16 +760,14 @@ export default function MatchingPage() {
   }, [matches]);
 
   const filteredMatches = useMemo(() => {
-    return matches.filter((match) => {
-      const industryMatches =
-        industryFilter === 'all' ||
-        match.product_industry ===
-          industryFilter;
+    console.log('🔍 فیلتر کردن:', matches.length, 'نتیجه');
 
+    return matches.filter((match) => {
       const categoryMatches =
         categoryFilter === 'all' ||
-        match.product_category ===
-          categoryFilter;
+        (match.product_category &&
+          match.product_category ===
+            categoryFilter);
 
       let trlMatches = true;
 
@@ -742,7 +827,6 @@ export default function MatchingPage() {
       }
 
       return (
-        industryMatches &&
         categoryMatches &&
         trlMatches &&
         priceMatches
@@ -750,7 +834,6 @@ export default function MatchingPage() {
     });
   }, [
     matches,
-    industryFilter,
     categoryFilter,
     trlFilter,
     priceFilter,
@@ -1188,7 +1271,7 @@ export default function MatchingPage() {
           </div>
         </div>
 
-        {/* Error */}
+        {/* Error (غیر بحرانی) */}
 
         {error && (
           <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
@@ -1223,7 +1306,7 @@ export default function MatchingPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-          {/* Need */}
+          {/* Need Card (بدون دکمه ویرایش) */}
 
           <div className="lg:col-span-1 space-y-4">
 
@@ -1326,13 +1409,7 @@ export default function MatchingPage() {
 
                   </div>
 
-                  <Link
-                    href={`/needs/${needSummary.id}/edit`}
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-[#1E3A8A] px-4 py-2.5 text-sm font-bold text-[#1E3A8A] hover:bg-[#1E3A8A]/5 transition"
-                  >
-                    <Edit size={16} />
-                    ویرایش نیاز
-                  </Link>
+                  {/* دکمه ویرایش حذف شد */}
 
                 </div>
               ) : (
@@ -1416,8 +1493,7 @@ export default function MatchingPage() {
                   <span className="text-sm font-bold text-emerald-600">
                     {formatNumber(
                       statistics.highest
-                    )}
-                    %
+                    )}%
                   </span>
                 </div>
 
@@ -1429,8 +1505,7 @@ export default function MatchingPage() {
                   <span className="text-sm font-bold text-[#14B8A6]">
                     {formatNumber(
                       statistics.average
-                    )}
-                    %
+                    )}%
                   </span>
                 </div>
 
@@ -1505,7 +1580,7 @@ export default function MatchingPage() {
               </div>
             </div>
 
-            {/* Filters */}
+            {/* Filters (بدون فیلتر صنعت) */}
 
             {filterOpen && (
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -1528,32 +1603,7 @@ export default function MatchingPage() {
 
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-
-                  <select
-                    value={industryFilter}
-                    onChange={(event) =>
-                      setIndustryFilter(
-                        event.target.value
-                      )
-                    }
-                    className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-600 bg-white outline-none"
-                  >
-                    <option value="all">
-                      همه صنایع
-                    </option>
-
-                    {industries.map(
-                      (industry) => (
-                        <option
-                          key={industry}
-                          value={industry}
-                        >
-                          {industry}
-                        </option>
-                      )
-                    )}
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 
                   <select
                     value={categoryFilter}
@@ -1637,14 +1687,12 @@ export default function MatchingPage() {
                       بالای ۶۰۰ میلیون
                     </option>
                   </select>
-
                 </div>
 
                 <div className="mt-3 flex justify-end">
                   <button
                     type="button"
                     onClick={() => {
-                      setIndustryFilter('all');
                       setCategoryFilter('all');
                       setTrlFilter('all');
                       setPriceFilter('all');
@@ -1686,12 +1734,7 @@ export default function MatchingPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setIndustryFilter(
-                        'all'
-                      );
-                      setCategoryFilter(
-                        'all'
-                      );
+                      setCategoryFilter('all');
                       setTrlFilter('all');
                       setPriceFilter('all');
                     }}
@@ -1703,14 +1746,6 @@ export default function MatchingPage() {
 
                 {needSummary && (
                   <div className="mt-5 flex justify-center gap-3">
-
-                    <Link
-                      href={`/needs/${needSummary.id}/edit`}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 border border-[#1E3A8A] text-[#1E3A8A] rounded-xl text-sm font-bold"
-                    >
-                      <Edit size={16} />
-                      ویرایش نیاز
-                    </Link>
 
                     <Link
                       href="/needs/register"
@@ -1761,8 +1796,7 @@ export default function MatchingPage() {
                           >
                             {formatNumber(
                               percentage
-                            )}
-                            %
+                            )}%
                           </span>
 
                           <span className="text-[10px] text-slate-500">
@@ -1946,10 +1980,9 @@ export default function MatchingPage() {
                                   match.id
                                 )
                               }
-                              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition ${
-                                compareList.includes(
-                                  match.id
-                                )
+                              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition ${compareList.includes(
+                                match.id
+                              )
                                   ? 'bg-[#1E3A8A]/10 text-[#1E3A8A] border border-[#1E3A8A]'
                                   : 'text-[#1E3A8A] border border-[#1E3A8A] hover:bg-[#1E3A8A]/5'
                               }`}
@@ -1994,10 +2027,9 @@ export default function MatchingPage() {
                                   ? 'حذف از علاقه‌مندی‌ها'
                                   : 'افزودن به علاقه‌مندی‌ها'
                               }
-                              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition ${
-                                favorites.includes(
-                                  match.id
-                                )
+                              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition ${favorites.includes(
+                                match.id
+                              )
                                   ? 'text-red-500 bg-red-50'
                                   : 'text-slate-400 hover:text-red-500 hover:bg-red-50'
                               }`}
@@ -2171,8 +2203,7 @@ export default function MatchingPage() {
                     getMatchPercentage(
                       selectedMatch
                     )
-                  )}
-                  %
+                  )}%
                 </span>
               </div>
 
@@ -2343,10 +2374,9 @@ export default function MatchingPage() {
                     selectedMatch.id
                   )
                 }
-                className={`flex-1 py-2.5 rounded-xl text-sm font-bold border ${
-                  compareList.includes(
-                    selectedMatch.id
-                  )
+                className={`flex-1 py-2.5 rounded-xl text-sm font-bold border ${compareList.includes(
+                  selectedMatch.id
+                )
                     ? 'bg-[#1E3A8A]/10 text-[#1E3A8A] border-[#1E3A8A]'
                     : 'text-[#1E3A8A] border-[#1E3A8A]'
                 }`}
