@@ -1,3 +1,5 @@
+// src/app/profile/page.tsx
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -30,6 +32,7 @@ import {
   Send as SendIcon,
   Maximize2,
   Archive as ArchiveIcon,
+  Zap, // <-- جدید
 } from 'lucide-react';
 
 // ============================================================
@@ -1757,12 +1760,11 @@ function WalletTab({ wallet, loading }: { wallet: WalletData | null; loading: bo
 }
 
 // ============================================================
-// My Needs Tab - با وضعیت‌های فارسی و نمایش کاربرپسند (بدون JSON)
-// ============================================================
-// ============================================================
-// My Needs Tab - با نمایش کامل توضیحات (بدون برش کلمات)
+// My Needs Tab - با دکمه تطبیق هوشمند
 // ============================================================
 function MyNeedsTab({ needs, loading }: { needs: Need[]; loading: boolean }) {
+  const router = useRouter();
+
   const statusMap: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
     published: { label: 'منتشر شده', color: 'bg-green-100 text-green-700', icon: <CheckCircle size={14} /> },
     draft: { label: 'پیش‌نویس', color: 'bg-slate-100 text-slate-600', icon: <AlertCircle size={14} /> },
@@ -1826,7 +1828,6 @@ function MyNeedsTab({ needs, loading }: { needs: Need[]; loading: boolean }) {
         </button>
       </div>
 
-      {/* ستونی (یک کارت در هر ردیف) برای نمایش کامل متن */}
       <div className="space-y-4">
         {needs.map((need) => {
           const statusInfo = statusMap[need.status] || {
@@ -1852,24 +1853,32 @@ function MyNeedsTab({ needs, loading }: { needs: Need[]; loading: boolean }) {
                 </span>
               </div>
 
-              {/* ✅ نمایش کامل توضیحات – بدون برش کلمات */}
               <div
                 className="text-sm text-slate-600 mt-3 leading-relaxed [&_*]:inline [&_*]:text-sm [&_*]:text-slate-600"
                 dangerouslySetInnerHTML={{ __html: need.description || 'بدون توضیحات' }}
               />
 
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-4 pt-3 border-t border-slate-100 text-xs text-slate-400">
-                <span className="flex items-center gap-1.5">
-                  <Target size={14} className="text-slate-400" />
-                  صنعت: {need.industry?.name || 'نامشخص'}
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <History size={14} className="text-slate-400" />
-                  {formatDate(need.created_at)}
-                </span>
-              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 mt-4 pt-3 border-t border-slate-100">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-400">
+                  <span className="flex items-center gap-1.5">
+                    <Target size={14} className="text-slate-400" />
+                    صنعت: {need.industry?.name || 'نامشخص'}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <History size={14} className="text-slate-400" />
+                    {formatDate(need.created_at)}
+                  </span>
+                </div>
 
-              
+                {/* ✅ دکمه تطبیق هوشمند */}
+                <button
+                  onClick={() => router.push(`/matching/${need.id}`)}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] hover:shadow-lg text-white text-xs font-bold rounded-xl transition-all duration-200"
+                >
+                  <Zap size={14} />
+                  تطبیق هوشمند
+                </button>
+              </div>
             </div>
           );
         })}
@@ -1879,10 +1888,9 @@ function MyNeedsTab({ needs, loading }: { needs: Need[]; loading: boolean }) {
 }
 
 // ============================================================
-// My Products Tab - با وضعیت‌های فارسی (اصلاح‌شده)
+// My Products Tab
 // ============================================================
 function MyProductsTab({ supplies, loading }: { supplies: Supply[]; loading: boolean }) {
-  // دیکشنری وضعیت‌ها با رنگ‌بندی مناسب
   const statusMap: Record<string, { label: string; color: string }> = {
     published: { label: 'منتشر شده', color: 'bg-green-100 text-green-700' },
     approved: { label: 'تأیید شده', color: 'bg-green-100 text-green-700' },

@@ -1,57 +1,25 @@
-# matching/services.py
-
-"""
-Petrochemical Matching Service
-==============================
-
-هسته اصلی تطبیق Need و Supply.
-
-تمرکز فعلی سیستم:
-    صنعت پتروشیمی
-
-ویژگی‌ها:
-    1. Matching مفهومی با استفاده از matching.dictionary
-    2. Matching صنعت
-    3. Matching نوع عرضه
-    4. Matching واژگان تخصصی پتروشیمی
-    5. Matching بودجه
-    6. Matching زمان‌بندی
-    7. Matching TRL
-    8. محاسبه Match Percentage
-    9. محاسبه هوشمند Risk Level به صورت Rule-Based
-    10. تولید دلیل قابل فهم برای پیشنهاد
-    11. بدون وابستگی به Mock Data
-"""
-
 from __future__ import annotations
 
+import json
+import logging
 import re
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, Optional
+
+from django.conf import settings
 
 from .dictionary import (
-    PETROCHEMICAL_TERMS,
     get_petrochemical_concepts,
     normalize_petrochemical_text,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
 # Configuration
 # ============================================================
 
-PETROCHEMICAL_INDUSTRY_KEYWORDS = [
-    "پتروشیمی",
-    "صنعت پتروشیمی",
-    "مجتمع پتروشیمی",
-    "صنایع پتروشیمی",
-    "petrochemical",
-    "petrochemical industry",
-    "petrochemical complex",
-]
-
-
-# وزن معیارهای Matching
 MATCH_WEIGHTS = {
     "industry": 0.20,
     "concept": 0.30,
@@ -64,15 +32,42 @@ MATCH_WEIGHTS = {
 }
 
 
+OPENROUTER_API_KEY = getattr(
+    settings,
+    "OPENROUTER_API_KEY",
+    None,
+)
+
+OPENROUTER_BASE_URL = getattr(
+    settings,
+    "OPENROUTER_BASE_URL",
+    "https://openrouter.ai/api/v1",
+)
+
+OPENROUTER_MODEL = getattr(
+    settings,
+    "OPENROUTER_MODEL",
+    "openai/gpt-oss-20b:free",
+)
+
+OPENROUTER_MAX_TOKENS = getattr(
+    settings,
+    "OPENROUTER_MAX_TOKENS",
+    1200,
+)
+
+OPENROUTER_TEMPERATURE = getattr(
+    settings,
+    "OPENROUTER_TEMPERATURE",
+    0.1,
+)
+
+
 # ============================================================
 # Generic Helpers
 # ============================================================
 
 def safe_text(value: Any) -> str:
-    """
-    تبدیل مقدار به متن امن.
-    """
-
     if value is None:
         return ""
 
@@ -80,27 +75,29 @@ def safe_text(value: Any) -> str:
 
 
 def normalize(value: Any) -> str:
-    """
-    نرمال‌سازی متن با Dictionary پتروشیمی.
-    """
-
     return normalize_petrochemical_text(
         safe_text(value)
     )
 
 
-def clamp(value: float, minimum: float = 0.0, maximum: float = 100.0) -> float:
-    """
-    محدود کردن عدد به بازه مشخص.
-    """
+def clamp(
+    value: float,
+    minimum: float = 0.0,
+    maximum: float = 100.0,
+) -> float:
 
-    return max(minimum, min(maximum, value))
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return minimum
+
+    return max(
+        minimum,
+        min(maximum, value),
+    )
 
 
-def decimal_value(value: Any) -> Decimal | None:
-    """
-    تبدیل امن مقدار به Decimal.
-    """
+def decimal_value(value: Any) -> Optional[Decimal]:
 
     if value is None:
         return None
@@ -110,128 +107,289 @@ def decimal_value(value: Any) -> Decimal | None:
 
     try:
         return Decimal(str(value))
-    except (InvalidOperation, ValueError, TypeError):
+    except (
+        InvalidOperation,
+        ValueError,
+        TypeError,
+    ):
         return None
 
 
-def extract_numbers(text: str) -> list[float]:
-    """
-    استخراج اعداد از متن.
+def safe_int(value: Any) -> Optional[int]:
 
-    مثال:
+    try:
+        if value is None:
+            return None
 
-        "۳ تا ۶ ماه"
-        "TRL 8"
-        "کاهش ۱۵ درصد"
+        return int(value)
 
-    """
+    except (TypeError, ValueError):
+        return None
 
-    if not text:
-        return []
 
-    # پشتیبانی از اعداد فارسی
-    translation = str.maketrans(
-        "۰۱۲۳۴۵۶۷۸۹",
-        "0123456789",
+def get_industry_name(obj) -> str:
+
+    industry = getattr(
+        obj,
+        "industry",
+        None,
     )
 
-    normalized = text.translate(translation)
+    if industry is None:
+        return ""
 
-    values = re.findall(
-        r"\d+(?:\.\d+)?",
-        normalized,
+    if hasattr(industry, "name"):
+        return safe_text(
+            industry.name
+        )
+
+    return safe_text(industry)
+
+
+def get_description(obj) -> str:
+
+    # Supply
+    description = getattr(
+        obj,
+        "description",
+        None,
     )
 
-    return [float(v) for v in values]
+    if description:
+        return safe_text(description)
 
-
-# ============================================================
-# Industry Matching
-# ============================================================
-
-def is_petrochemical_text(text: str) -> bool:
-    """
-    بررسی می‌کند آیا متن به حوزه پتروشیمی مربوط است یا خیر.
-    """
-
-    normalized_text = normalize(text)
-
-    if not normalized_text:
-        return False
-
-    for keyword in PETROCHEMICAL_INDUSTRY_KEYWORDS:
-
-        normalized_keyword = normalize(keyword)
-
-        if normalized_keyword in normalized_text:
-            return True
-
-    # اگر حداقل چند مفهوم تخصصی پتروشیمی وجود داشته باشد
-    concepts = get_petrochemical_concepts(normalized_text)
-
-    return len(concepts) >= 2
-
-
-def industry_match(need, supply) -> tuple[float, str]:
-    """
-    محاسبه انطباق صنعت.
-
-    فعلاً سیستم روی پتروشیمی متمرکز است.
-    """
-
-    need_industry = safe_text(
+    # Product
+    fields = [
         getattr(
-            getattr(need, "industry", None),
-            "name",
+            obj,
+            "short_description",
+            "",
+        ),
+        getattr(
+            obj,
+            "full_description",
+            "",
+        ),
+        getattr(
+            obj,
+            "problem_solved",
+            "",
+        ),
+        getattr(
+            obj,
+            "technical_specs",
+            "",
+        ),
+        getattr(
+            obj,
+            "competitive_advantage",
+            "",
+        ),
+    ]
+
+    return " ".join(
+        safe_text(value)
+        for value in fields
+        if safe_text(value)
+    )
+
+
+def get_category(obj) -> str:
+
+    return safe_text(
+        getattr(
+            obj,
+            "category",
             "",
         )
     )
 
-    supply_industry = safe_text(
-        getattr(
-            supply,
-            "industry",
-            "",
-        )
+
+def get_supply_type(obj) -> str:
+
+    value = getattr(
+        obj,
+        "supply_type",
+        None,
     )
 
-    need_industry_normalized = normalize(need_industry)
-    supply_industry_normalized = normalize(supply_industry)
+    if value:
+        return safe_text(value)
 
-    # هر دو صراحتاً پتروشیمی
-    if (
-        "پتروشیمی" in need_industry_normalized
-        and "پتروشیمی" in supply_industry_normalized
-    ):
-        return 100.0, "صنعت نیاز و عرضه هر دو پتروشیمی هستند"
+    value = getattr(
+        obj,
+        "category",
+        None,
+    )
 
-    # تطابق دقیق
-    if (
-        need_industry_normalized
-        and supply_industry_normalized
-        and need_industry_normalized == supply_industry_normalized
-    ):
-        return 100.0, "صنعت نیاز و عرضه یکسان است"
+    return safe_text(value)
 
-    # اگر Need پتروشیمی است ولی Supply صنعت دیگری دارد
-    if "پتروشیمی" in need_industry_normalized:
 
-        if supply_industry_normalized:
-            return 0.0, "صنعت عرضه با صنعت پتروشیمی تطابق ندارد"
+def get_trl(obj) -> Optional[int]:
 
-        return 40.0, "صنعت عرضه مشخص نشده است"
+    value = getattr(
+        obj,
+        "trl",
+        None,
+    )
 
-    return 50.0, "اطلاعات صنعت برای تطبیق کامل کافی نیست"
+    if value is None:
+        return None
+
+    return safe_int(value)
 
 
 # ============================================================
-# Concept Matching
+# LLM Client
+# ============================================================
+
+class OpenRouterLLM:
+
+    _instance = None
+
+    def __new__(cls):
+
+        if cls._instance is None:
+            cls._instance = super().__new__(
+                cls
+            )
+
+        return cls._instance
+
+    def __init__(self):
+
+        if getattr(
+            self,
+            "_initialized",
+            False,
+        ):
+            return
+
+        self._initialized = True
+        self._available = False
+        self._openai = None
+
+        self._check_availability()
+
+    def _check_availability(self):
+
+        if not OPENROUTER_API_KEY:
+
+            logger.warning(
+                "OPENROUTER_API_KEY is not configured."
+            )
+
+            return
+
+        try:
+
+            import openai
+
+            self._openai = openai
+            self._available = True
+
+            logger.info(
+                "OpenRouter LLM initialized. "
+                f"model={OPENROUTER_MODEL}"
+            )
+
+        except ImportError:
+
+            logger.exception(
+                "openai package is not installed."
+            )
+
+    def is_available(self) -> bool:
+
+        return (
+            self._available
+            and bool(
+                OPENROUTER_API_KEY
+            )
+        )
+
+    def generate(
+        self,
+        prompt: str,
+    ) -> Optional[str]:
+
+        if not self.is_available():
+            return None
+
+        try:
+
+            client = self._openai.OpenAI(
+                api_key=OPENROUTER_API_KEY,
+                base_url=OPENROUTER_BASE_URL,
+                timeout=30.0,
+            )
+
+            response = (
+                client.chat.completions.create(
+                    model=OPENROUTER_MODEL,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a strict "
+                                "matching engine. "
+                                "Return valid JSON only. "
+                                "Do not use markdown."
+                            ),
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt,
+                        },
+                    ],
+                    max_tokens=OPENROUTER_MAX_TOKENS,
+                    temperature=OPENROUTER_TEMPERATURE,
+                )
+            )
+
+            if not response.choices:
+                return None
+
+            content = (
+                response
+                .choices[0]
+                .message
+                .content
+            )
+
+            if not content:
+                return None
+
+            return content.strip()
+
+        except Exception as exc:
+
+            logger.exception(
+                "OpenRouter request failed: %s",
+                exc,
+            )
+
+            return None
+
+
+_llm_client = None
+
+
+def get_llm_client():
+
+    global _llm_client
+
+    if _llm_client is None:
+        _llm_client = OpenRouterLLM()
+
+    return _llm_client
+
+
+# ============================================================
+# Need Text
 # ============================================================
 
 def build_need_text(need) -> str:
-    """
-    ساخت متن جامع Need.
-    """
 
     fields = [
         getattr(need, "title", ""),
@@ -240,263 +398,165 @@ def build_need_text(need) -> str:
         getattr(need, "expected_outcome", ""),
         getattr(need, "constraints", ""),
         getattr(need, "evaluation_criteria", ""),
+        getattr(need, "timeline", ""),
     ]
 
-    industry = getattr(
-        getattr(need, "industry", None),
-        "name",
-        "",
-    )
+    industry = get_industry_name(need)
 
-    fields.append(industry)
+    if industry:
+        fields.append(industry)
 
     return " ".join(
-        safe_text(field)
-        for field in fields
-        if safe_text(field)
+        safe_text(value)
+        for value in fields
+        if safe_text(value)
     )
 
 
-def build_supply_text(supply) -> str:
-    """
-    ساخت متن جامع Supply.
-    """
+# ============================================================
+# Supply / Product Text
+# ============================================================
+
+def build_supply_text(product) -> str:
 
     fields = [
-        getattr(supply, "title", ""),
-        getattr(supply, "category", ""),
-        getattr(supply, "industry", ""),
-        getattr(supply, "technology", ""),
-        getattr(supply, "description", ""),
-        getattr(supply, "quantity", ""),
-        getattr(supply, "unit", ""),
+        getattr(product, "title", ""),
+        get_category(product),
+        get_industry_name(product),
+        getattr(product, "technology", ""),
+        get_description(product),
+        getattr(product, "quantity", ""),
+        getattr(product, "unit", ""),
+        getattr(product, "capacity", ""),
+        getattr(product, "pricing_model", ""),
+        getattr(product, "collaboration_terms", ""),
+        getattr(product, "ip_status", ""),
     ]
 
     return " ".join(
-        safe_text(field)
-        for field in fields
-        if safe_text(field)
+        safe_text(value)
+        for value in fields
+        if safe_text(value)
     )
 
 
-def concept_match(need, supply) -> tuple[float, list[str]]:
-    """
-    Matching مفهومی Need و Supply.
+# ============================================================
+# Concept Matching
+# ============================================================
 
-    از Dictionary پتروشیمی استفاده می‌کند.
-
-    مثال:
-
-        Need:
-            "بهینه سازی مصرف انرژی کوره"
-
-        Supply:
-            "سامانه هوشمند پایش کوره و مصرف سوخت"
-
-    مفاهیم مشترک:
-
-        furnace
-        energy
-        monitoring
-
-    """
-
-    need_text = build_need_text(need)
-    supply_text = build_supply_text(supply)
+def calculate_concept_score(
+    need_text: str,
+    product_text: str,
+) -> tuple[float, set]:
 
     need_concepts = set(
-        get_petrochemical_concepts(need_text)
-    )
-
-    supply_concepts = set(
-        get_petrochemical_concepts(supply_text)
-    )
-
-    if not need_concepts:
-        return 0.0, []
-
-    if not supply_concepts:
-        return 0.0, []
-
-    common = need_concepts.intersection(
-        supply_concepts
-    )
-
-    if not common:
-        return 0.0, []
-
-    # ضریب Jaccard
-    union = need_concepts.union(
-        supply_concepts
-    )
-
-    score = (
-        len(common) /
-        max(len(union), 1)
-    ) * 100
-
-    return clamp(score), sorted(common)
-
-
-# ============================================================
-# Text Similarity
-# ============================================================
-
-def text_tokenize(text: str) -> set[str]:
-    """
-    توکن‌سازی ساده برای Matching متنی.
-    """
-
-    normalized = normalize(text)
-
-    if not normalized:
-        return set()
-
-    tokens = re.findall(
-        r"[a-zA-Z0-9آ-ی]+",
-        normalized,
-    )
-
-    return {
-        token
-        for token in tokens
-        if len(token) >= 2
-    }
-
-
-def text_similarity(need, supply) -> float:
-    """
-    شباهت متنی ساده.
-
-    این بخش جایگزین Dictionary نیست.
-    Dictionary وزن بیشتری دارد.
-    """
-
-    need_tokens = text_tokenize(
-        build_need_text(need)
-    )
-
-    supply_tokens = text_tokenize(
-        build_supply_text(supply)
-    )
-
-    if not need_tokens or not supply_tokens:
-        return 0.0
-
-    intersection = need_tokens.intersection(
-        supply_tokens
-    )
-
-    if not intersection:
-        return 0.0
-
-    # برای Need محوریت بیشتری در نظر می‌گیریم
-    score = (
-        len(intersection) /
-        len(need_tokens)
-    ) * 100
-
-    return clamp(score)
-
-
-# ============================================================
-# Supply Type Matching
-# ============================================================
-
-def type_match(need, supply) -> float:
-    """
-    بررسی نوع عرضه.
-
-    Supply:
-        product
-        service
-
-    Need مدل فعلی نوع مستقیم ندارد.
-    بنابراین از متن Need استنباط می‌شود.
-    """
-
-    need_text = normalize(
-        build_need_text(need)
-    )
-
-    supply_type = normalize(
-        getattr(
-            supply,
-            "supply_type",
-            "",
+        get_petrochemical_concepts(
+            need_text
         )
     )
 
-    if not supply_type:
+    product_concepts = set(
+        get_petrochemical_concepts(
+            product_text
+        )
+    )
+
+    if not need_concepts:
+        return 50.0, set()
+
+    if not product_concepts:
+        return 0.0, set()
+
+    common = (
+        need_concepts
+        .intersection(
+            product_concepts
+        )
+    )
+
+    union = (
+        need_concepts
+        .union(
+            product_concepts
+        )
+    )
+
+    score = (
+        len(common)
+        / max(
+            len(union),
+            1,
+        )
+    ) * 100
+
+    return clamp(score), common
+
+
+# ============================================================
+# Industry Score
+# ============================================================
+
+def calculate_industry_score(
+    need,
+    product,
+) -> float:
+
+    need_industry = normalize(
+        get_industry_name(need)
+    )
+
+    product_industry = normalize(
+        get_industry_name(product)
+    )
+
+    if not need_industry:
         return 50.0
 
-    service_keywords = [
-        "مشاوره",
-        "خدمات",
-        "خدمت",
-        "consulting",
-        "consultancy",
-        "service",
-    ]
+    if not product_industry:
+        return 30.0
 
-    product_keywords = [
-        "سامانه",
-        "سیستم",
-        "تجهیزات",
-        "دستگاه",
-        "محصول",
-        "تجهیز",
-        "system",
-        "equipment",
-        "device",
-        "product",
-    ]
+    if need_industry == product_industry:
+        return 100.0
 
-    need_is_service = any(
-        normalize(keyword) in need_text
-        for keyword in service_keywords
+    need_words = set(
+        need_industry.split()
     )
 
-    need_is_product = any(
-        normalize(keyword) in need_text
-        for keyword in product_keywords
+    product_words = set(
+        product_industry.split()
     )
 
-    if supply_type == "service":
-        if need_is_service:
-            return 100.0
+    overlap = (
+        need_words
+        .intersection(
+            product_words
+        )
+    )
 
-        if need_is_product:
-            return 40.0
+    if overlap:
+        return 75.0
 
-        return 70.0
+    if (
+        "پتروشیمی" in need_industry
+        and "پتروشیمی"
+        in product_industry
+    ):
+        return 90.0
 
-    if supply_type == "product":
-        if need_is_product:
-            return 100.0
+    if "پتروشیمی" in need_industry:
+        return 25.0
 
-        if need_is_service:
-            return 40.0
-
-        return 70.0
-
-    return 50.0
+    return 40.0
 
 
 # ============================================================
-# Budget Matching
+# Budget
 # ============================================================
 
-def budget_match(need, supply) -> tuple[float, str]:
-    """
-    بررسی سازگاری قیمت عرضه با بودجه Need.
-
-    Need:
-        budget
-
-    Supply:
-        price
-    """
+def calculate_budget_score(
+    need,
+    product,
+) -> float:
 
     budget = decimal_value(
         getattr(
@@ -508,660 +568,1081 @@ def budget_match(need, supply) -> tuple[float, str]:
 
     price = decimal_value(
         getattr(
-            supply,
+            product,
             "price",
             None,
         )
     )
 
-    if budget is None or budget <= 0:
-        return 60.0, "بودجه نیاز مشخص نشده است"
+    if budget is None or price is None:
+        return 50.0
 
-    if price is None:
-        return 50.0, "قیمت عرضه مشخص نشده است"
+    if budget <= 0:
+        return 50.0
 
-    # قیمت کمتر یا مساوی بودجه
     if price <= budget:
-        return 100.0, "قیمت عرضه در محدوده بودجه نیاز است"
+        return 100.0
 
-    # درصد تجاوز از بودجه
-    excess_ratio = float(
-        (price - budget) / budget
+    excess = float(
+        (price - budget)
+        / budget
     )
 
-    if excess_ratio <= 0.10:
-        return 85.0, "قیمت کمی بالاتر از بودجه نیاز است"
+    if excess <= 0.10:
+        return 85.0
 
-    if excess_ratio <= 0.25:
-        return 65.0, "قیمت عرضه حدود ۱۰ تا ۲۵ درصد بالاتر از بودجه است"
+    if excess <= 0.25:
+        return 65.0
 
-    if excess_ratio <= 0.50:
-        return 40.0, "قیمت عرضه به‌طور محسوسی بالاتر از بودجه است"
+    if excess <= 0.50:
+        return 40.0
 
-    return 15.0, "قیمت عرضه بسیار بالاتر از بودجه نیاز است"
+    return 15.0
 
 
 # ============================================================
-# TRL Matching
+# TRL
 # ============================================================
 
-def trl_match(need, supply) -> tuple[float, str]:
-    """
-    تطبیق TRL عرضه.
+def calculate_trl_score(
+    product,
+) -> float:
 
-    Need فعلاً TRL ندارد.
-    بنابراین برای پتروشیمی، TRL بالاتر
-    به‌عنوان ریسک کمتر در نظر گرفته می‌شود.
-    """
+    trl = get_trl(product)
 
-    trl_raw = getattr(
-        supply,
-        "trl",
-        None,
-    )
-
-    if trl_raw is None:
-        return 50.0, "TRL عرضه مشخص نشده است"
-
-    try:
-        trl = int(
-            str(trl_raw).strip()
-        )
-    except (ValueError, TypeError):
-        return 50.0, "TRL عرضه قابل تشخیص نیست"
+    if trl is None:
+        return 50.0
 
     if trl >= 9:
-        return 100.0, "فناوری در بالاترین سطح آمادگی قرار دارد"
+        return 100.0
 
-    if trl == 8:
-        return 95.0, "فناوری در سطح بالای آمادگی قرار دارد"
+    if trl >= 7:
+        return 85.0
 
-    if trl == 7:
-        return 85.0, "فناوری برای کاربرد صنعتی مناسب است"
+    if trl >= 5:
+        return 65.0
 
-    if trl == 6:
-        return 70.0, "فناوری در مرحله نزدیک به کاربرد صنعتی است"
+    if trl >= 3:
+        return 45.0
 
-    if trl == 5:
-        return 50.0, "فناوری هنوز به بلوغ صنعتی کامل نرسیده است"
-
-    return 30.0, "TRL پایین است و ریسک بلوغ فناوری بالاتر است"
+    return 25.0
 
 
 # ============================================================
-# Supply Availability / Status
+# Type
 # ============================================================
 
-def availability_match(supply) -> tuple[float, str]:
-    """
-    بررسی وضعیت عرضه.
-    """
+def calculate_type_score(
+    need,
+    product,
+) -> float:
 
-    status = safe_text(
+    need_type = normalize(
         getattr(
-            supply,
+            need,
+            "need_type",
+            "",
+        )
+    )
+
+    product_type = normalize(
+        get_supply_type(product)
+    )
+
+    if not need_type or not product_type:
+        return 50.0
+
+    if need_type == product_type:
+        return 100.0
+
+    return 50.0
+
+
+# ============================================================
+# Availability
+# ============================================================
+
+def calculate_availability_score(
+    product,
+) -> float:
+
+    status = normalize(
+        getattr(
+            product,
             "status",
             "",
         )
     )
 
-    status = status.lower()
+    if not status:
+        return 50.0
 
-    if status == "published":
-        return 100.0, "عرضه منتشر شده و آماده ارائه است"
+    available_terms = [
+        "available",
+        "published",
+        "approved",
+        "active",
+        "موجود",
+        "فعال",
+        "منتشر",
+        "تایید شده",
+        "تأیید شده",
+        "آماده",
+    ]
 
-    if status == "approved":
-        return 95.0, "عرضه تأیید شده است"
+    for term in available_terms:
 
-    if status == "submitted":
-        return 75.0, "عرضه برای بررسی ارسال شده است"
+        if normalize(term) in status:
+            return 100.0
 
-    if status == "evaluating":
-        return 60.0, "عرضه در حال ارزیابی است"
+    unavailable_terms = [
+        "unavailable",
+        "inactive",
+        "draft",
+        "rejected",
+        "suspended",
+        "ناموجود",
+        "غیرفعال",
+        "پیش نویس",
+        "رد شده",
+        "تعلیق",
+    ]
 
-    if status == "pending":
-        return 50.0, "عرضه هنوز در انتظار بررسی است"
+    for term in unavailable_terms:
 
-    if status == "draft":
-        return 25.0, "عرضه هنوز در وضعیت پیش‌نویس است"
+        if normalize(term) in status:
+            return 20.0
 
-    if status == "suspended":
-        return 10.0, "عرضه در وضعیت تعلیق قرار دارد"
-
-    if status == "rejected":
-        return 0.0, "عرضه رد شده است"
-
-    return 50.0, "وضعیت عرضه مشخص نیست"
+    return 50.0
 
 
 # ============================================================
 # Data Quality
 # ============================================================
 
-def data_quality_score(supply) -> tuple[float, list[str]]:
-    """
-    ارزیابی کیفیت اطلاعات Supply.
+def calculate_data_quality(
+    product,
+) -> float:
 
-    اطلاعات کامل‌تر باعث کاهش عدم قطعیت Matching می‌شود.
-    """
-
-    fields = {
-        "title": getattr(supply, "title", None),
-        "category": getattr(supply, "category", None),
-        "industry": getattr(supply, "industry", None),
-        "technology": getattr(supply, "technology", None),
-        "description": getattr(supply, "description", None),
-        "quantity": getattr(supply, "quantity", None),
-        "unit": getattr(supply, "unit", None),
-        "price": getattr(supply, "price", None),
-        "trl": getattr(supply, "trl", None),
-    }
-
-    important_fields = [
-        "title",
-        "category",
-        "industry",
-        "description",
-        "price",
-        "trl",
+    fields = [
+        getattr(
+            product,
+            "title",
+            None,
+        ),
+        get_description(product),
+        get_industry_name(product),
+        get_category(product),
+        getattr(
+            product,
+            "price",
+            None,
+        ),
+        getattr(
+            product,
+            "trl",
+            None,
+        ),
     ]
 
-    filled = 0
-    missing = []
-
-    for field in important_fields:
-
-        value = fields.get(field)
-
-        if value is not None and safe_text(value):
-            filled += 1
-        else:
-            missing.append(field)
-
-    score = (
-        filled /
-        len(important_fields)
-    ) * 100
-
-    return clamp(score), missing
-
-
-# ============================================================
-# Risk Calculation
-# ============================================================
-
-def calculate_risk_level(
-    match_percentage: float,
-    budget_score: float,
-    trl_score: float,
-    availability_score: float,
-    data_quality: float,
-    industry_score: float,
-    concept_score: float,
-) -> tuple[str, list[str]]:
-    """
-    محاسبه Rule-Based Risk.
-
-    خروجی:
-
-        low
-        medium
-        high
-
-    علاوه بر سطح ریسک، دلایل ریسک نیز برگردانده می‌شود.
-    """
-
-    risk_points = 0
-    reasons = []
-
-    # --------------------------------------------------------
-    # Overall Match
-    # --------------------------------------------------------
-
-    if match_percentage < 45:
-        risk_points += 4
-        reasons.append(
-            "درصد انطباق کلی پایین است"
-        )
-
-    elif match_percentage < 60:
-        risk_points += 2
-        reasons.append(
-            "درصد انطباق کلی متوسط رو به پایین است"
-        )
-
-    elif match_percentage < 75:
-        risk_points += 1
-
-    # --------------------------------------------------------
-    # Industry
-    # --------------------------------------------------------
-
-    if industry_score < 50:
-        risk_points += 4
-        reasons.append(
-            "عدم تطابق مناسب صنعت"
-        )
-
-    elif industry_score < 80:
-        risk_points += 2
-        reasons.append(
-            "اطلاعات صنعت نیاز و عرضه کاملاً هم‌راستا نیست"
-        )
-
-    # --------------------------------------------------------
-    # Concept
-    # --------------------------------------------------------
-
-    if concept_score < 30:
-        risk_points += 3
-        reasons.append(
-            "مفاهیم تخصصی مشترک کمی شناسایی شده است"
-        )
-
-    elif concept_score < 50:
-        risk_points += 1
-        reasons.append(
-            "تطابق مفهومی متوسط است"
-        )
-
-    # --------------------------------------------------------
-    # Budget
-    # --------------------------------------------------------
-
-    if budget_score < 30:
-        risk_points += 3
-        reasons.append(
-            "قیمت عرضه فاصله زیادی با بودجه دارد"
-        )
-
-    elif budget_score < 60:
-        risk_points += 2
-        reasons.append(
-            "قیمت عرضه با بودجه کاملاً سازگار نیست"
-        )
-
-    elif budget_score < 80:
-        risk_points += 1
-
-    # --------------------------------------------------------
-    # TRL
-    # --------------------------------------------------------
-
-    if trl_score < 40:
-        risk_points += 3
-        reasons.append(
-            "TRL پایین است"
-        )
-
-    elif trl_score < 60:
-        risk_points += 2
-        reasons.append(
-            "بلوغ فناوری هنوز محدود است"
-        )
-
-    elif trl_score < 80:
-        risk_points += 1
-
-    # --------------------------------------------------------
-    # Availability
-    # --------------------------------------------------------
-
-    if availability_score < 30:
-        risk_points += 3
-        reasons.append(
-            "وضعیت عرضه برای شروع همکاری مناسب نیست"
-        )
-
-    elif availability_score < 60:
-        risk_points += 1
-        reasons.append(
-            "وضعیت عرضه هنوز کاملاً قطعی نیست"
-        )
-
-    # --------------------------------------------------------
-    # Data Quality
-    # --------------------------------------------------------
-
-    if data_quality < 40:
-        risk_points += 3
-        reasons.append(
-            "اطلاعات عرضه ناقص است"
-        )
-
-    elif data_quality < 65:
-        risk_points += 1
-        reasons.append(
-            "برخی اطلاعات مهم عرضه ثبت نشده است"
-        )
-
-    # --------------------------------------------------------
-    # Final Decision
-    # --------------------------------------------------------
-
-    if risk_points >= 8:
-        return "high", reasons
-
-    if risk_points >= 4:
-        return "medium", reasons
-
-    return "low", reasons
-
-
-# ============================================================
-# Match Reason
-# ============================================================
-
-def concept_label(concept: str) -> str:
-    """
-    تبدیل Concept استاندارد به نام فارسی قابل نمایش.
-    """
-
-    labels = {
-        "distillation": "تقطیر",
-        "fractionation": "تفکیک",
-        "separation": "جداسازی",
-        "furnace": "کوره",
-        "heat_exchanger": "مبدل حرارتی",
-        "compressor": "کمپرسور",
-        "pump": "پمپ",
-        "reactor": "راکتور",
-        "boiler": "بویلر",
-        "cooling_system": "سیستم خنک‌کننده",
-        "refinery": "پالایشگاه",
-        "petrochemical": "پتروشیمی",
-        "process_unit": "واحد فرآیندی",
-        "production_line": "خط تولید",
-        "energy": "انرژی",
-        "combustion": "احتراق",
-        "steam": "بخار",
-        "process_control": "کنترل فرآیند",
-        "instrumentation": "ابزار دقیق",
-        "monitoring": "پایش",
-        "ai": "هوش مصنوعی",
-        "digital_twin": "دوقلوی دیجیتال",
-        "digitalization": "دیجیتالی‌سازی",
-        "predictive_maintenance": "نگهداری پیش‌بینانه",
-        "fault_detection": "تشخیص خرابی",
-        "optimization": "بهینه‌سازی",
-        "emission": "آلایندگی",
-        "carbon": "کربن",
-        "safety": "ایمنی",
-        "hazard": "خطر",
-        "maintenance": "نگهداری و تعمیرات",
-        "equipment": "تجهیزات",
-        "polymer": "پلیمر",
-        "ethylene": "اتیلن",
-        "propylene": "پروپیلن",
-        "methanol": "متانول",
-        "ammonia": "آمونیاک",
-        "production": "تولید",
-        "efficiency": "راندمان",
-        "capacity": "ظرفیت",
-    }
-
-    return labels.get(
-        concept,
-        concept.replace("_", " "),
+    filled = sum(
+        1
+        for field in fields
+        if safe_text(field)
     )
 
-
-def generate_match_reason(
-    concepts: list[str],
-    industry_score: float,
-    budget_reason: str,
-    trl_reason: str,
-    availability_reason: str,
-) -> str:
-    """
-    تولید دلیل قابل فهم برای نمایش در Frontend.
-    """
-
-    reasons = []
-
-    if concepts:
-        labels = [
-            concept_label(concept)
-            for concept in concepts[:5]
-        ]
-
-        reasons.append(
-            "تطابق مفهومی در حوزه "
-            + "، ".join(labels)
-        )
-
-    if industry_score >= 90:
-        reasons.append(
-            "هم‌خوانی کامل با صنعت پتروشیمی"
-        )
-
-    if budget_reason:
-        reasons.append(
-            budget_reason
-        )
-
-    if trl_reason:
-        reasons.append(
-            trl_reason
-        )
-
-    if availability_reason:
-        reasons.append(
-            availability_reason
-        )
-
-    return "، ".join(reasons)
-
-
-# ============================================================
-# Main Matching Function
-# ============================================================
-
-def calculate_match(need, supply) -> dict:
-    """
-    محاسبه کامل Matching بین یک Need و یک Supply.
-
-    خروجی:
-
-    {
-        "match_percentage": 84,
-        "match_reason": "...",
-        "risk_level": "low",
-        "risk_reasons": [...],
-        "concepts": [...],
-        "scores": {...}
-    }
-    """
-
-    # --------------------------------------------------------
-    # Industry
-    # --------------------------------------------------------
-
-    industry_score, industry_reason = industry_match(
-        need,
-        supply,
-    )
-
-    # --------------------------------------------------------
-    # Concepts
-    # --------------------------------------------------------
-
-    concept_score, concepts = concept_match(
-        need,
-        supply,
-    )
-
-    # --------------------------------------------------------
-    # Text
-    # --------------------------------------------------------
-
-    text_score = text_similarity(
-        need,
-        supply,
-    )
-
-    # --------------------------------------------------------
-    # Type
-    # --------------------------------------------------------
-
-    type_score = type_match(
-        need,
-        supply,
-    )
-
-    # --------------------------------------------------------
-    # Budget
-    # --------------------------------------------------------
-
-    budget_score, budget_reason = budget_match(
-        need,
-        supply,
-    )
-
-    # --------------------------------------------------------
-    # TRL
-    # --------------------------------------------------------
-
-    trl_score, trl_reason = trl_match(
-        need,
-        supply,
-    )
-
-    # --------------------------------------------------------
-    # Availability
-    # --------------------------------------------------------
-
-    availability_score, availability_reason = (
-        availability_match(supply)
-    )
-
-    # --------------------------------------------------------
-    # Data Quality
-    # --------------------------------------------------------
-
-    quality_score, missing_fields = (
-        data_quality_score(supply)
-    )
-
-    # --------------------------------------------------------
-    # Weighted Score
-    # --------------------------------------------------------
-
-    score = (
-        industry_score
-        * MATCH_WEIGHTS["industry"]
-        +
-        concept_score
-        * MATCH_WEIGHTS["concept"]
-        +
-        text_score
-        * MATCH_WEIGHTS["text"]
-        +
-        budget_score
-        * MATCH_WEIGHTS["budget"]
-        +
-        trl_score
-        * MATCH_WEIGHTS["trl"]
-        +
-        type_score
-        * MATCH_WEIGHTS["type"]
-        +
-        availability_score
-        * MATCH_WEIGHTS["availability"]
-        +
-        quality_score
-        * MATCH_WEIGHTS["data_quality"]
-    )
-
-    score = round(
-        clamp(score),
+    return round(
+        (
+            filled
+            / len(fields)
+        ) * 100,
         2,
     )
 
-    # --------------------------------------------------------
-    # Risk
-    # --------------------------------------------------------
 
-    risk_level, risk_reasons = calculate_risk_level(
-        match_percentage=score,
-        budget_score=budget_score,
-        trl_score=trl_score,
-        availability_score=availability_score,
-        data_quality=quality_score,
-        industry_score=industry_score,
-        concept_score=concept_score,
+# ============================================================
+# Text
+# ============================================================
+
+def calculate_text_score(
+    need_text: str,
+    product_text: str,
+) -> float:
+
+    need_words = set(
+        normalize(
+            need_text
+        ).split()
     )
 
-    # --------------------------------------------------------
-    # Reason
-    # --------------------------------------------------------
-
-    match_reason = generate_match_reason(
-        concepts=concepts,
-        industry_score=industry_score,
-        budget_reason=budget_reason,
-        trl_reason=trl_reason,
-        availability_reason=availability_reason,
+    product_words = set(
+        normalize(
+            product_text
+        ).split()
     )
+
+    if (
+        not need_words
+        or not product_words
+    ):
+        return 0.0
+
+    common = (
+        need_words
+        .intersection(
+            product_words
+        )
+    )
+
+    score = (
+        len(common)
+        / max(
+            len(need_words),
+            1,
+        )
+    ) * 100
+
+    return clamp(score)
+
+
+# ============================================================
+# LLM Prompt
+# ============================================================
+
+def build_llm_prompt(
+    need_text: str,
+    product_text: str,
+) -> str:
+
+    return f"""
+Analyze compatibility between a BUYER NEED and a PRODUCT/SUPPLY.
+
+Rules:
+- Judge actual technical and business compatibility.
+- Do not rely only on shared words.
+- Do not invent facts.
+- Missing information must reduce confidence.
+- Return ONLY valid JSON.
+- All scores must be between 0 and 100.
+- The reason must be in Persian.
+
+BUYER NEED:
+{need_text[:2500]}
+
+PRODUCT/SUPPLY:
+{product_text[:2500]}
+
+Return exactly:
+
+{{
+  "semantic_match": 0,
+  "requirement_match": 0,
+  "concept_match": 0,
+  "confidence": 0,
+  "matched_requirements": [],
+  "missing_requirements": [],
+  "risk_factors": [],
+  "reason": "",
+  "recommended_actions": []
+}}
+
+semantic_match:
+Meaning-level compatibility.
+
+requirement_match:
+Compatibility with explicit requirements.
+
+concept_match:
+Technical/domain concept compatibility.
+
+confidence:
+Confidence based only on provided information.
+
+matched_requirements:
+Requirements that appear satisfied.
+
+missing_requirements:
+Requirements that cannot be confirmed.
+
+risk_factors:
+Important risks or uncertainties.
+
+reason:
+Short Persian explanation.
+
+recommended_actions:
+Useful next steps.
+"""
+
+
+# ============================================================
+# JSON Extraction
+# ============================================================
+
+def extract_json(
+    response: str,
+) -> Optional[dict]:
+
+    if not response:
+        return None
+
+    text = response.strip()
+
+    text = re.sub(
+        r"```(?:json)?",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    text = text.replace(
+        "```",
+        "",
+    ).strip()
+
+    try:
+
+        data = json.loads(text)
+
+        if isinstance(data, dict):
+            return data
+
+    except json.JSONDecodeError:
+        pass
+
+    start = text.find("{")
+    end = text.rfind("}")
+
+    if start == -1 or end == -1:
+        return None
+
+    candidate = text[
+        start:end + 1
+    ]
+
+    try:
+
+        data = json.loads(
+            candidate
+        )
+
+        if isinstance(data, dict):
+            return data
+
+    except json.JSONDecodeError:
+        pass
+
+    candidate = re.sub(
+        r",\s*([}\]])",
+        r"\1",
+        candidate,
+    )
+
+    try:
+
+        data = json.loads(
+            candidate
+        )
+
+        if isinstance(data, dict):
+            return data
+
+    except json.JSONDecodeError:
+        return None
+
+    return None
+
+
+# ============================================================
+# LLM Analysis
+# ============================================================
+
+def llm_analyze_match(
+    need_text: str,
+    product_text: str,
+) -> Optional[dict]:
+
+    client = get_llm_client()
+
+    if not client.is_available():
+
+        logger.warning(
+            "LLM unavailable. "
+            "Using deterministic matcher."
+        )
+
+        return None
+
+    prompt = build_llm_prompt(
+        need_text,
+        product_text,
+    )
+
+    logger.info(
+        "Sending matching request to "
+        "OpenRouter. model=%s",
+        OPENROUTER_MODEL,
+    )
+
+    response = client.generate(
+        prompt
+    )
+
+    if not response:
+
+        logger.warning(
+            "LLM returned no response."
+        )
+
+        return None
+
+    data = extract_json(
+        response
+    )
+
+    if not data:
+
+        logger.warning(
+            "Could not parse LLM JSON."
+        )
+
+        return None
 
     return {
-        "match_percentage": score,
+        "semantic_match": clamp(
+            data.get(
+                "semantic_match",
+                50,
+            )
+        ),
+        "requirement_match": clamp(
+            data.get(
+                "requirement_match",
+                50,
+            )
+        ),
+        "concept_match": clamp(
+            data.get(
+                "concept_match",
+                50,
+            )
+        ),
+        "confidence": clamp(
+            data.get(
+                "confidence",
+                50,
+            )
+        ),
+        "matched_requirements": (
+            data.get(
+                "matched_requirements",
+                [],
+            )
+            if isinstance(
+                data.get(
+                    "matched_requirements",
+                    [],
+                ),
+                list,
+            )
+            else []
+        ),
+        "missing_requirements": (
+            data.get(
+                "missing_requirements",
+                [],
+            )
+            if isinstance(
+                data.get(
+                    "missing_requirements",
+                    [],
+                ),
+                list,
+            )
+            else []
+        ),
+        "risk_factors": (
+            data.get(
+                "risk_factors",
+                [],
+            )
+            if isinstance(
+                data.get(
+                    "risk_factors",
+                    [],
+                ),
+                list,
+            )
+            else []
+        ),
+        "reason": safe_text(
+            data.get(
+                "reason",
+                "",
+            )
+        ),
+        "recommended_actions": (
+            data.get(
+                "recommended_actions",
+                [],
+            )
+            if isinstance(
+                data.get(
+                    "recommended_actions",
+                    [],
+                ),
+                list,
+            )
+            else []
+        ),
+    }
 
-        "match_reason": match_reason,
 
-        "risk_level": risk_level,
+# ============================================================
+# Final Score
+# ============================================================
 
-        "risk_reasons": risk_reasons,
+def calculate_final_score(
+    scores: dict,
+) -> float:
 
-        "concepts": concepts,
+    weighted_score = 0.0
 
-        "concept_labels": [
-            concept_label(concept)
-            for concept in concepts
-        ],
+    for name, weight in MATCH_WEIGHTS.items():
 
-        "scores": {
-            "industry": round(
-                industry_score,
-                2,
-            ),
-            "concept": round(
-                concept_score,
-                2,
-            ),
-            "text": round(
-                text_score,
-                2,
-            ),
-            "budget": round(
-                budget_score,
-                2,
-            ),
-            "trl": round(
-                trl_score,
-                2,
-            ),
-            "type": round(
-                type_score,
-                2,
-            ),
-            "availability": round(
-                availability_score,
-                2,
-            ),
-            "data_quality": round(
-                quality_score,
-                2,
-            ),
-        },
+        weighted_score += (
+            float(
+                scores.get(
+                    name,
+                    50.0,
+                )
+            )
+            * weight
+        )
 
-        "details": {
-            "industry_reason": industry_reason,
-            "budget_reason": budget_reason,
-            "trl_reason": trl_reason,
-            "availability_reason": availability_reason,
-            "missing_fields": missing_fields,
-        },
+    return round(
+        clamp(weighted_score),
+        2,
+    )
+
+
+# ============================================================
+# Risk
+# ============================================================
+
+def calculate_risk(
+    final_score: float,
+    scores: dict,
+    llm_data: Optional[dict],
+) -> tuple[str, list[str]]:
+
+    reasons = []
+    points = 0
+
+    if final_score < 30:
+
+        points += 4
+
+        reasons.append(
+            "درصد تطابق کلی بسیار پایین است"
+        )
+
+    elif final_score < 45:
+
+        points += 3
+
+        reasons.append(
+            "درصد تطابق کلی پایین است"
+        )
+
+    elif final_score < 60:
+
+        points += 2
+
+        reasons.append(
+            "درصد تطابق متوسط یا پایین است"
+        )
+
+    elif final_score < 75:
+
+        points += 1
+
+    if scores["industry"] < 40:
+
+        points += 2
+
+        reasons.append(
+            "تطابق صنعت ضعیف است"
+        )
+
+    if scores["budget"] < 40:
+
+        points += 2
+
+        reasons.append(
+            "قیمت محصول فاصله زیادی با بودجه دارد"
+        )
+
+    if scores["trl"] < 40:
+
+        points += 2
+
+        reasons.append(
+            "سطح آمادگی فناوری پایین است"
+        )
+
+    if llm_data:
+
+        for risk in llm_data.get(
+            "risk_factors",
+            [],
+        )[:3]:
+
+            if safe_text(risk):
+
+                reasons.append(
+                    safe_text(risk)
+                )
+
+        if (
+            llm_data.get(
+                "confidence",
+                50,
+            )
+            < 40
+        ):
+
+            points += 1
+
+            reasons.append(
+                "اطمینان مدل نسبت به اطلاعات موجود پایین است"
+            )
+
+    if points >= 8:
+
+        level = "high"
+
+    elif points >= 4:
+
+        level = "medium"
+
+    else:
+
+        level = "low"
+
+    if not reasons:
+
+        reasons.append(
+            "ریسک قابل توجهی در اطلاعات موجود شناسایی نشد"
+        )
+
+    return level, reasons
+
+
+# ============================================================
+# Main Matching
+# ============================================================
+
+def calculate_match(
+    need,
+    product,
+) -> dict:
+
+    need_text = build_need_text(
+        need
+    )
+
+    product_text = build_supply_text(
+        product
+    )
+
+    concept_score, common_concepts = (
+        calculate_concept_score(
+            need_text,
+            product_text,
+        )
+    )
+
+    industry_score = (
+        calculate_industry_score(
+            need,
+            product,
+        )
+    )
+
+    budget_score = (
+        calculate_budget_score(
+            need,
+            product,
+        )
+    )
+
+    trl_score = (
+        calculate_trl_score(
+            product,
+        )
+    )
+
+    type_score = (
+        calculate_type_score(
+            need,
+            product,
+        )
+    )
+
+    availability_score = (
+        calculate_availability_score(
+            product,
+        )
+    )
+
+    quality_score = (
+        calculate_data_quality(
+            product,
+        )
+    )
+
+    text_score = (
+        calculate_text_score(
+            need_text,
+            product_text,
+        )
+    )
+
+    llm_data = None
+
+    if (
+        len(need_text) >= 10
+        and len(product_text) >= 10
+    ):
+
+        try:
+
+            llm_data = llm_analyze_match(
+                need_text,
+                product_text,
+            )
+
+        except Exception:
+
+            logger.exception(
+                "Unexpected LLM matching error."
+            )
+
+            llm_data = None
+
+    if llm_data:
+
+        concept_score = round(
+            (
+                concept_score * 0.35
+                + llm_data[
+                    "concept_match"
+                ] * 0.65
+            ),
+            2,
+        )
+
+        text_score = round(
+            (
+                text_score * 0.35
+                + llm_data[
+                    "semantic_match"
+                ] * 0.65
+            ),
+            2,
+        )
+
+        text_score = round(
+            (
+                text_score * 0.70
+                + llm_data[
+                    "requirement_match"
+                ] * 0.30
+            ),
+            2,
+        )
+
+    scores = {
+        "industry": round(
+            industry_score,
+            2,
+        ),
+        "concept": round(
+            concept_score,
+            2,
+        ),
+        "text": round(
+            text_score,
+            2,
+        ),
+        "budget": round(
+            budget_score,
+            2,
+        ),
+        "trl": round(
+            trl_score,
+            2,
+        ),
+        "type": round(
+            type_score,
+            2,
+        ),
+        "availability": round(
+            availability_score,
+            2,
+        ),
+        "data_quality": round(
+            quality_score,
+            2,
+        ),
+    }
+
+    final_score = calculate_final_score(
+        scores
+    )
+
+    risk_level, risk_reasons = (
+        calculate_risk(
+            final_score,
+            scores,
+            llm_data,
+        )
+    )
+
+    concepts = list(
+        common_concepts
+    )
+
+    concept_labels = [
+        safe_text(
+            concept
+        ).replace(
+            "_",
+            " ",
+        )
+        for concept in concepts
+    ]
+
+    if llm_data and llm_data.get(
+        "reason"
+    ):
+
+        match_reason = llm_data[
+            "reason"
+        ]
+
+    elif concepts:
+
+        match_reason = (
+            "تطابق مفهومی در حوزه‌های: "
+            + ", ".join(
+                concept_labels[:5]
+            )
+        )
+
+    elif final_score >= 70:
+
+        match_reason = (
+            "تطابق مناسب بر اساس "
+            "معیارهای ساختاری و محتوایی"
+        )
+
+    elif final_score >= 50:
+
+        match_reason = (
+            "تطابق نسبی بر اساس "
+            "اطلاعات موجود"
+        )
+
+    else:
+
+        match_reason = (
+            "تطابق محدود بر اساس "
+            "اطلاعات موجود"
+        )
+
+    recommended_actions = []
+
+    if llm_data:
+
+        recommended_actions.extend(
+            [
+                safe_text(action)
+                for action in llm_data.get(
+                    "recommended_actions",
+                    [],
+                )
+                if safe_text(action)
+            ][:5]
+        )
+
+        for missing in llm_data.get(
+            "missing_requirements",
+            [],
+        )[:3]:
+
+            if safe_text(missing):
+
+                recommended_actions.append(
+                    f"بررسی الزامات: {safe_text(missing)}"
+                )
+
+    if not recommended_actions:
+
+        if budget_score < 60:
+
+            recommended_actions.append(
+                "بررسی امکان مذاکره درباره قیمت"
+            )
+
+        if trl_score < 60:
+
+            recommended_actions.append(
+                "بررسی سطح آمادگی فناوری محصول"
+            )
+
+        if quality_score < 60:
+
+            recommended_actions.append(
+                "تکمیل اطلاعات عرضه توسط فروشنده"
+            )
+
+    details = {
+        "industry_reason":
+            "امتیاز صنعت بر اساس تطابق صنعت Need و Supply محاسبه شده است.",
+
+        "budget_reason":
+            "امتیاز بودجه بر اساس مقایسه بودجه نیاز و قیمت عرضه محاسبه شده است.",
+
+        "trl_reason":
+            "امتیاز TRL بر اساس سطح آمادگی فناوری عرضه محاسبه شده است.",
+
+        "availability_reason":
+            "امتیاز دسترس‌پذیری بر اساس وضعیت عرضه محاسبه شده است.",
+
+        "missing_fields": [],
+    }
+
+    if not safe_text(
+        getattr(
+            product,
+            "description",
+            None,
+        )
+    ) and not get_description(product):
+
+        details[
+            "missing_fields"
+        ].append(
+            "description"
+        )
+
+    if not get_industry_name(product):
+
+        details[
+            "missing_fields"
+        ].append(
+            "industry"
+        )
+
+    if getattr(
+        product,
+        "price",
+        None,
+    ) is None:
+
+        details[
+            "missing_fields"
+        ].append(
+            "price"
+        )
+
+    if getattr(
+        product,
+        "trl",
+        None,
+    ) in (
+        None,
+        "",
+    ):
+
+        details[
+            "missing_fields"
+        ].append(
+            "trl"
+        )
+
+    return {
+        "match_percentage":
+            final_score,
+
+        "match_reason":
+            match_reason,
+
+        "risk_level":
+            risk_level,
+
+        "risk_reasons":
+            risk_reasons,
+
+        "concepts":
+            concepts,
+
+        "concept_labels":
+            concept_labels,
+
+        "scores":
+            scores,
+
+        "details":
+            details,
+
+        "llm_used":
+            bool(llm_data),
+
+        "llm_confidence":
+            (
+                llm_data.get(
+                    "confidence",
+                    0,
+                )
+                if llm_data
+                else 0
+            ),
+
+        "matched_requirements":
+            (
+                llm_data.get(
+                    "matched_requirements",
+                    [],
+                )
+                if llm_data
+                else []
+            ),
+
+        "missing_requirements":
+            (
+                llm_data.get(
+                    "missing_requirements",
+                    [],
+                )
+                if llm_data
+                else []
+            ),
+
+        "risk_factors":
+            (
+                llm_data.get(
+                    "risk_factors",
+                    [],
+                )
+                if llm_data
+                else []
+            ),
+
+        "recommended_actions":
+            recommended_actions,
     }
 
 
@@ -1169,68 +1650,98 @@ def calculate_match(need, supply) -> dict:
 # Petrochemical Filtering
 # ============================================================
 
-def is_petrochemical_supply(supply) -> bool:
-    """
-    تشخیص اینکه Supply مربوط به پتروشیمی است یا خیر.
-    """
+def is_petrochemical_text(
+    text: str,
+) -> bool:
 
-    industry = safe_text(
-        getattr(
-            supply,
-            "industry",
-            "",
-        )
+    normalized = normalize(text)
+
+    if not normalized:
+        return False
+
+    keywords = [
+        "پتروشیمی",
+        "صنعت پتروشیمی",
+        "مجتمع پتروشیمی",
+        "صنایع پتروشیمی",
+        "petrochemical",
+        "petrochemical industry",
+        "petrochemical complex",
+        "پلیمر",
+        "پلی اتیلن",
+        "پلی پروپیلن",
+        "کاتالیست",
+        "راکتور",
+        "تقطیر",
+        "واحد الفین",
+        "واحد آروماتیک",
+        "گاز طبیعی",
+        "ال ان جی",
+        "lng",
+        "dcs",
+        "plc",
+        "hse",
+        "hazop",
+    ]
+
+    for keyword in keywords:
+
+        if normalize(keyword) in normalized:
+            return True
+
+    concepts = get_petrochemical_concepts(
+        normalized
+    )
+
+    return len(concepts) >= 2
+
+
+def is_petrochemical_supply(
+    product,
+) -> bool:
+
+    industry = get_industry_name(
+        product
     )
 
     text = build_supply_text(
-        supply
+        product
     )
 
-    if is_petrochemical_text(
-        industry
-    ):
-        return True
-
-    if is_petrochemical_text(text):
-        return True
-
-    return False
-
-
-def is_petrochemical_need(need) -> bool:
-    """
-    تشخیص اینکه Need مربوط به پتروشیمی است یا خیر.
-    """
-
-    industry = safe_text(
-        getattr(
-            getattr(
-                need,
-                "industry",
-                None,
-            ),
-            "name",
-            "",
+    return (
+        is_petrochemical_text(
+            industry
         )
+        or is_petrochemical_text(
+            text
+        )
+    )
+
+
+def is_petrochemical_need(
+    need,
+) -> bool:
+
+    industry = get_industry_name(
+        need
     )
 
     text = build_need_text(
         need
     )
 
-    if is_petrochemical_text(
-        industry
-    ):
-        return True
-
-    if is_petrochemical_text(text):
-        return True
-
-    return False
+    return (
+        is_petrochemical_text(
+            industry
+        )
+        or is_petrochemical_text(
+            text
+        )
+    )
 
 
 # ============================================================
-# Match One Need Against Supplies
+# Match Need With Supplies
 # ============================================================
 
 def match_need_with_supplies(
@@ -1239,54 +1750,86 @@ def match_need_with_supplies(
     limit: int = 20,
     petrochemical_only: bool = True,
 ) -> list[dict]:
-    """
-    تطبیق یک Need با مجموعه‌ای از Supplyها.
-
-    نتیجه بر اساس Match Percentage
-    از بیشترین به کمترین مرتب می‌شود.
-    """
 
     results = []
+
+    try:
+        total = supplies.count()
+    except Exception:
+        total = len(supplies)
+
+    logger.info(
+        "Matching Need %s against %s supplies",
+        getattr(need, "id", "Unknown"),
+        total,
+    )
+
+    # --------------------------------------------------------
+    # فقط پتروشیمی
+    # --------------------------------------------------------
+    if petrochemical_only and not is_petrochemical_need(need):
+        logger.info(
+            "Need %s is not petrochemical. No matches returned.",
+            getattr(need, "id", None),
+        )
+        return []
 
     for supply in supplies:
 
         # ----------------------------------------------------
-        # تمرکز فعلی روی پتروشیمی
+        # فقط Supply های پتروشیمی
         # ----------------------------------------------------
+        if petrochemical_only and not is_petrochemical_supply(supply):
+            continue
 
-        if petrochemical_only:
+        try:
+            result = calculate_match(
+                need,
+                supply,
+            )
 
-            if not is_petrochemical_need(need):
-                continue
+        except Exception:
+            logger.exception(
+                "Matching failed for need=%s supply=%s",
+                getattr(need, "id", None),
+                getattr(supply, "id", None),
+            )
+            continue
 
-            if not is_petrochemical_supply(supply):
-                continue
-
-        # ----------------------------------------------------
-        # Calculate Match
-        # ----------------------------------------------------
-
-        result = calculate_match(
-            need,
+        supply_id = getattr(
             supply,
+            "id",
+            None,
         )
 
+        # ----------------------------------------------------
+        # شناسه اصلی موجودیت
+        #
+        # Supply واقعی همان products.Supply است.
+        # بنابراین product_id و supply_id باید به همان
+        # شناسه رکورد اشاره کنند.
+        # ----------------------------------------------------
         result["need_id"] = getattr(
             need,
             "id",
             None,
         )
 
-        result["supply_id"] = getattr(
-            supply,
-            "id",
-            None,
-        )
+        result["supply_id"] = supply_id
 
-        result["type"] = getattr(
-            supply,
-            "supply_type",
-            "product",
+        result["product_id"] = supply_id
+
+        result["type"] = (
+            getattr(
+                supply,
+                "supply_type",
+                None,
+            )
+            or getattr(
+                supply,
+                "category",
+                "product",
+            )
         )
 
         result["title"] = getattr(
@@ -1301,9 +1844,8 @@ def match_need_with_supplies(
             None,
         )
 
-        if seller is not None:
-
-            provider_name = (
+        if seller:
+            result["provider"] = (
                 getattr(
                     seller,
                     "company_name",
@@ -1321,11 +1863,8 @@ def match_need_with_supplies(
                 )
                 or str(seller)
             )
-
         else:
-            provider_name = ""
-
-        result["provider"] = provider_name
+            result["provider"] = ""
 
         result["price"] = getattr(
             supply,
@@ -1339,60 +1878,49 @@ def match_need_with_supplies(
             None,
         )
 
-        result["industry"] = getattr(
-            supply,
-            "industry",
-            "",
+        result["industry"] = get_industry_name(
+            supply
         )
 
-        result["description"] = getattr(
-            supply,
-            "description",
-            "",
+        result["description"] = get_description(
+            supply
         )
 
         result["delivery_time"] = ""
 
-        results.append(
-            result
-        )
+        # برای اطمینان Frontend
+        result["entity_type"] = "supply"
 
-    # --------------------------------------------------------
-    # Sort
-    # --------------------------------------------------------
+        results.append(result)
+
+    risk_order = {
+        "low": 0,
+        "medium": 1,
+        "high": 2,
+    }
 
     results.sort(
         key=lambda item: (
-            item.get(
-                "match_percentage",
-                0,
-            ),
-            -(
+            -float(
                 item.get(
-                    "scores",
-                    {},
-                ).get(
-                    "risk_level",
+                    "match_percentage",
                     0,
                 )
-                if isinstance(
-                    item.get(
-                        "scores",
-                        {},
-                    ),
-                    dict,
-                )
-                else 0
             ),
-        ),
-        reverse=True,
+            risk_order.get(
+                item.get(
+                    "risk_level",
+                    "medium",
+                ),
+                1,
+            ),
+        )
     )
 
     return results[:limit]
 
-
 # ============================================================
-# Get Best Matches
+# Best Matches
 # ============================================================
 
 def get_best_matches(
@@ -1400,11 +1928,6 @@ def get_best_matches(
     supplies,
     limit: int = 10,
 ) -> list[dict]:
-    """
-    API-friendly wrapper.
-
-    فقط بهترین Matchهای پتروشیمی را برمی‌گرداند.
-    """
 
     return match_need_with_supplies(
         need=need,
@@ -1413,63 +1936,62 @@ def get_best_matches(
         petrochemical_only=True,
     )
 
-
 # ============================================================
-# MatchResult Payload
+# Legacy Product MatchResult Payload
 # ============================================================
 
 def build_match_result_payload(
     need,
-    supply,
+    product,
 ) -> dict:
-    """
-    ساخت Payload مناسب برای ایجاد MatchResult.
-
-    نکته:
-    این تابع عمداً save نمی‌کند.
-    چون ساختار دقیق مدل MatchResult باید مستقل
-    از موتور Matching باقی بماند.
-    """
 
     result = calculate_match(
         need,
-        supply,
+        product,
     )
 
     return {
-        "need_id": getattr(
-            need,
-            "id",
-            None,
-        ),
+        "need_id":
+            getattr(
+                need,
+                "id",
+                None,
+            ),
 
-        "supply_id": getattr(
-            supply,
-            "id",
-            None,
-        ),
+        "product_id":
+            getattr(
+                product,
+                "id",
+                None,
+            ),
 
-        "match_percentage": result[
-            "match_percentage"
-        ],
+        "match_percentage":
+            result[
+                "match_percentage"
+            ],
 
-        "match_reason": result[
-            "match_reason"
-        ],
+        "match_reason":
+            result[
+                "match_reason"
+            ],
 
-        "risk_level": result[
-            "risk_level"
-        ],
+        "risk_level":
+            result[
+                "risk_level"
+            ],
 
-        "risk_reasons": result[
-            "risk_reasons"
-        ],
+        "risk_reasons":
+            result[
+                "risk_reasons"
+            ],
 
-        "concepts": result[
-            "concepts"
-        ],
+        "concepts":
+            result[
+                "concepts"
+            ],
 
-        "scores": result[
-            "scores"
-        ],
+        "scores":
+            result[
+                "scores"
+            ],
     }

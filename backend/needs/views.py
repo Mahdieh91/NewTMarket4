@@ -13,7 +13,7 @@ class NeedViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     http_method_names = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options']
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['industry', 'status', 'confidentiality']
+    filterset_fields = [ 'status', 'confidentiality']
     search_fields = ['title', 'description', 'expected_outcome']
     ordering_fields = '__all__'
 

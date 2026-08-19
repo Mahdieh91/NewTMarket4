@@ -295,3 +295,27 @@ if not DEBUG:
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+
+
+
+
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+
+OPENROUTER_BASE_URL = os.getenv(
+    "OPENROUTER_BASE_URL",
+    "https://openrouter.ai/api/v1"
+)
+
+# مدل مشخص، نه openrouter/free
+OPENROUTER_MODEL = os.getenv(
+    "OPENROUTER_MODEL",
+    "openai/gpt-oss-20b:free"
+)
+
+OPENROUTER_MAX_TOKENS = int(
+    os.getenv("OPENROUTER_MAX_TOKENS", "30")
+)
+
+OPENROUTER_TEMPERATURE = float(
+    os.getenv("OPENROUTER_TEMPERATURE", "0.1")
+)
