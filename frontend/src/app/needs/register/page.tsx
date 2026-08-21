@@ -1,12 +1,5 @@
-// ============================================================
 // src/app/needs/register/page.tsx
-// صفحه ثبت نیاز فناورانه - نسخه نهایی
-// اصلاحات:
-// 1. رفع خطای buyer با تنظیم read_only_fields در serializer (بک‌اند)
-// 2. در فرانت‌اند: پس از ثبت موفق، پیام موفقیت با دکمه رفتن به داشبورد نمایش داده می‌شود
-// 3. حذف redirect خودکار (کاربر خودش تصمیم می‌گیرد)
-// 4. مدیریت کامل خطاهای اعتبارسنجی برگشتی از سرور
-// ============================================================
+// نسخه اصلاح شده - حذف کامل بخش صنعت
 
 'use client';
 
@@ -26,7 +19,7 @@ import { useAuthStore } from '@/store/auth-store';
 type NeedFormData = {
   title: string;
   description: string;
-  industry: number | '';
+  // industry حذف شد
   technology: string;
   city: string;
   currentStatus: string;
@@ -39,13 +32,8 @@ type NeedFormData = {
   attachments: File[];
 };
 
-type Industry = {
-  id: number;
-  name: string;
-};
-
 // ============================================================
-// Static options (به جز industry که از سرور می‌آید)
+// Static options
 // ============================================================
 const TECHNOLOGY_OPTIONS = [
   'هوش مصنوعی', 'اینترنت اشیاء', 'دوقلوی دیجیتال', 'رباتیک', 'بلاکچین',
@@ -73,29 +61,12 @@ const BUDGET_OPTIONS = [
 ];
 
 // ============================================================
-// Fallback industries (اگر سرور پاسخ ندهد)
-// ============================================================
-const DEFAULT_INDUSTRIES: Industry[] = [
-  { id: 1, name: 'نفت و گاز' },
-  { id: 2, name: 'پالایش و پتروشیمی' },
-  { id: 3, name: 'فولاد و معدن' },
-  { id: 4, name: 'سلامت' },
-  { id: 5, name: 'کشاورزی' },
-  { id: 6, name: 'حمل‌ونقل' },
-  { id: 7, name: 'خودروسازی' },
-  { id: 8, name: 'انرژی' },
-  { id: 9, name: 'فناوری اطلاعات' },
-  { id: 10, name: 'محیط زیست' },
-  { id: 11, name: 'سایر' },
-];
-
-// ============================================================
 // Initial form
 // ============================================================
 const initialForm: NeedFormData = {
   title: '',
   description: '',
-  industry: '',
+  // industry حذف شد
   technology: '',
   city: '',
   currentStatus: '',
@@ -110,7 +81,7 @@ const initialForm: NeedFormData = {
 
 const wizardSteps = [
   'تعریف مسئله',
-  'زمینه صنعتی',
+  'زمینه فناوری',
   'خروجی مورد انتظار',
   'معیارهای انتخاب',
   'بودجه و زمان',
@@ -133,47 +104,6 @@ export default function NeedRegisterPage() {
   const [errors, setErrors] = useState<string[]>([]);
   const [form, setForm] = useState<NeedFormData>(initialForm);
   const [logoError, setLogoError] = useState(false);
-  const [industries, setIndustries] = useState<Industry[]>(DEFAULT_INDUSTRIES);
-  const [loadingIndustries, setLoadingIndustries] = useState(false);
-
-  // ============================================================
-  // Fetch industries from server
-  // ============================================================
-  useEffect(() => {
-    const fetchIndustries = async () => {
-      if (!isAuthenticated || !accessToken) {
-        setIndustries(DEFAULT_INDUSTRIES);
-        return;
-      }
-      setLoadingIndustries(true);
-      try {
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
-        const res = await fetch(`${API_URL}/industries/`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          let industriesData: Industry[] = [];
-          if (data.results && Array.isArray(data.results)) {
-            industriesData = data.results;
-          } else if (Array.isArray(data)) {
-            industriesData = data;
-          } else {
-            industriesData = DEFAULT_INDUSTRIES;
-          }
-          setIndustries(industriesData.length ? industriesData : DEFAULT_INDUSTRIES);
-        } else {
-          setIndustries(DEFAULT_INDUSTRIES);
-        }
-      } catch (error) {
-        console.error('Error fetching industries:', error);
-        setIndustries(DEFAULT_INDUSTRIES);
-      } finally {
-        setLoadingIndustries(false);
-      }
-    };
-    fetchIndustries();
-  }, [isAuthenticated, accessToken]);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -240,7 +170,8 @@ export default function NeedRegisterPage() {
       if (!form.description.trim()) errs.push('شرح مسئله الزامی است.');
     }
     if (stepIndex === 1) {
-      if (!form.industry) errs.push('صنعت مرتبط الزامی است.');
+      // industry حذف شد - فقط فناوری و شهر و وضعیت فعلی
+      if (!form.technology.trim()) errs.push('فناوری مرتبط الزامی است.');
       if (!form.currentStatus.trim()) errs.push('وضعیت فعلی الزامی است.');
     }
     if (stepIndex === 2) {
@@ -301,7 +232,7 @@ export default function NeedRegisterPage() {
       // ---- فیلدهای اجباری ----
       formData.append('title', form.title);
       formData.append('description', form.description);
-      if (form.industry) formData.append('industry', String(form.industry));
+      // industry حذف شد - دیگر ارسال نمی‌شود
       if (form.currentStatus) formData.append('current_status', form.currentStatus);
       if (form.expectedOutput) formData.append('expected_outcome', form.expectedOutput);
       if (form.evaluationCriteria) formData.append('evaluation_criteria', form.evaluationCriteria);
@@ -367,9 +298,7 @@ export default function NeedRegisterPage() {
 
       if (parseError) throw new Error('پاسخ سرور نامعتبر است.');
 
-      // ===== ثبت موفق =====
       setSubmitMessage('✅ نیاز فناورانه شما با موفقیت ثبت شد.');
-      // دیگر redirect خودکار انجام نمی‌شود – کاربر با کلیک روی دکمه به داشبورد می‌رود
     } catch (error: any) {
       console.error('❌ خطا:', error);
       setErrors([error.message || 'خطا در ثبت نیاز. لطفاً دوباره تلاش کنید.']);
@@ -435,7 +364,7 @@ export default function NeedRegisterPage() {
           </div>
         )}
 
-        {/* Success Message with button */}
+        {/* Success Message */}
         {submitMessage && (
           <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center">
             <ShieldCheck className="h-14 w-14 text-emerald-600 mx-auto mb-3" strokeWidth={1.5} />
@@ -450,17 +379,16 @@ export default function NeedRegisterPage() {
           </div>
         )}
 
-        {/* اگر submitMessage وجود دارد، بقیه محتوا را مخفی می‌کنیم (اختیاری) */}
         {!submitMessage && (
           <>
             {/* Steps */}
             {step === 0 && <ProblemDefinitionStep form={form} updateField={updateField} />}
-            {step === 1 && <IndustryContextStep form={form} updateField={updateField} industries={industries} loadingIndustries={loadingIndustries} />}
+            {step === 1 && <TechnologyContextStep form={form} updateField={updateField} />}
             {step === 2 && <ExpectedOutputStep form={form} updateField={updateField} />}
             {step === 3 && <EvaluationCriteriaStep form={form} updateField={updateField} />}
             {step === 4 && <BudgetTimelineStep form={form} updateField={updateField} />}
             {step === 5 && <ConfidentialityStep form={form} updateField={updateField} />}
-            {step === 6 && <ReviewPublishStep form={form} loading={loading} handleFileChange={handleFileChange} removeFile={removeFile} industries={industries} />}
+            {step === 6 && <ReviewPublishStep form={form} loading={loading} handleFileChange={handleFileChange} removeFile={removeFile} />}
 
             {/* Navigation */}
             <div className="mt-10 flex flex-col gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:items-center sm:justify-between">
@@ -502,30 +430,17 @@ function ProblemDefinitionStep({ form, updateField }: { form: NeedFormData; upda
   );
 }
 
-function IndustryContextStep({ form, updateField, industries, loadingIndustries }: { form: NeedFormData; updateField: any; industries: Industry[]; loadingIndustries: boolean }) {
+// ============================================================
+// TechnologyContextStep - جایگزین IndustryContextStep
+// ============================================================
+function TechnologyContextStep({ form, updateField }: { form: NeedFormData; updateField: any }) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2"><Building2 size={24} className="text-teal-500" /> زمینه صنعتی</h2>
-        <p className="mt-1 text-sm text-slate-500">صنعت، فناوری، شهر و وضعیت فعلی را مشخص کنید.</p>
+        <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2"><Building2 size={24} className="text-teal-500" /> زمینه فناوری</h2>
+        <p className="mt-1 text-sm text-slate-500">فناوری مرتبط، شهر و وضعیت فعلی را مشخص کنید.</p>
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div>
-          <label className="mb-2 block text-sm font-bold text-slate-700">صنعت مرتبط</label>
-          <select
-            value={form.industry}
-            onChange={(e) => updateField('industry', e.target.value ? Number(e.target.value) : '')}
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-transparent focus:ring-2"
-            style={{ '--tw-ring-color': '#1E3A8A' } as any}
-            disabled={loadingIndustries}
-          >
-            <option value="">انتخاب صنعت...</option>
-            {industries.map((ind) => (
-              <option key={ind.id} value={ind.id}>{ind.name}</option>
-            ))}
-          </select>
-          {loadingIndustries && <p className="mt-1 text-xs text-slate-400">در حال بارگذاری صنایع...</p>}
-        </div>
         <SelectField label="فناوری مرتبط" value={form.technology} onChange={(v) => updateField('technology', v)} options={TECHNOLOGY_OPTIONS} placeholder="انتخاب فناوری..." />
         <SelectField label="شهر / استان" value={form.city} onChange={(v) => updateField('city', v)} options={CITY_OPTIONS} placeholder="انتخاب شهر..." />
       </div>
@@ -626,19 +541,12 @@ function ConfidentialityStep({ form, updateField }: { form: NeedFormData; update
   );
 }
 
-function ReviewPublishStep({ form, loading, handleFileChange, removeFile, industries }: {
+function ReviewPublishStep({ form, loading, handleFileChange, removeFile }: {
   form: NeedFormData;
   loading: boolean;
   handleFileChange: (files: FileList | null) => void;
   removeFile: (index: number) => void;
-  industries: Industry[];
 }) {
-  const getIndustryName = (id: number | '') => {
-    if (!id) return '-';
-    const found = industries.find((i) => i.id === id);
-    return found ? found.name : String(id);
-  };
-
   return (
     <div className="space-y-6">
       <div>
@@ -651,8 +559,7 @@ function ReviewPublishStep({ form, loading, handleFileChange, removeFile, indust
           <SummaryRow label="عنوان" value={form.title} />
           <SummaryRow label="شرح مسئله" value={form.description} />
         </SummaryCard>
-        <SummaryCard title="زمینه صنعتی">
-          <SummaryRow label="صنعت" value={getIndustryName(form.industry)} />
+        <SummaryCard title="زمینه فناوری">
           <SummaryRow label="فناوری" value={form.technology || '-'} />
           <SummaryRow label="شهر" value={form.city || '-'} />
           <SummaryRow label="وضعیت فعلی" value={form.currentStatus} />
