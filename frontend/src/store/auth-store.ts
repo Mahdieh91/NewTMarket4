@@ -1,12 +1,19 @@
-// src/store/auth-store.ts
+'use client';
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+/* ============================================================
+   User
+============================================================ */
+
 export interface User {
   id: string | number;
+
   email: string;
+
   first_name: string;
+
   last_name: string;
 
   role:
@@ -19,35 +26,58 @@ export interface User {
     | 'partner';
 
   phone?: string;
+
   company_name?: string;
+
   national_id?: string;
+
   registration_number?: string;
+
   economic_code?: string;
 
   documentsStatus?: 'red' | 'yellow' | 'green';
 
   username?: string;
+
   is_legal?: boolean;
+
   address?: string;
+
   website?: string;
+
   bio?: string;
+
   expertise?: string;
+
   activity_domain?: string;
+
   experience_summary?: string;
+
   kyc_status?: string;
 }
+
+/* ============================================================
+   Auth State
+============================================================ */
 
 interface AuthState {
   user: User | null;
 
   accessToken: string | null;
+
   refreshToken: string | null;
 
   isLoading: boolean;
+
   error: string | null;
+
   isAuthenticated: boolean;
 
-  login: (username: string, password: string) => Promise<void>;
+  login: (
+    username: string,
+    password: string
+  ) => Promise<void>;
+
   logout: () => void;
 
   fetchUser: () => Promise<void>;
@@ -62,7 +92,9 @@ interface AuthState {
 
   clearError: () => void;
 
-  updateUser: (data: Partial<User>) => void;
+  updateUser: (
+    data: Partial<User>
+  ) => void;
 }
 
 /* ============================================================
@@ -74,15 +106,21 @@ export const API_URL =
   'http://127.0.0.1:8000/api';
 
 /* ============================================================
-   LocalStorage helpers
+   Browser
 ============================================================ */
 
 const isBrowser = (): boolean => {
   return typeof window !== 'undefined';
 };
 
+/* ============================================================
+   Access Token
+============================================================ */
+
 export const getAccessToken = (): string | null => {
-  if (!isBrowser()) return null;
+  if (!isBrowser()) {
+    return null;
+  }
 
   return (
     localStorage.getItem('access_token') ||
@@ -92,8 +130,14 @@ export const getAccessToken = (): string | null => {
   );
 };
 
+/* ============================================================
+   Refresh Token
+============================================================ */
+
 export const getRefreshToken = (): string | null => {
-  if (!isBrowser()) return null;
+  if (!isBrowser()) {
+    return null;
+  }
 
   return (
     localStorage.getItem('refresh_token') ||
@@ -102,88 +146,161 @@ export const getRefreshToken = (): string | null => {
   );
 };
 
+/* ============================================================
+   Save Tokens
+============================================================ */
+
 const saveTokens = (
   accessToken: string,
   refreshToken?: string | null
 ): void => {
-  if (!isBrowser()) return;
+  if (!isBrowser()) {
+    return;
+  }
 
-  localStorage.setItem('access_token', accessToken);
+  localStorage.setItem(
+    'access_token',
+    accessToken
+  );
 
-  // پاک کردن کلیدهای قدیمی برای جلوگیری از استفاده از توکن اشتباه
-  localStorage.removeItem('accessToken');
-  localStorage.removeItem('token');
+  /*
+   * حذف کلیدهای قدیمی
+   */
+
+  localStorage.removeItem(
+    'accessToken'
+  );
+
+  localStorage.removeItem(
+    'token'
+  );
 
   if (refreshToken) {
-    localStorage.setItem('refresh_token', refreshToken);
-    localStorage.removeItem('refreshToken');
+    localStorage.setItem(
+      'refresh_token',
+      refreshToken
+    );
+
+    localStorage.removeItem(
+      'refreshToken'
+    );
   }
 };
 
+/* ============================================================
+   Clear Authentication
+============================================================ */
+
 export const clearStoredAuth = (): void => {
-  if (!isBrowser()) return;
+  if (!isBrowser()) {
+    return;
+  }
 
-  localStorage.removeItem('access_token');
-  localStorage.removeItem('accessToken');
-  localStorage.removeItem('token');
+  localStorage.removeItem(
+    'access_token'
+  );
 
-  localStorage.removeItem('refresh_token');
-  localStorage.removeItem('refreshToken');
+  localStorage.removeItem(
+    'accessToken'
+  );
 
-  localStorage.removeItem('user');
-  localStorage.removeItem('user_role');
+  localStorage.removeItem(
+    'token'
+  );
 
-  localStorage.removeItem('rememberedUsername');
+  localStorage.removeItem(
+    'refresh_token'
+  );
+
+  localStorage.removeItem(
+    'refreshToken'
+  );
+
+  localStorage.removeItem(
+    'user'
+  );
+
+  localStorage.removeItem(
+    'user_role'
+  );
+
+  localStorage.removeItem(
+    'rememberedUsername'
+  );
 };
 
 /* ============================================================
-   User normalization
+   Normalize User
 ============================================================ */
 
-const normalizeUser = (userData: any): User => {
+const normalizeUser = (
+  userData: any
+): User => {
   const user: User = {
     id: userData?.id ?? 0,
 
-    email: userData?.email || '',
+    email:
+      userData?.email || '',
 
-    first_name: userData?.first_name || '',
+    first_name:
+      userData?.first_name || '',
 
-    last_name: userData?.last_name || '',
+    last_name:
+      userData?.last_name || '',
 
-    role: userData?.role || 'buyer',
+    role:
+      userData?.role || 'buyer',
 
-    phone: userData?.phone || '',
+    phone:
+      userData?.phone || '',
 
-    company_name: userData?.company_name || '',
+    company_name:
+      userData?.company_name || '',
 
-    national_id: userData?.national_id || '',
+    national_id:
+      userData?.national_id || '',
 
-    registration_number: userData?.registration_number || '',
+    registration_number:
+      userData?.registration_number || '',
 
-    economic_code: userData?.economic_code || '',
+    economic_code:
+      userData?.economic_code || '',
 
-    username: userData?.username || '',
+    username:
+      userData?.username || '',
 
-    is_legal: Boolean(userData?.is_legal),
+    is_legal:
+      Boolean(userData?.is_legal),
 
-    address: userData?.address || '',
+    address:
+      userData?.address || '',
 
-    website: userData?.website || '',
+    website:
+      userData?.website || '',
 
-    bio: userData?.bio || '',
+    bio:
+      userData?.bio || '',
 
-    expertise: userData?.expertise || '',
+    expertise:
+      userData?.expertise || '',
 
-    activity_domain: userData?.activity_domain || '',
+    activity_domain:
+      userData?.activity_domain || '',
 
-    experience_summary: userData?.experience_summary || '',
+    experience_summary:
+      userData?.experience_summary || '',
 
-    kyc_status: userData?.kyc_status || 'draft',
+    kyc_status:
+      userData?.kyc_status || 'draft',
   };
 
-  if (user.kyc_status === 'approved') {
+  if (
+    user.kyc_status === 'approved'
+  ) {
     user.documentsStatus = 'green';
-  } else if (user.kyc_status === 'pending') {
+  } else if (
+    user.kyc_status === 'pending'
+  ) {
     user.documentsStatus = 'yellow';
   } else {
     user.documentsStatus = 'red';
@@ -193,307 +310,295 @@ const normalizeUser = (userData: any): User => {
 };
 
 /* ============================================================
-   Refresh access token
+   Refresh Access Token
 ============================================================ */
 
-export const refreshAccessToken = async (): Promise<string | null> => {
-  if (!isBrowser()) return null;
+export const refreshAccessToken =
+  async (): Promise<string | null> => {
+    if (!isBrowser()) {
+      return null;
+    }
 
-  const refreshToken = getRefreshToken();
+    const refreshToken =
+      getRefreshToken();
 
-  if (!refreshToken) {
-    return null;
-  }
-
-  try {
-    const response = await fetch(`${API_URL}/token/refresh/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        refresh: refreshToken,
-      }),
-    });
-
-    if (!response.ok) {
+    if (!refreshToken) {
       console.warn(
-        '⚠️ Refresh token failed:',
-        response.status
+        '⚠️ Refresh token وجود ندارد'
       );
 
       return null;
     }
 
-    const data = await response.json();
-
-    const newAccessToken = data?.access;
-
-    if (!newAccessToken) {
-      console.warn(
-        '⚠️ Refresh response did not contain access token'
+    try {
+      console.log(
+        '🔄 Refreshing access token...'
       );
 
-      return null;
-    }
+      const response =
+        await fetch(
+          `${API_URL}/token/refresh/`,
+          {
+            method: 'POST',
 
-    saveTokens(
-      newAccessToken,
-      data?.refresh || refreshToken
-    );
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
 
-    useAuthStore.setState({
-      accessToken: newAccessToken,
-      refreshToken: data?.refresh || refreshToken,
-      isAuthenticated: true,
-    });
+            body: JSON.stringify({
+              refresh:
+                refreshToken,
+            }),
+          }
+        );
 
-    return newAccessToken;
-  } catch (error) {
-    console.error(
-      '❌ Error refreshing access token:',
-      error
-    );
+      if (!response.ok) {
+        console.warn(
+          '⚠️ Refresh failed:',
+          response.status
+        );
 
-    return null;
-  }
-};
-
-/* ============================================================
-   Authenticated fetch
-   ------------------------------------------------------------
-   اگر access token منقضی شده باشد:
-   1. یک بار refresh می‌کند
-   2. درخواست را با token جدید تکرار می‌کند
-
-   توجه:
-   این تابع خودش logout نمی‌کند.
-   تصمیم Logout فقط باید در جایی گرفته شود که واقعاً
-   authentication از بین رفته باشد.
-============================================================ */
-
-export const authenticatedFetch = async (
-  input: RequestInfo | URL,
-  init: RequestInit = {}
-): Promise<Response> => {
-  let token = getAccessToken();
-
-  if (!token) {
-    return new Response(
-      JSON.stringify({
-        detail: 'No access token',
-      }),
-      {
-        status: 401,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        return null;
       }
-    );
-  }
 
-  const makeRequest = async (
-    accessToken: string
-  ): Promise<Response> => {
-    const headers = new Headers(init.headers || {});
+      const data =
+        await response
+          .json()
+          .catch(() => ({}));
 
-    headers.set(
-      'Authorization',
-      `Bearer ${accessToken}`
-    );
+      const newAccessToken =
+        data?.access;
 
-    if (
-      !headers.has('Content-Type') &&
-      !(init.body instanceof FormData)
-    ) {
-      headers.set(
-        'Content-Type',
-        'application/json'
+      if (!newAccessToken) {
+        console.warn(
+          '⚠️ Refresh response فاقد access token است'
+        );
+
+        return null;
+      }
+
+      const newRefreshToken =
+        data?.refresh ||
+        refreshToken;
+
+      saveTokens(
+        newAccessToken,
+        newRefreshToken
       );
-    }
 
-    return fetch(input, {
-      ...init,
-      headers,
-    });
+      useAuthStore.setState({
+        accessToken:
+          newAccessToken,
+
+        refreshToken:
+          newRefreshToken,
+
+        isAuthenticated:
+          true,
+      });
+
+      console.log(
+        '✅ Access token refreshed'
+      );
+
+      return newAccessToken;
+    } catch (error) {
+      console.error(
+        '❌ Refresh error:',
+        error
+      );
+
+      return null;
+    }
   };
 
-  let response = await makeRequest(token);
+/* ============================================================
+   Authenticated Fetch
+============================================================ */
 
-  /*
-   * فقط یک بار تلاش برای Refresh.
-   * این قسمت جلوی Logout اشتباه را می‌گیرد.
-   */
-  if (response.status === 401) {
-    const newToken = await refreshAccessToken();
+export const authenticatedFetch =
+  async (
+    input: RequestInfo | URL,
+    init: RequestInit = {}
+  ): Promise<Response> => {
+    let accessToken =
+      getAccessToken();
 
-    if (newToken) {
-      token = newToken;
+    if (!accessToken) {
+      console.warn(
+        '⚠️ authenticatedFetch: access token وجود ندارد'
+      );
 
-      response = await makeRequest(token);
+      return new Response(
+        JSON.stringify({
+          detail:
+            'No access token',
+        }),
+        {
+          status: 401,
+
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+        }
+      );
     }
-  }
 
-  return response;
-};
+    const makeRequest =
+      async (
+        token: string
+      ): Promise<Response> => {
+        const headers =
+          new Headers(
+            init.headers || {}
+          );
+
+        headers.set(
+          'Authorization',
+          `Bearer ${token}`
+        );
+
+        /*
+         * JSON
+         */
+
+        if (
+          !headers.has(
+            'Content-Type'
+          ) &&
+          !(
+            typeof FormData !==
+              'undefined' &&
+            init.body instanceof
+              FormData
+          )
+        ) {
+          headers.set(
+            'Content-Type',
+            'application/json'
+          );
+        }
+
+        return fetch(
+          input,
+          {
+            ...init,
+            headers,
+          }
+        );
+      };
+
+    console.log(
+      '🔐 API Request:',
+      input.toString()
+    );
+
+    console.log(
+      '🔑 Access Token:',
+      accessToken
+        ? `${accessToken.substring(
+            0,
+            20
+          )}...`
+        : 'NONE'
+    );
+
+    /*
+     * درخواست اول
+     */
+
+    let response =
+      await makeRequest(
+        accessToken
+      );
+
+    console.log(
+      '📡 API Status:',
+      response.status
+    );
+
+    /*
+     * اگر 401
+     */
+
+    if (
+      response.status === 401
+    ) {
+      console.warn(
+        '⚠️ API returned 401. Trying refresh...'
+      );
+
+      const newAccessToken =
+        await refreshAccessToken();
+
+      if (!newAccessToken) {
+        console.error(
+          '❌ Refresh token failed'
+        );
+
+        return response;
+      }
+
+      accessToken =
+        newAccessToken;
+
+      /*
+       * فقط یک Retry
+       */
+
+      response =
+        await makeRequest(
+          accessToken
+        );
+
+      console.log(
+        '📡 Retry API Status:',
+        response.status
+      );
+    }
+
+    return response;
+  };
 
 /* ============================================================
    Zustand Store
 ============================================================ */
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set, get) => ({
-      user: null,
+export const useAuthStore =
+  create<AuthState>()(
+    persist(
+      (set, get) => ({
 
-      accessToken: null,
+        /* ======================================================
+           Initial
+        ====================================================== */
 
-      refreshToken: null,
+        user: null,
 
-      isLoading: false,
+        accessToken: null,
 
-      error: null,
+        refreshToken: null,
 
-      isAuthenticated: false,
+        isLoading: false,
 
-      /* ======================================================
-         setAuth
-      ====================================================== */
+        error: null,
 
-      setAuth: (
-        user,
-        accessToken,
-        refreshToken
-      ) => {
-        saveTokens(
-          accessToken,
-          refreshToken
-        );
+        isAuthenticated: false,
 
-        if (isBrowser()) {
-          localStorage.setItem(
-            'user',
-            JSON.stringify(user)
-          );
+        /* ======================================================
+           setAuth
+        ====================================================== */
 
-          localStorage.setItem(
-            'user_role',
-            user.role
-          );
-        }
-
-        set({
+        setAuth: (
           user,
           accessToken,
-          refreshToken,
-          isAuthenticated: true,
-          isLoading: false,
-          error: null,
-        });
-      },
-
-      /* ======================================================
-         Login
-      ====================================================== */
-
-      login: async (
-        username: string,
-        password: string
-      ) => {
-        set({
-          isLoading: true,
-          error: null,
-        });
-
-        try {
-          const tokenRes = await fetch(
-            `${API_URL}/token/`,
-            {
-              method: 'POST',
-
-              headers: {
-                'Content-Type':
-                  'application/json',
-              },
-
-              body: JSON.stringify({
-                username,
-                password,
-              }),
-            }
-          );
-
-          const tokenData =
-            await tokenRes.json().catch(
-              () => ({})
-            );
-
-          if (!tokenRes.ok) {
-            throw new Error(
-              tokenData?.detail ||
-                tokenData?.message ||
-                'نام کاربری یا رمز عبور اشتباه است.'
-            );
-          }
-
-          const access =
-            tokenData?.access;
-
-          const refresh =
-            tokenData?.refresh;
-
-          if (!access || !refresh) {
-            throw new Error(
-              'توکن احراز هویت از سرور دریافت نشد.'
-            );
-          }
-
-          /*
-           * دریافت کاربر
-           */
-
-          let user: User;
-
-          const userRes = await fetch(
-            `${API_URL}/users/me/`,
-            {
-              headers: {
-                Authorization:
-                  `Bearer ${access}`,
-
-                'Content-Type':
-                  'application/json',
-              },
-            }
-          );
-
-          if (userRes.ok) {
-            const userData =
-              await userRes.json();
-
-            user =
-              normalizeUser(userData);
-          } else {
-            /*
-             * اگر /me مشکل داشت، login را
-             * به صورت خودکار fail نکن.
-             *
-             * کاربر با اطلاعات پایه ذخیره می‌شود
-             * و بعداً fetchUser می‌تواند آن را
-             * تکمیل کند.
-             */
-
-            user = normalizeUser({
-              id: 0,
-              email: username,
-              username,
-              role: 'buyer',
-            });
-          }
-
+          refreshToken
+        ) => {
           saveTokens(
-            access,
-            refresh
+            accessToken,
+            refreshToken
           );
 
           if (isBrowser()) {
@@ -511,20 +616,199 @@ export const useAuthStore = create<AuthState>()(
           set({
             user,
 
-            accessToken: access,
+            accessToken,
 
-            refreshToken: refresh,
+            refreshToken,
 
-            isAuthenticated: true,
+            isAuthenticated:
+              true,
 
             isLoading: false,
 
             error: null,
           });
-        } catch (error: any) {
-          console.error(
-            '❌ خطای لاگین:',
-            error
+        },
+
+        /* ======================================================
+           Login
+        ====================================================== */
+
+        login: async (
+          username,
+          password
+        ) => {
+          set({
+            isLoading: true,
+
+            error: null,
+          });
+
+          try {
+            const tokenRes =
+              await fetch(
+                `${API_URL}/token/`,
+                {
+                  method: 'POST',
+
+                  headers: {
+                    'Content-Type':
+                      'application/json',
+                  },
+
+                  body: JSON.stringify({
+                    username,
+                    password,
+                  }),
+                }
+              );
+
+            const tokenData =
+              await tokenRes
+                .json()
+                .catch(() => ({}));
+
+            if (!tokenRes.ok) {
+              throw new Error(
+                tokenData?.detail ||
+                  tokenData?.message ||
+                  'نام کاربری یا رمز عبور اشتباه است.'
+              );
+            }
+
+            const access =
+              tokenData?.access;
+
+            const refresh =
+              tokenData?.refresh;
+
+            if (
+              !access ||
+              !refresh
+            ) {
+              throw new Error(
+                'توکن احراز هویت از سرور دریافت نشد.'
+              );
+            }
+
+            /*
+             * دریافت User
+             */
+
+            let user: User;
+
+            const userRes =
+              await fetch(
+                `${API_URL}/users/me/`,
+                {
+                  headers: {
+                    Authorization:
+                      `Bearer ${access}`,
+
+                    'Content-Type':
+                      'application/json',
+                  },
+                }
+              );
+
+            if (userRes.ok) {
+              const userData =
+                await userRes.json();
+
+              user =
+                normalizeUser(
+                  userData
+                );
+            } else {
+              /*
+               * Login را به خاطر /me
+               * fail نکن.
+               */
+
+              user =
+                normalizeUser({
+                  id: 0,
+
+                  email: username,
+
+                  username,
+
+                  role: 'buyer',
+                });
+            }
+
+            saveTokens(
+              access,
+              refresh
+            );
+
+            if (isBrowser()) {
+              localStorage.setItem(
+                'user',
+                JSON.stringify(user)
+              );
+
+              localStorage.setItem(
+                'user_role',
+                user.role
+              );
+            }
+
+            set({
+              user,
+
+              accessToken:
+                access,
+
+              refreshToken:
+                refresh,
+
+              isAuthenticated:
+                true,
+
+              isLoading: false,
+
+              error: null,
+            });
+
+            console.log(
+              '✅ Login successful'
+            );
+          } catch (error: any) {
+            console.error(
+              '❌ Login error:',
+              error
+            );
+
+            clearStoredAuth();
+
+            set({
+              user: null,
+
+              accessToken: null,
+
+              refreshToken: null,
+
+              isLoading: false,
+
+              error:
+                error?.message ||
+                'خطا در ورود به حساب کاربری',
+
+              isAuthenticated:
+                false,
+            });
+
+            throw error;
+          }
+        },
+
+        /* ======================================================
+           Logout
+        ====================================================== */
+
+        logout: () => {
+          console.log(
+            '🔒 Logout'
           );
 
           clearStoredAuth();
@@ -536,90 +820,38 @@ export const useAuthStore = create<AuthState>()(
 
             refreshToken: null,
 
+            isAuthenticated:
+              false,
+
             isLoading: false,
 
-            error:
-              error?.message ||
-              'خطا در ورود به حساب کاربری',
-
-            isAuthenticated: false,
+            error: null,
           });
+        },
 
-          throw error;
-        }
-      },
+        /* ======================================================
+           fetchUser
+        ====================================================== */
 
-      /* ======================================================
-         Logout
-      ====================================================== */
+        fetchUser: async () => {
+          let token =
+            getAccessToken();
 
-      logout: () => {
-        clearStoredAuth();
+          if (!token) {
+            set({
+              user: null,
 
-        set({
-          user: null,
+              isAuthenticated:
+                false,
 
-          accessToken: null,
+              accessToken: null,
+            });
 
-          refreshToken: null,
+            return;
+          }
 
-          isAuthenticated: false,
-
-          isLoading: false,
-
-          error: null,
-        });
-      },
-
-      /* ======================================================
-         fetchUser
-      ====================================================== */
-
-      fetchUser: async () => {
-        let token = getAccessToken();
-
-        if (!token) {
-          set({
-            user: null,
-            isAuthenticated: false,
-            accessToken: null,
-          });
-
-          return;
-        }
-
-        try {
-          let response =
-            await fetch(
-              `${API_URL}/users/me/`,
-              {
-                headers: {
-                  Authorization:
-                    `Bearer ${token}`,
-
-                  'Content-Type':
-                    'application/json',
-                },
-              }
-            );
-
-          /*
-           * اگر access token منقضی شده،
-           * refresh کن و دوباره درخواست بده.
-           */
-
-          if (response.status === 401) {
-            const newToken =
-              await refreshAccessToken();
-
-            if (!newToken) {
-              get().logout();
-              return;
-            }
-
-            token = newToken;
-
-            response =
+          try {
+            let response =
               await fetch(
                 `${API_URL}/users/me/`,
                 {
@@ -632,29 +864,102 @@ export const useAuthStore = create<AuthState>()(
                   },
                 }
               );
-          }
 
-          if (!response.ok) {
             /*
-             * فقط اگر بعد از refresh هم 401 بود
-             * session واقعاً معتبر نیست.
+             * Refresh اگر 401
              */
 
             if (
               response.status === 401
             ) {
-              get().logout();
+              const newToken =
+                await refreshAccessToken();
+
+              if (!newToken) {
+                get().logout();
+
+                return;
+              }
+
+              token =
+                newToken;
+
+              response =
+                await fetch(
+                  `${API_URL}/users/me/`,
+                  {
+                    headers: {
+                      Authorization:
+                        `Bearer ${token}`,
+
+                      'Content-Type':
+                        'application/json',
+                    },
+                  }
+                );
             }
 
-            return;
+            if (!response.ok) {
+              if (
+                response.status === 401
+              ) {
+                get().logout();
+              }
+
+              return;
+            }
+
+            const userData =
+              await response.json();
+
+            const user =
+              normalizeUser(
+                userData
+              );
+
+            if (isBrowser()) {
+              localStorage.setItem(
+                'user',
+                JSON.stringify(user)
+              );
+
+              localStorage.setItem(
+                'user_role',
+                user.role
+              );
+            }
+
+            set({
+              user,
+
+              isAuthenticated:
+                true,
+
+              accessToken:
+                token,
+
+              refreshToken:
+                getRefreshToken(),
+            });
+          } catch (error) {
+            /*
+             * خطای شبکه نباید logout کند.
+             */
+
+            console.error(
+              '❌ fetchUser error:',
+              error
+            );
           }
+        },
 
-          const userData =
-            await response.json();
+        /* ======================================================
+           setUser
+        ====================================================== */
 
-          const user =
-            normalizeUser(userData);
-
+        setUser: (
+          user
+        ) => {
           if (isBrowser()) {
             localStorage.setItem(
               'user',
@@ -670,112 +975,83 @@ export const useAuthStore = create<AuthState>()(
           set({
             user,
 
-            isAuthenticated: true,
-
-            accessToken: token,
-
-            refreshToken:
-              getRefreshToken(),
+            isAuthenticated:
+              true,
           });
-        } catch (error) {
-          console.error(
-            '❌ خطا در دریافت کاربر:',
-            error
-          );
+        },
 
-          /*
-           * خطای شبکه نباید باعث Logout شود.
-           */
-        }
-      },
+        /* ======================================================
+           updateUser
+        ====================================================== */
 
-      /* ======================================================
-         setUser
-      ====================================================== */
+        updateUser: (
+          data
+        ) => {
+          const currentUser =
+            get().user;
 
-      setUser: (user: User) => {
-        if (isBrowser()) {
-          localStorage.setItem(
-            'user',
-            JSON.stringify(user)
-          );
+          if (!currentUser) {
+            return;
+          }
 
-          localStorage.setItem(
-            'user_role',
-            user.role
-          );
-        }
+          const updatedUser = {
+            ...currentUser,
+            ...data,
+          };
 
-        set({
-          user,
+          if (isBrowser()) {
+            localStorage.setItem(
+              'user',
+              JSON.stringify(
+                updatedUser
+              )
+            );
 
-          isAuthenticated: true,
-        });
-      },
-
-      /* ======================================================
-         updateUser
-      ====================================================== */
-
-      updateUser: (
-        data: Partial<User>
-      ) => {
-        const currentUser =
-          get().user;
-
-        if (!currentUser) {
-          return;
-        }
-
-        const updatedUser = {
-          ...currentUser,
-          ...data,
-        };
-
-        if (isBrowser()) {
-          localStorage.setItem(
-            'user',
-            JSON.stringify(updatedUser)
-          );
-
-          if (updatedUser.role) {
             localStorage.setItem(
               'user_role',
               updatedUser.role
             );
           }
-        }
 
-        set({
-          user: updatedUser,
-        });
-      },
+          set({
+            user:
+              updatedUser,
+          });
+        },
 
-      /* ======================================================
-         clearError
-      ====================================================== */
+        /* ======================================================
+           clearError
+        ====================================================== */
 
-      clearError: () =>
-        set({
-          error: null,
-        }),
-    }),
-
-    {
-      name: 'auth-storage',
-
-      partialize: (state) => ({
-        user: state.user,
-
-        accessToken:
-          state.accessToken,
-
-        refreshToken:
-          state.refreshToken,
-
-        isAuthenticated:
-          state.isAuthenticated,
+        clearError: () => {
+          set({
+            error: null,
+          });
+        },
       }),
-    }
-  )
-);
+
+      /* ========================================================
+         Persist
+      ======================================================== */
+
+      {
+        name: 'auth-storage',
+
+        partialize: (
+          state
+        ) => ({
+          user:
+            state.user,
+
+          accessToken:
+            state.accessToken,
+
+          refreshToken:
+            state.refreshToken,
+
+          isAuthenticated:
+            state.isAuthenticated,
+        }),
+      }
+    )
+  );

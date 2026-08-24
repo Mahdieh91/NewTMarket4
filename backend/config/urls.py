@@ -192,9 +192,9 @@ urlpatterns = [
     ),
 
     path(
-        'api/',
-        include('analytics.urls')
-    ),
+    'api/analytics/',
+    include('analytics.urls')
+),
 
     path(
         'api/',

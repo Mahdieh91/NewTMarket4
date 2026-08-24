@@ -1,30 +1,33 @@
-# analytics/serializers.py
-
 from rest_framework import serializers
 
-from .models import MarketTrend, KPI
-
 
 # ============================================================
-# Market Trend
+# Market Intelligence
 # ============================================================
 
-class MarketTrendSerializer(serializers.ModelSerializer):
+class MarketIntelligenceSerializer(serializers.Serializer):
 
-    class Meta:
-        model = MarketTrend
-        fields = "__all__"
+    market_overview = serializers.DictField()
 
+    top_products = serializers.ListField()
 
-# ============================================================
-# KPI
-# ============================================================
+    readiness_analysis = serializers.DictField()
 
-class KPISerializer(serializers.ModelSerializer):
+    competitors = serializers.ListField()
 
-    class Meta:
-        model = KPI
-        fields = "__all__"
+    competitor_reasoning = serializers.CharField(
+        allow_blank=True,
+        required=False,
+    )
+
+    trends = serializers.ListField()
+
+    needs = serializers.ListField(
+        required=False,
+        default=list,
+    )
+
+    recommendations = serializers.ListField()
 
 
 # ============================================================
@@ -42,123 +45,42 @@ class DashboardStatsSerializer(serializers.Serializer):
     successfulDeals = serializers.IntegerField()
 
 
-class DashboardIndustrySerializer(serializers.Serializer):
-
-    name = serializers.CharField()
-
-    value = serializers.IntegerField()
-
-
-class DashboardMonthlyDealSerializer(serializers.Serializer):
-
-    month = serializers.CharField()
-
-    deals = serializers.IntegerField()
-
-
-class DashboardActivitySerializer(serializers.Serializer):
-
-    id = serializers.CharField()
-
-    type = serializers.CharField()
-
-    title = serializers.CharField()
-
-    user = serializers.CharField(
-        allow_blank=True
-    )
-
-    time = serializers.CharField(
-        allow_blank=True
-    )
-
-
-class DashboardSuggestionSerializer(serializers.Serializer):
-
-    title = serializers.CharField()
-
-    match = serializers.IntegerField(
-        min_value=0,
-        max_value=100
-    )
-
-    reason = serializers.CharField()
-
-
-class DashboardFunnelSerializer(serializers.Serializer):
-
-    label = serializers.CharField()
-
-    value = serializers.IntegerField(
-        min_value=0
-    )
-
-    percent = serializers.IntegerField(
-        min_value=0,
-        max_value=100
-    )
-
-
-class DashboardSupplierSerializer(serializers.Serializer):
-
-    name = serializers.CharField()
-
-    score = serializers.FloatField(
-        min_value=0
-    )
-
-    deals = serializers.IntegerField(
-        min_value=0
-    )
-
-
-class DashboardNegotiationInsightSerializer(serializers.Serializer):
-
-    label = serializers.CharField()
-
-    value = serializers.IntegerField(
-        min_value=0
-    )
-
-    percent = serializers.IntegerField(
-        min_value=0,
-        max_value=100
-    )
-
-
-# ============================================================
-# Main Dashboard serializer
-# ============================================================
-
-class DashboardSerializer(serializers.Serializer):
+class DashboardDataSerializer(serializers.Serializer):
 
     stats = DashboardStatsSerializer()
 
-    # حفظ برای backward compatibility
-    industryData = DashboardIndustrySerializer(
-        many=True
+    industryData = serializers.ListField(
+        child=serializers.JSONField(),
+        required=False,
+        default=list,
     )
 
-    monthlyDeals = DashboardMonthlyDealSerializer(
-        many=True
+    monthlyDeals = serializers.ListField(
+        required=False,
+        default=list,
     )
 
-    recentActivities = DashboardActivitySerializer(
-        many=True
+    recentActivities = serializers.ListField(
+        required=False,
+        default=list,
     )
 
-    smartSuggestions = DashboardSuggestionSerializer(
-        many=True
+    smartSuggestions = serializers.ListField(
+        required=False,
+        default=list,
     )
 
-    conversionFunnel = DashboardFunnelSerializer(
-        many=True
+    conversionFunnel = serializers.ListField(
+        required=False,
+        default=list,
     )
 
-    topSuppliers = DashboardSupplierSerializer(
-        many=True
+    topSuppliers = serializers.ListField(
+        required=False,
+        default=list,
     )
 
-    negotiationInsights = DashboardNegotiationInsightSerializer(
-        many=True
+    negotiationInsights = serializers.ListField(
+        required=False,
+        default=list,
     )

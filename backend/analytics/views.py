@@ -1,160 +1,123 @@
-# analytics/views.py
-
-import logging
-
-from django_filters.rest_framework import DjangoFilterBackend
-
-from rest_framework import (
-    filters,
-    permissions,
-    status,
-    viewsets,
-)
-
-from rest_framework.permissions import IsAuthenticated
+from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import MarketTrend, KPI
-
 from .serializers import (
-    MarketTrendSerializer,
-    KPISerializer,
-    DashboardSerializer,
+    DashboardDataSerializer,
+    MarketIntelligenceSerializer,
 )
-
 from .services import (
-    get_stats,
-    get_monthly_deals,
-    get_recent_activities,
-    get_smart_suggestions,
-    get_conversion_funnel,
-    get_top_suppliers,
-    get_negotiation_insights,
+    generate_market_intelligence,
+    generate_dashboard_data,
 )
 
 
-logger = logging.getLogger(__name__)
-
-
-# ============================================================
-# Market Trends
-# ============================================================
-
-class MarketTrendViewSet(viewsets.ModelViewSet):
-
-    queryset = MarketTrend.objects.all()
-
-    serializer_class = MarketTrendSerializer
-
-    permission_classes = [
-        permissions.IsAuthenticated
-    ]
-
-    filter_backends = [
-        DjangoFilterBackend,
-        filters.SearchFilter,
-        filters.OrderingFilter,
-    ]
-
-    filterset_fields = [
-        "industry",
-    ]
-
-    search_fields = [
-        "industry__name",
-        "trend_name",
-        "description",
-    ]
-
-    ordering_fields = "__all__"
-
-
-# ============================================================
-# KPI
-# ============================================================
-
-class KPIViewSet(viewsets.ModelViewSet):
-
-    queryset = KPI.objects.all()
-
-    serializer_class = KPISerializer
-
-    permission_classes = [
-        permissions.IsAuthenticated
-    ]
-
-    filter_backends = [
-        DjangoFilterBackend,
-        filters.SearchFilter,
-        filters.OrderingFilter,
-    ]
-
-    filterset_fields = [
-        "category",
-    ]
-
-    search_fields = [
-        "name",
-    ]
-
-    ordering_fields = "__all__"
-
-
-# ============================================================
-# Dashboard API
-# ============================================================
-
-class DashboardAPIView(APIView):
-
-    permission_classes = [
-        IsAuthenticated
-    ]
+class MarketIntelligenceAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        industry_id = request.query_params.get("industry")
+        category = request.query_params.get("category")
 
-        user = request.user
+        trl_min = request.query_params.get("trl_min")
+        trl_max = request.query_params.get("trl_max")
+
+        # --------------------------------------------------
+        # TRL validation
+        # --------------------------------------------------
 
         try:
+            if trl_min not in (None, ""):
+                trl_min = int(trl_min)
+            else:
+                trl_min = None
 
-            data = {
-                "stats": get_stats(user),
+            if trl_max not in (None, ""):
+                trl_max = int(trl_max)
+            else:
+                trl_max = None
 
-                # حفظ برای backward compatibility
-                "industryData": [],
-
-                "monthlyDeals": get_monthly_deals(
-                    user,
-                    months=6,
-                ),
-
-                "recentActivities": get_recent_activities(
-                    user,
-                    limit=10,
-                ),
-
-                "smartSuggestions": get_smart_suggestions(
-                    user,
-                    limit=3,
-                ),
-
-                "conversionFunnel": get_conversion_funnel(
-                    user,
-                ),
-
-                "topSuppliers": get_top_suppliers(
-                    user,
-                    limit=5,
-                ),
-
-                "negotiationInsights": get_negotiation_insights(
-                    user,
-                ),
-            }
-
-            serializer = DashboardSerializer(
-                instance=data
+        except (TypeError, ValueError):
+            return Response(
+                {
+                    "status": "error",
+                    "message": "مقدار TRL نامعتبر است.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # --------------------------------------------------
+        # Range validation
+        # --------------------------------------------------
+
+        if trl_min is not None and trl_max is not None:
+            if trl_min > trl_max:
+                return Response(
+                    {
+                        "status": "error",
+                        "message": "TRL حداقل نمی‌تواند بیشتر از TRL حداکثر باشد.",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        if trl_min is not None and not 1 <= trl_min <= 9:
+            return Response(
+                {
+                    "status": "error",
+                    "message": "TRL حداقل باید بین 1 و 9 باشد.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if trl_max is not None and not 1 <= trl_max <= 9:
+            return Response(
+                {
+                    "status": "error",
+                    "message": "TRL حداکثر باید بین 1 و 9 باشد.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # --------------------------------------------------
+        # Generate data
+        # --------------------------------------------------
+
+        try:
+            data = generate_market_intelligence(
+                industry_id=industry_id,
+                category=category,
+                trl_min=trl_min,
+                trl_max=trl_max,
+            )
+
+        except Exception:
+            return Response(
+                {
+                    "status": "error",
+                    "message": "خطا در تولید اطلاعات هوش بازار.",
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        serializer = MarketIntelligenceSerializer(data)
+
+        return Response(
+            {
+                "status": "success",
+                "data": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class DashboardAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        try:
+            data = generate_dashboard_data(request.user)
+
+            serializer = DashboardDataSerializer(data)
 
             return Response(
                 serializer.data,
@@ -162,16 +125,10 @@ class DashboardAPIView(APIView):
             )
 
         except Exception:
-
-            logger.exception(
-                "[Dashboard] Unexpected error"
-            )
-
             return Response(
                 {
-                    "detail": (
-                        "خطا در دریافت اطلاعات داشبورد"
-                    )
+                    "status": "error",
+                    "message": "خطا در دریافت اطلاعات داشبورد.",
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
