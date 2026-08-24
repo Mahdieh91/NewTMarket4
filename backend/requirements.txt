@@ -1,3 +1,5 @@
+# backend/requirements.txt
+
 Django==5.0
 djangorestframework==3.15
 djangorestframework-simplejwt==5.3.1
@@ -27,6 +29,7 @@ sentry-sdk==2.13.0
 pytest==8.3.2
 pytest-django==4.8.0
 coverage==7.6.1
+requests>=2.31.0
 Pillow
 setuptools
 wheel

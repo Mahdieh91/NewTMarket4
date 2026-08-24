@@ -1,7 +1,4 @@
-# ============================================================
-# این فایل Serializerهای مدل‌های Product و Supply را تعریف می‌کند
-# مسیر: backend/products/serializers.py
-# ============================================================
+# products/serializers.py
 
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
