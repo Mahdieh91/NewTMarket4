@@ -1,5 +1,5 @@
 # analytics/services.py
-# نسخه نهایی با مدیریت کامل خطاها
+# تحلیل بازار بر اساس Product و Need (Supply فعلاً استفاده نمی‌شود)
 
 import logging
 from collections import defaultdict
@@ -30,10 +30,14 @@ try:
 except ImportError:
     Negotiation = None
 
-try:
-    from products.models import Supply
-except ImportError:
-    Supply = None
+# ============================================================
+# ⚠️ Supply فعلاً در تحلیل بازار استفاده نمی‌شود.
+# خط زیر کامنت شده است تا در صورت نیاز بعداً فعال شود.
+# ============================================================
+# try:
+#     from products.models import Supply
+# except ImportError:
+#     Supply = None
 
 logger = logging.getLogger(__name__)
 
@@ -123,21 +127,12 @@ def get_seller_name(user):
 # ============================================================
 
 def resolve_industry_param(value):
-    """
-    تبدیل رشته industry به id صنعت
-    اگر عدد باشد، همان عدد برگردانده می‌شود
-    اگر نام باشد، در IndustryCategory جستجو می‌شود
-    """
     if value is None or value == "":
         return None
-
-    # اگر عددی است
     try:
         return int(value)
     except (ValueError, TypeError):
         pass
-
-    # اگر رشته است و مدل IndustryCategory وجود دارد
     if IndustryCategory is not None:
         try:
             industry = IndustryCategory.objects.filter(name__iexact=value).first()
@@ -145,7 +140,6 @@ def resolve_industry_param(value):
                 return industry.id
         except Exception as e:
             logger.warning(f"Error resolving industry name '{value}': {e}")
-
     return None
 
 
@@ -171,7 +165,6 @@ def get_quality_indicator(product):
         evaluation = get_latest_evaluation(product)
         if evaluation is not None:
             return round(clamp(evaluation.quality_score or 0), 2)
-
         trl = product.trl or 0
         mrl = product.mrl or 0
         trl_score = ((trl - 1) / 8) * 100 if trl else 0
@@ -403,7 +396,7 @@ def build_monthly_trend(industry_id=None, months=6):
         )
         if industry_id:
             product_qs = product_qs.filter(industry_id=industry_id)
-        supply_count = product_qs.count()
+        product_count = product_qs.count()   # تعداد محصولات + خدمات در آن بازه
 
         demand_count = 0
         if Need is not None:
@@ -427,7 +420,7 @@ def build_monthly_trend(industry_id=None, months=6):
         result.append({
             "month": month_start.strftime("%Y-%m"),
             "تقاضا": demand_count,
-            "عرضه": supply_count,
+            "عرضه": product_count,   # عرضه = تعداد محصولات منتشرشده در آن ماه
             "معاملات": deals_count,
         })
     return result
@@ -441,7 +434,6 @@ def generate_market_intelligence(industry=None, category=None, trl_min=None, trl
     try:
         industry_id = resolve_industry_param(industry)
 
-        # Product Query
         product_queryset = Product.objects.select_related("seller", "industry").filter(status__in=MARKET_STATUSES)
 
         if industry_id is not None:
@@ -468,7 +460,6 @@ def generate_market_intelligence(industry=None, category=None, trl_min=None, trl
                 "summary": {
                     "total_products": 0,
                     "total_services": 0,
-                    "total_supplies": 0,
                     "total_needs": 0,
                     "published_products": 0,
                     "average_price": None,
@@ -491,15 +482,12 @@ def generate_market_intelligence(industry=None, category=None, trl_min=None, trl
             if ind is not None:
                 indicators.append(ind)
 
-        # Summary
-        total_products = len(products)
+        # ============================================================
+        # آمارهای اصلی بر اساس Product (و دسته‌بندی product/service)
+        # ============================================================
+        total_products = sum(1 for p in products if p.category == "product")
         total_services = sum(1 for p in products if p.category == "service")
-        total_supplies = 0
-        if Supply is not None:
-            try:
-                total_supplies = Supply.objects.filter(status__in=["approved", "published"]).count()
-            except Exception:
-                pass
+        total_records = len(products)  # مجموع محصولات و خدمات
 
         total_needs = 0
         if Need is not None:
@@ -508,7 +496,13 @@ def generate_market_intelligence(industry=None, category=None, trl_min=None, trl
             except Exception:
                 pass
 
-        published_products = sum(1 for p in products if p.status == "published")
+        # ============================================================
+        # published_products فقط محصولات (نه سرویس‌ها) را شامل می‌شود
+        # ============================================================
+        published_products = sum(
+            1 for p in products
+            if p.status == "published" and p.category == "product"
+        )
 
         price_data = [p.price for p in products if p.price is not None]
         average_price = mean(price_data) if price_data else None
@@ -522,13 +516,16 @@ def generate_market_intelligence(industry=None, category=None, trl_min=None, trl
         summary = {
             "total_products": total_products,
             "total_services": total_services,
-            "total_supplies": total_supplies,
             "total_needs": total_needs,
             "published_products": published_products,
             "average_price": safe_float(average_price),
             "average_trl": safe_float(average_trl),
             "average_mrl": safe_float(average_mrl),
         }
+
+        # ============================================================
+        # توزیع‌ها بر اساس total_records محاسبه می‌شوند
+        # ============================================================
 
         # Category Distribution
         categories = []
@@ -540,7 +537,7 @@ def generate_market_intelligence(industry=None, category=None, trl_min=None, trl
             categories.append({
                 "category": cat,
                 "count": count,
-                "percentage": round((count / total_products) * 100, 2) if total_products else 0
+                "percentage": round((count / total_records) * 100, 2) if total_records else 0
             })
         categories.sort(key=lambda x: x["count"], reverse=True)
 
@@ -554,7 +551,7 @@ def generate_market_intelligence(industry=None, category=None, trl_min=None, trl
             industries.append({
                 "industry": ind,
                 "count": count,
-                "percentage": round((count / total_products) * 100, 2) if total_products else 0
+                "percentage": round((count / total_records) * 100, 2) if total_records else 0
             })
         industries.sort(key=lambda x: x["count"], reverse=True)
 
@@ -568,7 +565,7 @@ def generate_market_intelligence(industry=None, category=None, trl_min=None, trl
             trl_distribution.append({
                 "trl": trl,
                 "count": count,
-                "percentage": round((count / total_products) * 100, 2) if total_products else 0
+                "percentage": round((count / total_records) * 100, 2) if total_records else 0
             })
 
         # MRL Distribution
@@ -581,7 +578,7 @@ def generate_market_intelligence(industry=None, category=None, trl_min=None, trl
             mrl_distribution.append({
                 "mrl": mrl,
                 "count": count,
-                "percentage": round((count / total_products) * 100, 2) if total_products else 0
+                "percentage": round((count / total_records) * 100, 2) if total_records else 0
             })
 
         # Price Analysis
@@ -593,7 +590,7 @@ def generate_market_intelligence(industry=None, category=None, trl_min=None, trl
             "median_price": sorted(prices)[len(prices)//2] if prices else None,
         }
 
-        # Providers
+        # Providers (بر اساس seller_name)
         providers = []
         provider_data = {}
         for p in indicators:
@@ -635,7 +632,7 @@ def generate_market_intelligence(industry=None, category=None, trl_min=None, trl
 
         # Insights
         insights = []
-        if total_products == 0:
+        if total_records == 0:
             insights.append("در این محدوده فیلتری، محصولی یافت نشد.")
         else:
             if average_trl is not None and average_trl >= 7:
@@ -689,7 +686,7 @@ def generate_market_intelligence(industry=None, category=None, trl_min=None, trl
         }
     except Exception as e:
         logger.exception("Unexpected error in generate_market_intelligence: %s", e)
-        raise  # اجازه می‌دهیم خطا به view برود تا پیام مناسب نشان داده شود
+        raise
 
 
 # ============================================================
@@ -805,14 +802,12 @@ def generate_competitor_analysis(product_id, limit=20):
 # ============================================================
 
 def generate_dashboard_data(user):
-    # Products
     try:
         total_products = Product.objects.filter(seller=user, status__in=MARKET_STATUSES).count()
     except Exception:
         total_products = 0
         logger.exception("Error counting products")
 
-    # Needs
     active_needs = 0
     if Need is not None:
         try:
@@ -820,7 +815,6 @@ def generate_dashboard_data(user):
         except Exception:
             logger.exception("Error counting needs")
 
-    # Negotiations
     ongoing_negotiations = 0
     successful_deals = 0
     recent_activities = []
@@ -864,7 +858,6 @@ def generate_dashboard_data(user):
         except Exception as exc:
             logger.exception("Could not fetch negotiation data: %s", exc)
 
-    # Monthly Deals
     monthly_deals = []
     if Negotiation is not None:
         try:
@@ -886,7 +879,6 @@ def generate_dashboard_data(user):
         except Exception:
             logger.exception("Error calculating monthly deals")
 
-    # Top Suppliers
     top_suppliers = []
     try:
         supplier_stats = (
@@ -908,7 +900,6 @@ def generate_dashboard_data(user):
     except Exception:
         logger.exception("Error calculating top suppliers")
 
-    # Smart Suggestions
     smart_suggestions = []
     if active_needs > 0 and total_products == 0:
         smart_suggestions.append({
@@ -929,7 +920,6 @@ def generate_dashboard_data(user):
             "action": "مشاهده مذاکرات",
         })
 
-    # Negotiation Insights
     negotiation_insights = []
     if ongoing_negotiations > 0:
         negotiation_insights.append({

@@ -1,59 +1,19 @@
-# ============================================================
-# seed_market_intelligence.py
-#
-# داده آزمایشی واقع‌گرایانه برای:
-# Market Intelligence
-# Marketplace
-# Matching
-# Dashboard
-#
-# تمرکز اصلی:
-# - پتروشیمی
-# - پلیمر
-# - الفین
-# - آروماتیک
-# - کاتالیست
-# - تجهیزات و پایش هوشمند
-#
-# اجرا:
-#
-# python manage.py shell < seed_market_intelligence.py
-#
-# یا:
-#
-# python manage.py shell
-# >>> exec(open("seed_market_intelligence.py", encoding="utf-8").read())
-#
-# ============================================================
 # seed_data.py
-# اسکریپت تولید داده‌های نمونه با تصاویر و مستندات برای تست و توسعه
-# اجرا:
-# python seed_data.py
+# اسکریپت تولید داده‌های نمونه برای صفحه Market Intelligence
+# اجرا: python manage.py shell (توصیه شده) یا python seed_data.py (پس از اصلاح مدل)
 
 import os
 import django
 import random
-from datetime import datetime, timedelta
+from datetime import timedelta
 from decimal import Decimal
-import io
-import requests
 
-# ============================================================
-# راه‌اندازی Django
-# ============================================================
-
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
-
-# ============================================================
-# Import مدل‌ها - فقط بعد از django.setup()
-# ============================================================
 
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
-
 from products.models import Product, Supply
 from industries.models import IndustryCategory
 from needs.models import Need
@@ -62,1727 +22,354 @@ from negotiations.models import Negotiation
 
 User = get_user_model()
 
-
 # ============================================================
-# Configuration
-# ============================================================
-
-SEED_PREFIX = "market_demo_"
-
-RANDOM_SEED = 1403
-random.seed(RANDOM_SEED)
-
-
-# ------------------------------------------------------------
-# تعداد داده‌ها
-# ------------------------------------------------------------
-
-PRODUCT_COUNT = 90
-SUPPLY_COUNT = 110
-NEED_COUNT = 55
-NEGOTIATION_COUNT = 25
-EVALUATION_COUNT = 70
-
-
-# ============================================================
-# Persian / Industrial Data
+# توابع کمکی
 # ============================================================
 
-CITIES = [
-    "تهران",
-    "اصفهان",
-    "شیراز",
-    "تبریز",
-    "مشهد",
-    "عسلویه",
-    "ماهشهر",
-    "اراک",
-    "بندرعباس",
-    "کرمانشاه",
+def random_date(start_date, end_date):
+    delta = end_date - start_date
+    random_days = random.randint(0, delta.days)
+    return start_date + timedelta(days=random_days)
+
+def get_random_image():
+    """دریافت تصویر از picsum.photos (اختیاری)"""
+    try:
+        import requests
+        url = f"https://picsum.photos/600/400?random={random.randint(1,10000)}"
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            return ContentFile(response.content, name=f"product_{random.randint(1,9999)}.jpg")
+    except Exception:
+        pass
+    return None
+
+# ============================================================
+# ۱. ایجاد کاربران (در صورت عدم وجود)
+# ============================================================
+
+users_data = [
+    ('azadeh_karimi', 'آزاده کریمی', 'شرکت دانش بنیان پایشگر', 'azadeh@example.com'),
+    ('ali_mohammadi', 'علی محمدی', 'صنایع فولاد مبارکه', 'ali@example.com'),
+    ('sara_hosseini', 'سارا حسینی', 'پتروشیمی بندر امام', 'sara@example.com'),
+    ('mehdi_rahmani', 'مهدی رحمانی', 'شرکت انرژی پویا', 'mehdi@example.com'),
+    ('narges_ahmadi', 'نرگس احمدی', 'گروه فناوری اطلاعات صنعتی', 'narges@example.com'),
+    ('reza_ghasemi', 'رضا قاسمی', 'معدن و صنایع معدنی', 'reza@example.com'),
+    ('zahra_moradi', 'زهرا مرادی', 'شرکت مهندسی نفت و گاز', 'zahra@example.com'),
+    ('hamid_rezai', 'حمید رضایی', 'پتروشیمی فجر', 'hamid@example.com'),
+    ('leila_hashemi', 'لیلا هاشمی', 'خدمات مهندسی برق', 'leila@example.com'),
+    ('saeed_karami', 'سعید کرمی', 'شرکت صنایع دارویی', 'saeed@example.com'),
+    ('mahdi_ahmadi', 'مهدی احمدی', 'پتروشیمی تبریز', 'mahdi@example.com'),
+    ('faezeh_nouri', 'فائزه نوری', 'شرکت اکتشاف نفت', 'faezeh@example.com'),
 ]
 
-
-REGIONS = [
-    "تهران",
-    "اصفهان",
-    "شیراز",
-    "تبریز",
-    "مشهد",
-]
-
-
-TECHNOLOGIES = [
-    "هوش مصنوعی",
-    "اینترنت اشیاء",
-    "دوقلوی دیجیتال",
-    "رباتیک",
-    "داده‌کاوی",
-    "اتوماسیون صنعتی",
-    "بینایی ماشین",
-    "پایش وضعیت",
-]
-
-
-PETRO_TECHS = [
-    "اتوماسیون صنعتی",
-    "اینترنت اشیاء",
-    "دوقلوی دیجیتال",
-    "هوش مصنوعی",
-    "پایش وضعیت",
-    "داده‌کاوی",
-]
-
-
-INDUSTRIES = [
-    "پتروشیمی",
-    "نفت و گاز",
-    "فولاد و معدن",
-    "انرژی",
-    "خودروسازی",
-    "سلامت",
-    "کشاورزی",
-    "حمل‌ونقل",
-    "فناوری اطلاعات",
-    "محیط زیست",
-]
-
-
-# ============================================================
-# Petrochemical Products
-# ============================================================
-
-PETRO_PRODUCTS = [
-
-    (
-        "پلی‌اتیلن سنگین HDPE گرید فیلم",
-        "مواد پلیمری",
-        "پلی‌اتیلن",
-        "پلی‌اتیلن سنگین با خلوص و پایداری مناسب برای تولید فیلم و بسته‌بندی صنعتی.",
-    ),
-
-    (
-        "پلی‌اتیلن سبک LDPE گرید فیلم",
-        "مواد پلیمری",
-        "پلی‌اتیلن",
-        "پلی‌اتیلن سبک مناسب تولید فیلم‌های بسته‌بندی، کشاورزی و کاربردهای صنعتی.",
-    ),
-
-    (
-        "پلی‌پروپیلن نساجی",
-        "مواد پلیمری",
-        "پلی‌پروپیلن",
-        "پلی‌پروپیلن با شاخص جریان مذاب کنترل‌شده برای تولید نخ و منسوجات صنعتی.",
-    ),
-
-    (
-        "پلی‌پروپیلن گرید تزریق",
-        "مواد پلیمری",
-        "پلی‌پروپیلن",
-        "گرید تزریقی پلی‌پروپیلن برای قطعات صنعتی و محصولات مهندسی.",
-    ),
-
-    (
-        "اتیلن گلیکول MEG",
-        "محصولات پتروشیمی",
-        "الفین",
-        "ماده اولیه مورد استفاده در زنجیره پلی‌استر و کاربردهای صنعتی.",
-    ),
-
-    (
-        "پروپیلن صنعتی",
-        "محصولات پتروشیمی",
-        "الفین",
-        "خوراک پتروشیمی با خلوص صنعتی برای واحدهای پایین‌دستی.",
-    ),
-
-    (
-        "بنزن آروماتیک",
-        "محصولات پتروشیمی",
-        "آروماتیک",
-        "بنزن با مشخصات کیفی مناسب برای استفاده در صنایع شیمیایی و پتروشیمی.",
-    ),
-
-    (
-        "تولوئن صنعتی",
-        "محصولات پتروشیمی",
-        "آروماتیک",
-        "تولوئن صنعتی برای کاربردهای حلال، شیمیایی و تولید مشتقات آروماتیک.",
-    ),
-
-    (
-        "زایلین مخلوط",
-        "محصولات پتروشیمی",
-        "آروماتیک",
-        "مخلوط زایلین با مشخصات فنی کنترل‌شده برای فرآیندهای پایین‌دستی.",
-    ),
-
-    (
-        "کاتالیست واحد الفین",
-        "کاتالیست",
-        "کاتالیست",
-        "کاتالیست صنعتی برای بهبود عملکرد واحدهای الفین و کاهش افت فعالیت.",
-    ),
-
-    (
-        "کاتالیست ریفرمینگ",
-        "کاتالیست",
-        "کاتالیست",
-        "کاتالیست مناسب فرآیندهای ریفرمینگ با پایداری حرارتی بالا.",
-    ),
-
-    (
-        "جاذب مولکولی واحد گاز",
-        "مواد فرآیندی",
-        "تصفیه گاز",
-        "جاذب مولکولی برای حذف رطوبت و ناخالصی از جریان‌های گازی.",
-    ),
-
-    (
-        "مواد ضدخوردگی خطوط فرآیندی",
-        "مواد شیمیایی",
-        "پایش وضعیت",
-        "مواد شیمیایی صنعتی برای کنترل خوردگی تجهیزات و خطوط انتقال.",
-    ),
-
-    (
-        "افزودنی پلیمری مقاوم‌کننده",
-        "مواد پلیمری",
-        "پلیمر",
-        "افزودنی تخصصی برای افزایش پایداری حرارتی و مکانیکی محصولات پلیمری.",
-    ),
-
-    (
-        "مستربچ مشکی صنعتی",
-        "مواد پلیمری",
-        "مستربچ",
-        "مستربچ مشکی با پراکنش مناسب برای تولید محصولات پلیمری.",
-    ),
-
-    (
-        "مستربچ سفید TiO2",
-        "مواد پلیمری",
-        "مستربچ",
-        "مستربچ سفید با پایه TiO2 برای افزایش پوشش و سفیدی محصولات.",
-    ),
-
-    (
-        "گرید پلی‌اتیلن لوله",
-        "مواد پلیمری",
-        "پلی‌اتیلن",
-        "مواد پلیمری مناسب تولید لوله‌های فشار بالا و شبکه‌های انتقال.",
-    ),
-
-    (
-        "کامپاند مهندسی پلی‌پروپیلن",
-        "مواد پلیمری",
-        "کامپاند",
-        "کامپاند مهندسی تقویت‌شده برای کاربردهای صنعتی و خودرویی.",
-    ),
-
-    (
-        "پلی‌استایرن مقاوم",
-        "مواد پلیمری",
-        "پلیمر",
-        "پلی‌استایرن مقاوم برای قطعات و کاربردهای صنعتی.",
-    ),
-
-    (
-        "رزین اپوکسی صنعتی",
-        "مواد شیمیایی",
-        "رزین",
-        "رزین اپوکسی برای پوشش‌های صنعتی، تعمیرات و حفاظت تجهیزات.",
-    ),
-
-    (
-        "حلال آروماتیک صنعتی",
-        "مواد شیمیایی",
-        "آروماتیک",
-        "حلال صنعتی با مشخصات کنترل‌شده برای فرآیندهای شیمیایی.",
-    ),
-
-    (
-        "سیستم پایش هوشمند کمپرسور",
-        "تجهیزات هوشمند",
-        "اینترنت اشیاء",
-        "سامانه پایش آنلاین ارتعاش، دما و وضعیت کمپرسورهای فرآیندی.",
-    ),
-
-    (
-        "دوقلوی دیجیتال واحد تقطیر",
-        "راهکار هوشمند",
-        "دوقلوی دیجیتال",
-        "مدل دیجیتال واحد فرآیندی برای تحلیل عملکرد و پیش‌بینی شرایط عملیاتی.",
-    ),
-
-    (
-        "سامانه پیش‌بینی خرابی پمپ",
-        "راهکار هوشمند",
-        "هوش مصنوعی",
-        "سامانه هوش مصنوعی برای پیش‌بینی خرابی و نگهداری پیشگویانه پمپ‌های صنعتی.",
-    ),
-
-    (
-        "پایش هوشمند خوردگی خطوط",
-        "راهکار هوشمند",
-        "داده‌کاوی",
-        "سامانه پایش و تحلیل روند خوردگی خطوط فرآیندی.",
-    ),
-
-]
-
-
-OTHER_PRODUCTS = [
-
-    (
-        "سامانه هوشمند مدیریت انرژی",
-        "مدیریت انرژی",
-        "هوش مصنوعی",
-        "راهکار هوشمند برای پایش و بهینه‌سازی مصرف انرژی.",
-    ),
-
-    (
-        "سامانه بینایی ماشین کنترل کیفیت",
-        "کنترل کیفیت",
-        "بینایی ماشین",
-        "سیستم کنترل کیفیت خودکار با استفاده از بینایی ماشین.",
-    ),
-
-    (
-        "پلتفرم تحلیل داده صنعتی",
-        "نرم‌افزار صنعتی",
-        "داده‌کاوی",
-        "پلتفرم تحلیل داده برای خطوط تولید و تجهیزات صنعتی.",
-    ),
-
-    (
-        "سامانه پایش وضعیت تجهیزات",
-        "پایش وضعیت",
-        "اینترنت اشیاء",
-        "سامانه پایش وضعیت تجهیزات دوار و صنعتی.",
-    ),
-
-    (
-        "ربات بازرسی خطوط صنعتی",
-        "رباتیک",
-        "رباتیک",
-        "ربات متحرک برای بازرسی خطوط و محیط‌های صنعتی.",
-    ),
-
-]
-
-
-# ============================================================
-# Needs
-# ============================================================
-
-PETRO_NEEDS = [
-
-    (
-        "پیش‌بینی خرابی تجهیزات دوار پتروشیمی",
-        "پتروشیمی",
-        "هوش مصنوعی",
-        "پیش‌بینی خرابی پمپ‌ها، کمپرسورها و تجهیزات دوار مجتمع پتروشیمی با استفاده از داده‌های عملیاتی.",
-    ),
-
-    (
-        "دوقلوی دیجیتال واحد الفین",
-        "پتروشیمی",
-        "دوقلوی دیجیتال",
-        "ایجاد مدل دیجیتال واحد الفین برای تحلیل سناریوهای عملیاتی و کاهش مصرف انرژی.",
-    ),
-
-    (
-        "پایش هوشمند خوردگی خطوط انتقال",
-        "پتروشیمی",
-        "اینترنت اشیاء",
-        "طراحی سامانه پایش آنلاین خوردگی خطوط و تجهیزات فرآیندی.",
-    ),
-
-    (
-        "بهینه‌سازی مصرف انرژی واحد تولید",
-        "پتروشیمی",
-        "داده‌کاوی",
-        "شناسایی عوامل مؤثر بر مصرف انرژی و ارائه مدل پیش‌بینی و بهینه‌سازی.",
-    ),
-
-    (
-        "کنترل کیفیت هوشمند محصولات پلیمری",
-        "پتروشیمی",
-        "بینایی ماشین",
-        "توسعه راهکار هوشمند کنترل کیفیت و تشخیص عیوب محصولات پلیمری.",
-    ),
-
-    (
-        "پایش وضعیت کمپرسورهای فرآیندی",
-        "پتروشیمی",
-        "اینترنت اشیاء",
-        "پایش لحظه‌ای ارتعاش، دما، فشار و شاخص‌های عملکرد کمپرسورها.",
-    ),
-
-    (
-        "پیش‌بینی کیفیت محصول پتروشیمی",
-        "پتروشیمی",
-        "هوش مصنوعی",
-        "پیش‌بینی مشخصات کیفی محصول با استفاده از داده‌های فرآیندی.",
-    ),
-
-    (
-        "بهینه‌سازی واحد تقطیر",
-        "پتروشیمی",
-        "دوقلوی دیجیتال",
-        "مدل‌سازی و بهینه‌سازی عملکرد واحد تقطیر و کاهش مصرف انرژی.",
-    ),
-
-    (
-        "تشخیص نشت گاز در مجتمع",
-        "پتروشیمی",
-        "بینایی ماشین",
-        "شناسایی سریع نشتی گاز و نقاط پرریسک در محیط صنعتی.",
-    ),
-
-    (
-        "مدیریت هوشمند نگهداری و تعمیرات",
-        "پتروشیمی",
-        "داده‌کاوی",
-        "توسعه مدل پیش‌بینی خرابی و برنامه‌ریزی نگهداری تجهیزات.",
-    ),
-
-]
-
-
-OTHER_NEEDS = [
-
-    (
-        "پایش هوشمند تجهیزات معدنی",
-        "فولاد و معدن",
-        "اینترنت اشیاء",
-        "پایش وضعیت تجهیزات و پیش‌بینی خرابی ماشین‌آلات معدنی.",
-    ),
-
-    (
-        "بهینه‌سازی مصرف انرژی کارخانه",
-        "فولاد و معدن",
-        "هوش مصنوعی",
-        "کاهش مصرف انرژی و شناسایی الگوهای مصرف.",
-    ),
-
-    (
-        "سامانه تشخیص عیب خطوط تولید",
-        "خودروسازی",
-        "بینایی ماشین",
-        "تشخیص خودکار عیوب قطعات در خط تولید.",
-    ),
-
-    (
-        "مدیریت هوشمند شبکه انرژی",
-        "انرژی",
-        "هوش مصنوعی",
-        "پیش‌بینی مصرف و بهینه‌سازی توزیع انرژی.",
-    ),
-
-    (
-        "پایش گلخانه هوشمند",
-        "کشاورزی",
-        "اینترنت اشیاء",
-        "پایش دما، رطوبت و شرایط محیطی گلخانه.",
-    ),
-
-]
-
-
-# ============================================================
-# Helper functions
-# ============================================================
-
-def field_names(model):
-    """
-    تمام فیلدهای واقعی مدل را برمی‌گرداند.
-    """
-
-    return {
-        f.name
-        for f in model._meta.get_fields()
-        if hasattr(f, "attname")
-    }
-
-
-def safe_create(model, **kwargs):
-    """
-    فقط فیلدهایی که واقعاً در مدل وجود دارند ارسال می‌شوند.
-    """
-
-    allowed = field_names(model)
-
-    clean = {
-        key: value
-        for key, value in kwargs.items()
-        if key in allowed
-    }
-
-    return model.objects.create(**clean)
-
-
-def safe_update(instance, **kwargs):
-    allowed = field_names(instance.__class__)
-
-    changed = []
-
-    for key, value in kwargs.items():
-
-        if key in allowed:
-            setattr(instance, key, value)
-            changed.append(key)
-
-    if changed:
-        instance.save(update_fields=changed)
-
-
-def find_or_create_industry(name):
-    """
-    IndustryCategory در نسخه‌های مختلف پروژه ممکن است
-    فیلدهای متفاوتی داشته باشد.
-
-    ابتدا بر اساس name تلاش می‌کنیم.
-    """
-
-    names = field_names(IndustryCategory)
-
-    if "name" not in names:
-        raise RuntimeError(
-            "IndustryCategory فاقد فیلد name است. "
-            "مدل industries/models.py را بررسی کنید."
-        )
-
-    obj = IndustryCategory.objects.filter(
-        name=name
-    ).first()
-
-    if obj:
-        return obj
-
-    kwargs = {
-        "name": name
-    }
-
-    if "description" in names:
-        kwargs["description"] = (
-            f"صنعت {name} در بازار فناوری و نوآوری"
-        )
-
-    if "is_active" in names:
-        kwargs["is_active"] = True
-
-    return IndustryCategory.objects.create(**kwargs)
-
-
-def make_username(prefix, index):
-    return f"{prefix}_{index}"
-
-
-def get_or_create_user(
-    username,
-    company_name,
-    first_name="کاربر",
-    last_name="نمونه",
-):
-
-    user = User.objects.filter(
-        username=username
-    ).first()
-
-    if user:
-        return user
-
-    kwargs = {
-        "username": username,
-        "email": f"{username}@example.local",
-        "first_name": first_name,
-        "last_name": last_name,
-    }
-
-    user = User.objects.create_user(
-        password="Test@123456",
-        **kwargs
-    )
-
-    # بعضی پروژه‌ها company_name دارند
-    if hasattr(user, "company_name"):
-        user.company_name = company_name
-        user.save(update_fields=["company_name"])
-
-    # بعضی پروژه‌ها company دارند
-    elif hasattr(user, "company"):
-        user.company = company_name
-        user.save(update_fields=["company"])
-
-    return user
-
-
-def random_price():
-    """
-    قیمت تقریبی برای محیط Demo.
-    """
-
-    return Decimal(
-        random.randint(
-            250,
-            8500
-        )
-        * 1_000_000
-    )
-
-
-def random_product_price():
-    return Decimal(
-        random.randint(
-            180,
-            6500
-        )
-        * 1_000_000
-    )
-
-
-def random_views(minimum=100, maximum=12500):
-    return random.randint(
-        minimum,
-        maximum
-    )
-
-
-# ============================================================
-# Users
-# ============================================================
-
-def create_users():
-
-    sellers = []
-
-    companies = [
-        "پتروشیمی آریا",
-        "پتروشیمی پارس",
-        "پتروشیمی جم",
-        "پتروشیمی مارون",
-        "پتروشیمی نوری",
-        "پتروشیمی زاگرس",
-        "پتروشیمی امیرکبیر",
-        "شرکت فناوری فرآیند هوشمند",
-        "راهکاران صنعت نوین",
-        "فناوران انرژی پارس",
-        "پژوهشگران هوشمند صنعت",
-        "نگین کنترل فرآیند",
-    ]
-
-    for i, company in enumerate(companies, start=1):
-
-        user = get_or_create_user(
-            username=make_username(
-                "market_supplier",
-                i
-            ),
-            company_name=company,
-            first_name="مدیر",
-            last_name=f"شرکت {i}",
-        )
-
-        sellers.append(user)
-
-    buyers = []
-
-    buyer_companies = [
-        "مجتمع پتروشیمی جنوب",
-        "شرکت صنایع شیمیایی پارس",
-        "هلدینگ انرژی نوین",
-        "شرکت تولید پلیمر ایران",
-        "مجتمع پتروشیمی مرکزی",
-        "شرکت مهندسی و توسعه فرآیند",
-        "صنایع پایین‌دستی پلیمر",
-        "شرکت بهره‌برداری انرژی",
-    ]
-
-    for i, company in enumerate(
-        buyer_companies,
-        start=1
-    ):
-
-        user = get_or_create_user(
-            username=make_username(
-                "market_buyer",
-                i
-            ),
-            company_name=company,
-            first_name="کارشناس",
-            last_name=f"خریدار {i}",
-        )
-
-        buyers.append(user)
-
-    return sellers, buyers
-
-
-# ============================================================
-# Industries
-# ============================================================
-
-def create_industries():
-
-    result = {}
-
-    for name in INDUSTRIES:
-
-        result[name] = find_or_create_industry(
-            name
-        )
-
-    return result
-
-
-# ============================================================
-# Products
-# ============================================================
-
-def create_products(
-    sellers,
-    industries,
-):
-
-    products = []
-
-    names = []
-
-    # --------------------------------------------------------
-    # حدود 75% پتروشیمی
-    # --------------------------------------------------------
-
-    for item in PETRO_PRODUCTS:
-
-        names.append(
-            (
-                item,
-                "پتروشیمی"
-            )
-        )
-
-    for item in OTHER_PRODUCTS:
-
-        names.append(
-            (
-                item,
-                random.choice(
-                    [
-                        "نفت و گاز",
-                        "فولاد و معدن",
-                        "انرژی",
-                        "خودروسازی",
-                        "فناوری اطلاعات",
-                    ]
-                )
-            )
-        )
-
-    # تکرار کنترل‌شده برای داشتن حجم واقعی
-    while len(names) < PRODUCT_COUNT:
-
-        item = random.choice(
-            PETRO_PRODUCTS
-        )
-
-        names.append(
-            (
-                item,
-                "پتروشیمی"
-            )
-        )
-
-    random.shuffle(names)
-
-    for index in range(PRODUCT_COUNT):
-
-        item, industry_name = names[index]
-
-        title, category, technology, description = item
-
-        seller = random.choice(
-            sellers
-        )
-
-        industry = industries[
-            industry_name
-        ]
-
-        is_petro = (
-            industry_name == "پتروشیمی"
-        )
-
-        if is_petro:
-
-            tech = technology
-
-            trl = random.choice(
-                [7, 8, 8, 9]
-            )
-
-            mrl = random.choice(
-                [6, 7, 8, 8, 9]
-            )
-
-        else:
-
-            tech = technology
-
-            trl = random.choice(
-                [5, 6, 7, 8]
-            )
-
-            mrl = random.choice(
-                [5, 6, 7, 8]
-            )
-
-        price = (
-            random_product_price()
-        )
-
-        product_data = {
-
-            "seller": seller,
-
-            "title":
-                title
-                if index < len(PETRO_PRODUCTS)
-                else f"{title} - مدل صنعتی {index + 1}",
-
-            "category": "product",
-
-            "industry": industry,
-
-            "short_description":
-                description,
-
-            "full_description":
-                f"""
-                این محصول برای استفاده در زنجیره صنعتی
-                {industry_name} طراحی شده است.
-
-                کاربرد اصلی:
-                {description}
-
-                قابلیت استقرار در محیط صنعتی،
-                امکان پایش عملکرد و پشتیبانی فنی
-                از ویژگی‌های این محصول است.
-                """,
-
-            "problem_solved":
-                "کاهش هزینه عملیاتی، افزایش قابلیت اطمینان "
-                "و بهبود بهره‌وری فرآیند.",
-
-            "competitive_advantage":
-                "قابلیت استقرار صنعتی، پشتیبانی فنی و "
-                "امکان توسعه متناسب با نیاز مشتری.",
-
-            "technical_specs":
-                f"فناوری: {tech} | "
-                f"TRL: {trl} | "
-                f"MRL: {mrl} | "
-                f"کاربرد: {industry_name}",
-
-            "trl": trl,
-
-            "mrl": mrl,
-
-            "pricing_model":
-                "فروش مستقیم / قرارداد تأمین صنعتی",
-
-            "price":
-                price,
-
-            "ip_status":
-                random.choice(
-                    [
-                        "مالکیت داخلی",
-                        "تحت لیسانس",
-                        "قابل توسعه",
-                        "ثبت اختراع",
-                    ]
-                ),
-
-            "sample_customers":
-                random.choice(
-                    [
-                        "مجتمع‌های پتروشیمی",
-                        "شرکت‌های تولیدی بزرگ",
-                        "صنایع فرآیندی",
-                        "مشتریان صنعتی منتخب",
-                    ]
-                ),
-
-            "capacity":
-                random.choice(
-                    [
-                        "100 تن در ماه",
-                        "250 تن در ماه",
-                        "500 تن در ماه",
-                        "1000 تن در ماه",
-                        "قابل توسعه تا 2000 تن در ماه",
-                    ]
-                ),
-
-            "collaboration_terms":
-                "تأمین، نصب، راه‌اندازی و خدمات پس از فروش",
-
-            "status":
-                random.choice(
-                    [
-                        "published",
-                        "published",
-                        "published",
-                        "approved",
-                        "in_negotiation",
-                    ]
-                ),
-
-            "view_count":
-                random_views(),
-
-            "city":
-                random.choice(
-                    CITIES
-                ),
-
-            "technology":
-                tech,
+users = {}
+for username, full_name, company, email in users_data:
+    user, created = User.objects.get_or_create(
+        username=username,
+        defaults={
+            'first_name': full_name.split()[0] if len(full_name.split()) >= 2 else full_name,
+            'last_name': full_name.split()[1] if len(full_name.split()) >= 2 else '',
+            'email': email,
+            'company_name': company,
         }
+    )
+    if created:
+        user.set_password('test1234')
+        user.save()
+    users[username] = user
 
-        product = safe_create(
-            Product,
-            **product_data
-        )
-
-        products.append(
-            product
-        )
-
-    return products
-
+print(f"✅ {len(users)} کاربر ایجاد/بارگیری شد.")
 
 # ============================================================
-# Supplies
+# ۲. ایجاد صنایع
 # ============================================================
 
-def create_supplies(
-    sellers,
-):
+industry_names = [
+    'نفت و گاز', 'پتروشیمی', 'فولاد و معدن', 'برق و انرژی',
+    'فناوری اطلاعات', 'خودروسازی', 'داروسازی', 'کشاورزی', 'ساختمان', 'حمل و نقل'
+]
 
-    supplies = []
+industry_objs = {}
+for name in industry_names:
+    obj, created = IndustryCategory.objects.get_or_create(name=name)
+    industry_objs[name] = obj
 
-    # --------------------------------------------------------
-    # برای Market Intelligence
-    # بخش بزرگی حتماً پتروشیمی باشد.
-    # --------------------------------------------------------
+print(f"✅ {len(industry_objs)} صنعت ایجاد/بارگیری شد.")
 
-    for i in range(
-        SUPPLY_COUNT
-    ):
+# ============================================================
+# ۳. تولید محصولات (با تأکید بر پتروشیمی و صنایع مرتبط)
+# ============================================================
 
-        seller = random.choice(
-            sellers
+start_date = timezone.now() - timedelta(days=730)
+end_date = timezone.now()
+
+# لیست محصولات با تنوع بالا (بیشتر پتروشیمی)
+product_templates = [
+    # -------------------- پتروشیمی (حدود ۱۵ محصول) --------------------
+    {'title': 'کاتالیست پیشرفته تبدیل متانول به الفین', 'short_description': 'کاتالیست با کارایی بالا برای واحدهای الفین', 'full_description': 'کاتالیست نسل جدید با افزایش ۱۵٪ بازدهی و کاهش مصرف انرژی', 'category': 'product', 'price': 250000000, 'trl': 8, 'mrl': 9, 'status': 'published', 'competitive_advantage': 'کاهش ۲۰٪ مصرف کاتالیست', 'industry': 'پتروشیمی'},
+    {'title': 'خدمات تعمیر و نگهداری تخصصی مبدل‌های حرارتی', 'short_description': 'ارائه خدمات تعمیر، نظافت و بهینه‌سازی مبدل‌های حرارتی', 'full_description': 'خدمات تخصصی شامل شستشوی شیمیایی، تعویض لوله‌ها و تست فشار', 'category': 'service', 'price': 150000000, 'trl': 9, 'mrl': 8, 'status': 'published', 'competitive_advantage': 'کاهش ۳۰٪ زمان توقف', 'industry': 'پتروشیمی'},
+    {'title': 'سیستم کنترل فرآیند پلیمریزاسیون', 'short_description': 'سیستم کنترل هوشمند برای واحدهای تولید پلیمر', 'full_description': 'سیستم DCS پیشرفته برای کنترل دقیق پارامترهای پلیمریزاسیون', 'category': 'product', 'price': 800000000, 'trl': 7, 'mrl': 8, 'status': 'published', 'competitive_advantage': 'دقت ۰٫۵٪ در کنترل دما', 'industry': 'پتروشیمی'},
+    {'title': 'سامانه مدیریت انرژی پتروشیمی', 'short_description': 'نرم‌افزار بهینه‌سازی مصرف انرژی در واحدهای پتروشیمی', 'full_description': 'پلتفرم تحلیل و مدیریت مصرف انرژی با قابلیت پیش‌بینی و بهینه‌سازی', 'category': 'service', 'price': 600000000, 'trl': 8, 'mrl': 7, 'status': 'published', 'competitive_advantage': 'کاهش ۱۲٪ مصرف انرژی', 'industry': 'پتروشیمی'},
+    {'title': 'راهکار تصفیه پساب پتروشیمی با غشاهای نانو', 'short_description': 'سیستم تصفیه پیشرفته با استفاده از غشاهای نانویی', 'full_description': 'فناوری ممبران برای تصفیه پساب‌های صنعتی و بازچرخانی آب', 'category': 'product', 'price': 350000000, 'trl': 6, 'mrl': 6, 'status': 'in_negotiation', 'competitive_advantage': 'بازچرخانی ۸۰٪ آب', 'industry': 'پتروشیمی'},
+    {'title': 'مشاوره توسعه محصولات پلیمری جدید', 'short_description': 'ارائه خدمات تحقیق و توسعه برای تولید پلیمرهای پیشرفته', 'full_description': 'خدمات مشاوره در زمینه تولید پلیمرهای خاص با کاربردهای صنعتی', 'category': 'service', 'price': 400000000, 'trl': 9, 'mrl': 9, 'status': 'published', 'competitive_advantage': 'دارای آزمایشگاه پیشرفته R&D', 'industry': 'پتروشیمی'},
+    {'title': 'سیستم پایش آنلاین آلاینده‌های هوا', 'short_description': 'سیستم دقیق سنجش آلاینده‌های خروجی از دودکش‌ها', 'full_description': 'دستگاه آنالایزر گازهای خروجی با قابلیت اتصال به شبکه', 'category': 'product', 'price': 280000000, 'trl': 8, 'mrl': 7, 'status': 'published', 'competitive_advantage': 'قابلیت اندازه‌گیری ۸ نوع آلاینده', 'industry': 'پتروشیمی'},
+    {'title': 'خدمات کالیبراسیون تجهیزات ابزار دقیق', 'short_description': 'ارائه خدمات کالیبراسیون و تعمیرات تجهیزات اندازه‌گیری', 'full_description': 'خدمات دوره‌ای کالیبراسیون برای تجهیزات فشار، دما، سطح و دبی', 'category': 'service', 'price': 120000000, 'trl': 9, 'mrl': 9, 'status': 'published', 'competitive_advantage': 'گواهینامه ISO 17025', 'industry': 'پتروشیمی'},
+    {'title': 'سیستم بازیابی حلال‌های صنعتی', 'short_description': 'راهکار بازیافت و تصفیه حلال‌های مصرفی', 'full_description': 'سیستم تقطیر و بازیابی حلال‌های آلی با راندمان بالا', 'category': 'product', 'price': 750000000, 'trl': 7, 'mrl': 8, 'status': 'published', 'competitive_advantage': 'بازیافت ۹۵٪ حلال', 'industry': 'پتروشیمی'},
+    {'title': 'سامانه یکپارچه مدیریت کیفیت محصولات پتروشیمی', 'short_description': 'نرم‌افزار کنترل کیفیت بر اساس استانداردهای بین‌المللی', 'full_description': 'سیستم مدیریت کیفیت برای پایش و بهبود مشخصات محصولات پتروشیمی', 'category': 'service', 'price': 500000000, 'trl': 8, 'mrl': 8, 'status': 'published', 'competitive_advantage': 'یکپارچگی با LIMS', 'industry': 'پتروشیمی'},
+    {'title': 'سیستم کنترل خوردگی مخازن پتروشیمی', 'short_description': 'سیستم پایش و کنترل خوردگی مخازن ذخیره', 'full_description': 'استفاده از سنسورهای پیشرفته برای پایش ضخامت و خوردگی', 'category': 'product', 'price': 450000000, 'trl': 7, 'mrl': 6, 'status': 'published', 'competitive_advantage': 'پیش‌بینی دقیق زمان تعمیرات', 'industry': 'پتروشیمی'},
+    {'title': 'مشاوره ایمنی فرآیندهای پتروشیمی', 'short_description': 'ارائه خدمات مشاوره ایمنی و HAZOP', 'full_description': 'خدمات تحلیل ریسک و ایمنی فرآیندهای پتروشیمی', 'category': 'service', 'price': 300000000, 'trl': 9, 'mrl': 9, 'status': 'published', 'competitive_advantage': 'تیم متخصص با ۱۵ سال تجربه', 'industry': 'پتروشیمی'},
+    {'title': 'سیستم هوشمند مدیریت نگهداری و تعمیرات (CMMS)', 'short_description': 'نرم‌افزار مدیریت نگهداری و تعمیرات برای صنایع پتروشیمی', 'full_description': 'سیستم برنامه‌ریزی و ثبت تعمیرات با قابلیت تحلیل داده‌های خرابی', 'category': 'product', 'price': 350000000, 'trl': 7, 'mrl': 7, 'status': 'published', 'competitive_advantage': 'یکپارچگی با سیستم‌های SCADA', 'industry': 'پتروشیمی'},
+
+    # -------------------- نفت و گاز (حدود ۵ محصول) --------------------
+    {'title': 'سیستم پایش هوشمند چاه‌های نفت', 'short_description': 'سیستم مانیتورینگ آنلاین فشار و دبی چاه‌های نفت', 'full_description': 'سیستم پیشرفته با سنسورهای دقیق برای پایش لحظه‌ای عملکرد چاه‌ها و پیش‌بینی خرابی‌ها', 'category': 'product', 'price': 1500000000, 'trl': 9, 'mrl': 8, 'status': 'published', 'competitive_advantage': 'دقت بالا و کاهش ۳۰٪ توقف تولید', 'industry': 'نفت و گاز'},
+    {'title': 'خدمات نقشه‌برداری زیرسطحی با روش لرزه‌نگاری', 'short_description': 'ارائه خدمات تخصصی اکتشاف نفت و گاز با روش‌های پیشرفته لرزه‌نگاری', 'full_description': 'خدمات کامل نقشه‌برداری سه‌بعدی برای شناسایی مخازن هیدروکربوری', 'category': 'service', 'price': 2500000000, 'trl': 7, 'mrl': 6, 'status': 'published', 'competitive_advantage': 'دقت ۹۵٪ در تشخیص مخازن', 'industry': 'نفت و گاز'},
+    {'title': 'سیستم اسکادا (SCADA) برای پالایشگاه‌ها', 'short_description': 'سیستم کنترل و مدیریت متمرکز فرآیندهای پالایشگاهی', 'full_description': 'نرم‌افزار و سخت‌افزار پیشرفته برای کنترل و پایش واحدهای پالایشگاهی', 'category': 'product', 'price': 3000000000, 'trl': 8, 'mrl': 9, 'status': 'published', 'competitive_advantage': 'قابلیت یکپارچه‌سازی با تجهیزات قدیمی', 'industry': 'نفت و گاز'},
+    {'title': 'خدمات مهندسی و طراحی تأسیسات نفت و گاز', 'short_description': 'ارائه خدمات طراحی، نظارت و راه‌اندازی تأسیسات نفت و گاز', 'full_description': 'خدمات جامع مهندسی از مرحله مطالعه تا بهره‌برداری', 'category': 'service', 'price': 800000000, 'trl': 9, 'mrl': 8, 'status': 'published', 'competitive_advantage': 'تیم مهندسی با ۲۰ سال تجربه', 'industry': 'نفت و گاز'},
+    {'title': 'دستگاه آنالایزر ترکیبات گاز طبیعی', 'short_description': 'دستگاه قابل حمل برای آنالیز ترکیبات گاز در میدان', 'full_description': 'دستگاه دقیق اندازه‌گیری ترکیبات گاز طبیعی با قابلیت ذخیره‌سازی داده', 'category': 'product', 'price': 450000000, 'trl': 7, 'mrl': 7, 'status': 'approved', 'competitive_advantage': 'دقت بالا در شرایط سخت محیطی', 'industry': 'نفت و گاز'},
+
+    # -------------------- فولاد و معدن (حدود ۴ محصول) --------------------
+    {'title': 'سیستم اتوماسیون کوره‌های قوس الکتریکی', 'short_description': 'کنترل هوشمند کوره‌های ذوب فولاد', 'full_description': 'سیستم کنترل پیشرفته برای بهینه‌سازی مصرف انرژی و کیفیت فولاد', 'category': 'product', 'price': 1200000000, 'trl': 7, 'mrl': 7, 'status': 'published', 'competitive_advantage': 'کاهش ۱۵٪ مصرف برق', 'industry': 'فولاد و معدن'},
+    {'title': 'خدمات آنالیز شیمیایی مواد معدنی', 'short_description': 'ارائه خدمات آزمایشگاهی برای آنالیز سنگ‌آهن و کنسانتره', 'full_description': 'خدمات آنالیز دقیق عناصر با استفاده از روش‌های XRF و ICP', 'category': 'service', 'price': 300000000, 'trl': 9, 'mrl': 9, 'status': 'published', 'competitive_advantage': 'دقت نتایج در سطح آزمایشگاه‌های مرجع', 'industry': 'فولاد و معدن'},
+    {'title': 'سیستم مدیریت نوار نقاله‌های معادن', 'short_description': 'سیستم مانیتورینگ و کنترل نوار نقاله‌های طولانی', 'full_description': 'سیستم مبتنی بر IoT برای پایش شرایط نوار نقاله و پیش‌بینی خرابی', 'category': 'product', 'price': 650000000, 'trl': 6, 'mrl': 6, 'status': 'approved', 'competitive_advantage': 'کاهش ۲۵٪ توقف‌های ناخواسته', 'industry': 'فولاد و معدن'},
+    {'title': 'خدمات طراحی سیستم‌های انتقال مواد در معادن', 'short_description': 'طراحی و مشاوره سیستم‌های انتقال مواد معدنی', 'full_description': 'خدمات مهندسی برای طراحی سیستم‌های نوار نقاله، اسکرو و پمپ‌های دوغاب', 'category': 'service', 'price': 350000000, 'trl': 9, 'mrl': 9, 'status': 'published', 'competitive_advantage': 'استفاده از نرم‌افزارهای پیشرفته شبیه‌سازی', 'industry': 'فولاد و معدن'},
+
+    # -------------------- برق و انرژی (حدود ۴ محصول) --------------------
+    {'title': 'سیستم مدیریت انرژی هوشمند (EMS)', 'short_description': 'نرم‌افزار بهینه‌سازی مصرف انرژی در ساختمان‌ها و کارخانجات', 'full_description': 'پلتفرم مبتنی بر IoT برای پایش و کنترل مصرف انرژی', 'category': 'product', 'price': 400000000, 'trl': 8, 'mrl': 8, 'status': 'published', 'competitive_advantage': 'کاهش ۲۰٪ مصرف انرژی', 'industry': 'برق و انرژی'},
+    {'title': 'خدمات مشاوره انرژی‌های تجدیدپذیر', 'short_description': 'ارائه مشاوره برای احداث نیروگاه‌های خورشیدی و بادی', 'full_description': 'خدمات مطالعات امکان‌سنجی، طراحی و نظارت بر اجرا', 'category': 'service', 'price': 600000000, 'trl': 9, 'mrl': 9, 'status': 'published', 'competitive_advantage': 'تجربه اجرای ۵۰ مگاوات نیروگاه', 'industry': 'برق و انرژی'},
+    {'title': 'دستگاه آنالایزر کیفیت برق', 'short_description': 'دستگاه قابل حمل برای اندازه‌گیری پارامترهای کیفیت برق', 'full_description': 'اندازه‌گیری هارمونیک‌ها، نوسانات و ضریب توان در شبکه‌های صنعتی', 'category': 'product', 'price': 180000000, 'trl': 7, 'mrl': 7, 'status': 'published', 'competitive_advantage': 'دقت بالا در فرکانس‌های بالا', 'industry': 'برق و انرژی'},
+    {'title': 'خدمات بهینه‌سازی شبکه‌های توزیع برق', 'short_description': 'ارائه راهکارهای کاهش تلفات و افزایش پایداری شبکه', 'full_description': 'خدمات شبیه‌سازی و اصلاح شبکه‌های توزیع', 'category': 'service', 'price': 500000000, 'trl': 9, 'mrl': 9, 'status': 'published', 'competitive_advantage': 'کاهش تلفات تا ۱۵٪', 'industry': 'برق و انرژی'},
+
+    # -------------------- فناوری اطلاعات (حدود ۴ محصول) --------------------
+    {'title': 'پلتفرم تحلیل داده‌های کلان صنعتی', 'short_description': 'سیستم تحلیل داده‌های حجیم برای صنایع تولیدی', 'full_description': 'راهکار جامع برای جمع‌آوری، ذخیره‌سازی و تحلیل داده‌های صنعتی با استفاده از هوش مصنوعی', 'category': 'product', 'price': 600000000, 'trl': 8, 'mrl': 9, 'status': 'published', 'competitive_advantage': 'پردازش داده در زمان واقعی', 'industry': 'فناوری اطلاعات'},
+    {'title': 'خدمات پیاده‌سازی سیستم‌های ERP صنعتی', 'short_description': 'پیاده‌سازی و سفارشی‌سازی نرم‌افزارهای برنامه‌ریزی منابع سازمان', 'full_description': 'خدمات جامع پیاده‌سازی ERP با رویکرد صنعتی و تولیدی', 'category': 'service', 'price': 800000000, 'trl': 9, 'mrl': 9, 'status': 'published', 'competitive_advantage': 'تجربه در صنایع بزرگ', 'industry': 'فناوری اطلاعات'},
+    {'title': 'سامانه امنیت سایبری صنعتی', 'short_description': 'راهکار حفاظت از شبکه‌های صنعتی و SCADA', 'full_description': 'سیستم تشخیص و پاسخ به تهدیدات سایبری در محیط‌های صنعتی', 'category': 'product', 'price': 450000000, 'trl': 6, 'mrl': 6, 'status': 'approved', 'competitive_advantage': 'انطباق با استانداردهای IEC 62443', 'industry': 'فناوری اطلاعات'},
+    {'title': 'سیستم هوش مصنوعی برای پیش‌بینی خرابی تجهیزات', 'short_description': 'نرم‌افزار مبتنی بر یادگیری ماشین برای نگهداری پیش‌بینی‌کننده', 'full_description': 'سیستم تحلیل داده‌های حسگرها برای پیش‌بینی خرابی‌ها و برنامه‌ریزی تعمیرات', 'category': 'product', 'price': 550000000, 'trl': 7, 'mrl': 7, 'status': 'published', 'competitive_advantage': 'دقت پیش‌بینی ۸۵٪', 'industry': 'فناوری اطلاعات'},
+
+    # -------------------- صنایع دیگر (هر کدام ۲ محصول) --------------------
+    {'title': 'سیستم کنترل کیفیت بدنه خودرو', 'short_description': 'سیستم بازرسی بدنه با استفاده از بینایی ماشین', 'full_description': 'سیستم تشخیص عیوب سطحی و ابعادی بدنه خودرو', 'category': 'product', 'price': 350000000, 'trl': 8, 'mrl': 7, 'status': 'published', 'competitive_advantage': 'دقت بالا در تشخیص عیوب', 'industry': 'خودروسازی'},
+    {'title': 'خدمات مشاوره مهندسی خودرو', 'short_description': 'ارائه خدمات مشاوره در زمینه طراحی و توسعه خودرو', 'full_description': 'خدمات مهندسی شامل طراحی سیستم‌های تعلیق، ترمز و فرمان', 'category': 'service', 'price': 500000000, 'trl': 9, 'mrl': 9, 'status': 'published', 'competitive_advantage': 'تیم با تجربه بین‌المللی', 'industry': 'خودروسازی'},
+    {'title': 'سیستم کنترل کیفی دارو با HPLC', 'short_description': 'دستگاه HPLC برای آنالیز ترکیبات دارویی', 'full_description': 'دستگاه کروماتوگرافی مایع با کارایی بالا برای کنترل کیفیت', 'category': 'product', 'price': 600000000, 'trl': 9, 'mrl': 8, 'status': 'published', 'competitive_advantage': 'دقت بالا در تشخیص ناخالصی‌ها', 'industry': 'داروسازی'},
+    {'title': 'خدمات مشاوره GMP در داروسازی', 'short_description': 'ارائه خدمات مشاوره برای پیاده‌سازی GMP', 'full_description': 'خدمات مشاوره جهت انطباق با استانداردهای تولید خوب', 'category': 'service', 'price': 300000000, 'trl': 9, 'mrl': 9, 'status': 'published', 'competitive_advantage': 'تخصص در صنایع دارویی', 'industry': 'داروسازی'},
+    {'title': 'سیستم آبیاری هوشمند', 'short_description': 'سیستم کنترل هوشمند آبیاری بر اساس رطوبت خاک', 'full_description': 'سیستم مبتنی بر سنسورهای رطوبت و هواشناسی برای بهینه‌سازی مصرف آب', 'category': 'product', 'price': 180000000, 'trl': 7, 'mrl': 6, 'status': 'published', 'competitive_advantage': 'کاهش ۳۰٪ مصرف آب', 'industry': 'کشاورزی'},
+    {'title': 'خدمات مشاوره کشاورزی دقیق', 'short_description': 'ارائه راهکارهای کشاورزی دقیق با استفاده از تصاویر ماهواره‌ای', 'full_description': 'خدمات تحلیل داده‌های ماهواره‌ای برای مدیریت مزارع', 'category': 'service', 'price': 200000000, 'trl': 8, 'mrl': 8, 'status': 'published', 'competitive_advantage': 'دقت بالا در تحلیل', 'industry': 'کشاورزی'},
+    {'title': 'سیستم مدیریت انرژی ساختمان (BEMS)', 'short_description': 'سیستم هوشمند مدیریت انرژی در ساختمان‌ها', 'full_description': 'سیستم کنترل HVAC، روشنایی و سایر مصرف‌کننده‌های انرژی', 'category': 'product', 'price': 250000000, 'trl': 8, 'mrl': 8, 'status': 'published', 'competitive_advantage': 'صرفه‌جویی تا ۲۵٪', 'industry': 'ساختمان'},
+    {'title': 'خدمات طراحی سازه‌های فولادی', 'short_description': 'طراحی و محاسبه سازه‌های فولادی برای ساختمان‌ها', 'full_description': 'خدمات مهندسی سازه با استفاده از نرم‌افزارهای پیشرفته', 'category': 'service', 'price': 150000000, 'trl': 9, 'mrl': 9, 'status': 'published', 'competitive_advantage': 'رعایت استانداردهای بین‌المللی', 'industry': 'ساختمان'},
+    {'title': 'سیستم مدیریت ناوگان حمل و نقل', 'short_description': 'سیستم GPS برای ردیابی و مدیریت ناوگان', 'full_description': 'پلتفرم مدیریت ناوگان با قابلیت ردیابی لحظه‌ای و تحلیل مسیر', 'category': 'product', 'price': 300000000, 'trl': 8, 'mrl': 8, 'status': 'published', 'competitive_advantage': 'کاهش ۲۰٪ هزینه‌های سوخت', 'industry': 'حمل و نقل'},
+    {'title': 'خدمات مشاوره لجستیک و زنجیره تامین', 'short_description': 'ارائه مشاوره بهینه‌سازی زنجیره تامین و لجستیک', 'full_description': 'خدمات تحلیل و بهبود فرآیندهای لجستیکی', 'category': 'service', 'price': 400000000, 'trl': 9, 'mrl': 9, 'status': 'published', 'competitive_advantage': 'تجربه در صنایع بزرگ', 'industry': 'حمل و نقل'},
+]
+
+products_created = 0
+for template in product_templates:
+    industry_name = template.pop('industry')
+    industry = industry_objs.get(industry_name)
+    if not industry:
+        continue
+    seller = random.choice(list(users.values()))
+    defaults = template.copy()
+    defaults['seller'] = seller
+    defaults['industry'] = industry
+    defaults['created_at'] = random_date(start_date, end_date)
+
+    product, created = Product.objects.get_or_create(
+        title=template['title'],
+        defaults=defaults
+    )
+    if created:
+        products_created += 1
+        # افزودن تصویر (اختیاری)
+        if random.random() < 0.6:
+            img = get_random_image()
+            if img:
+                try:
+                    product.image.save(f"product_{product.id}.jpg", img, save=True)
+                except Exception:
+                    pass
+        print(f"✅ محصول ایجاد شد: {product.title} (صنعت: {industry_name})")
+
+print(f"✅ {products_created} محصول جدید ایجاد شد. (تعداد کل: {Product.objects.count()})")
+
+# ============================================================
+# ۴. تولید نیازها (حداقل ۲۰ نیاز)
+# ============================================================
+
+need_templates = [
+    # نفت و گاز
+    {'title': 'سیستم پایش چاه‌های نفت', 'description': 'به دنبال سیستمی برای پایش فشار و دبی چاه‌های نفت هستیم.', 'industry': 'نفت و گاز', 'status': 'published', 'budget': 800000000, 'timeline': '۶ ماه'},
+    {'title': 'مشاور توسعه میدان نفتی', 'description': 'نیاز به مشاور برای طراحی و توسعه میدان نفتی جدید.', 'industry': 'نفت و گاز', 'status': 'receiving_proposals', 'budget': 1500000000, 'timeline': '۱۲ ماه'},
+    {'title': 'خرید تجهیزات حفاری', 'description': 'نیاز به تامین تجهیزات حفاری پیشرفته برای میدان نفتی.', 'industry': 'نفت و گاز', 'status': 'published', 'budget': 2000000000, 'timeline': '۸ ماه'},
+    
+    # پتروشیمی
+    {'title': 'کاتالیست با کیفیت بالا', 'description': 'نیاز به تامین کاتالیست با کیفیت بالا برای واحد الفین.', 'industry': 'پتروشیمی', 'status': 'published', 'budget': 200000000, 'timeline': '۳ ماه'},
+    {'title': 'مشاور بهینه‌سازی واحدهای پتروشیمی', 'description': 'به دنبال مشاور برای افزایش بازدهی واحدهای پتروشیمی.', 'industry': 'پتروشیمی', 'status': 'evaluating', 'budget': 500000000, 'timeline': '۹ ماه'},
+    {'title': 'سیستم تصفیه پساب پتروشیمی', 'description': 'نیاز به سیستم تصفیه پیشرفته پساب با غشاهای نانو.', 'industry': 'پتروشیمی', 'status': 'published', 'budget': 400000000, 'timeline': '۶ ماه'},
+    {'title': 'خدمات کالیبراسیون ابزار دقیق', 'description': 'نیاز به خدمات کالیبراسیون دوره‌ای تجهیزات ابزار دقیق.', 'industry': 'پتروشیمی', 'status': 'receiving_proposals', 'budget': 150000000, 'timeline': '۴ ماه'},
+    {'title': 'سیستم کنترل خوردگی مخازن', 'description': 'نیاز به سیستم پایش و کنترل خوردگی مخازن ذخیره پتروشیمی.', 'industry': 'پتروشیمی', 'status': 'published', 'budget': 350000000, 'timeline': '۵ ماه'},
+    {'title': 'مشاوره ایمنی فرآیندها', 'description': 'نیاز به مشاوره تخصصی ایمنی و HAZOP برای واحدهای پتروشیمی.', 'industry': 'پتروشیمی', 'status': 'evaluating', 'budget': 250000000, 'timeline': '۷ ماه'},
+
+    # فولاد و معدن
+    {'title': 'سیستم اتوماسیون کوره فولاد', 'description': 'نیاز به سیستم کنترل هوشمند کوره‌های فولاد.', 'industry': 'فولاد و معدن', 'status': 'published', 'budget': 700000000, 'timeline': '۴ ماه'},
+    {'title': 'مشاور کاهش باطله معدن', 'description': 'نیاز به مشاور برای کاهش باطله در کارخانه فرآوری.', 'industry': 'فولاد و معدن', 'status': 'matched', 'budget': 300000000, 'timeline': '۶ ماه'},
+    {'title': 'خدمات آنالیز مواد معدنی', 'description': 'نیاز به خدمات آنالیز شیمیایی سنگ‌آهن و کنسانتره.', 'industry': 'فولاد و معدن', 'status': 'published', 'budget': 200000000, 'timeline': '۳ ماه'},
+
+    # برق و انرژی
+    {'title': 'سیستم مدیریت انرژی', 'description': 'نیاز به سیستم مدیریت انرژی برای کارخانه تولیدی.', 'industry': 'برق و انرژی', 'status': 'published', 'budget': 400000000, 'timeline': '۵ ماه'},
+    {'title': 'مشاور نیروگاه خورشیدی', 'description': 'نیاز به مشاور برای احداث نیروگاه خورشیدی ۱۰ مگاواتی.', 'industry': 'برق و انرژی', 'status': 'receiving_proposals', 'budget': 2000000000, 'timeline': '۱۸ ماه'},
+    {'title': 'دستگاه آنالایزر کیفیت برق', 'description': 'نیاز به دستگاه آنالایزر قابل حمل برای اندازه‌گیری کیفیت برق.', 'industry': 'برق و انرژی', 'status': 'published', 'budget': 180000000, 'timeline': '۲ ماه'},
+
+    # فناوری اطلاعات
+    {'title': 'سامانه تحلیل داده‌های صنعتی', 'description': 'نیاز به پلتفرم تحلیل داده‌های حجیم برای صنعت.', 'industry': 'فناوری اطلاعات', 'status': 'published', 'budget': 500000000, 'timeline': '۶ ماه'},
+    {'title': 'پیاده‌سازی ERP صنعتی', 'description': 'نیاز به پیاده‌سازی نرم‌افزار ERP برای صنعت تولیدی.', 'industry': 'فناوری اطلاعات', 'status': 'evaluating', 'budget': 800000000, 'timeline': '۱۲ ماه'},
+    {'title': 'امنیت سایبری صنعتی', 'description': 'نیاز به راهکار امنیت سایبری برای شبکه‌های صنعتی و SCADA.', 'industry': 'فناوری اطلاعات', 'status': 'published', 'budget': 450000000, 'timeline': '۴ ماه'},
+
+    # خودروسازی
+    {'title': 'سیستم کنترل کیفیت خودرو', 'description': 'نیاز به سیستم بازرسی بدنه خودرو با بینایی ماشین.', 'industry': 'خودروسازی', 'status': 'published', 'budget': 300000000, 'timeline': '۴ ماه'},
+    {'title': 'مشاور طراحی خودرو', 'description': 'نیاز به مشاور برای طراحی سیستم‌های خودرو.', 'industry': 'خودروسازی', 'status': 'receiving_proposals', 'budget': 400000000, 'timeline': '۸ ماه'},
+
+    # داروسازی
+    {'title': 'دستگاه HPLC برای داروسازی', 'description': 'نیاز به دستگاه HPLC با دقت بالا برای کنترل کیفیت.', 'industry': 'داروسازی', 'status': 'published', 'budget': 500000000, 'timeline': '۳ ماه'},
+    {'title': 'مشاور GMP در داروسازی', 'description': 'نیاز به مشاور برای پیاده‌سازی GMP.', 'industry': 'داروسازی', 'status': 'evaluating', 'budget': 200000000, 'timeline': '۶ ماه'},
+
+    # کشاورزی
+    {'title': 'سیستم آبیاری هوشمند', 'description': 'نیاز به سیستم آبیاری هوشمند برای مزرعه.', 'industry': 'کشاورزی', 'status': 'published', 'budget': 150000000, 'timeline': '۲ ماه'},
+    {'title': 'مشاور کشاورزی دقیق', 'description': 'نیاز به مشاور کشاورزی دقیق با استفاده از تصاویر ماهواره‌ای.', 'industry': 'کشاورزی', 'status': 'receiving_proposals', 'budget': 180000000, 'timeline': '۴ ماه'},
+
+    # ساختمان
+    {'title': 'سیستم BEMS برای ساختمان', 'description': 'نیاز به سیستم مدیریت انرژی برای ساختمان اداری.', 'industry': 'ساختمان', 'status': 'published', 'budget': 200000000, 'timeline': '۳ ماه'},
+    {'title': 'مشاور سازه‌های فولادی', 'description': 'نیاز به مشاور برای طراحی سازه‌های فولادی.', 'industry': 'ساختمان', 'status': 'matched', 'budget': 120000000, 'timeline': '۵ ماه'},
+
+    # حمل و نقل
+    {'title': 'سیستم مدیریت ناوگان', 'description': 'نیاز به سیستم GPS برای مدیریت ناوگان حمل و نقل.', 'industry': 'حمل و نقل', 'status': 'published', 'budget': 250000000, 'timeline': '۴ ماه'},
+    {'title': 'مشاور لجستیک', 'description': 'نیاز به مشاور برای بهینه‌سازی زنجیره تامین.', 'industry': 'حمل و نقل', 'status': 'receiving_proposals', 'budget': 350000000, 'timeline': '۶ ماه'},
+]
+
+needs_created = 0
+for template in need_templates:
+    industry = industry_objs.get(template['industry'])
+    if not industry:
+        continue
+    buyer = random.choice(list(users.values()))
+    defaults = {k: v for k, v in template.items() if k != 'industry'}
+    defaults['buyer'] = buyer
+    defaults['industry'] = industry
+    defaults['created_at'] = random_date(start_date, end_date)
+
+    need, created = Need.objects.get_or_create(
+        title=template['title'],
+        defaults=defaults
+    )
+    if created:
+        needs_created += 1
+        print(f"✅ نیاز ایجاد شد: {need.title} (صنعت: {template['industry']})")
+
+print(f"✅ {needs_created} نیاز جدید ایجاد شد. (تعداد کل: {Need.objects.count()})")
+
+# ============================================================
+# ۵. تولید ارزیابی برای محصولات (در صورت عدم وجود)
+# ============================================================
+
+evaluations_created = 0
+for product in Product.objects.all():
+    if not Evaluation.objects.filter(product=product).exists():
+        evaluator = random.choice(list(users.values()))
+        Evaluation.objects.create(
+            product=product,
+            evaluator=evaluator,
+            quality_score=random.randint(60, 95),
+            risk_score=random.randint(10, 40),
+            market_readiness_score=random.randint(60, 90),
+            final_decision=random.choice(['approved', 'approved', 'approved', 'conditional']),
+            comments='ارزیابی خودکار برای تست',
+            created_at=random_date(start_date, end_date)
         )
+        evaluations_created += 1
 
-        is_petro = (
-            i < int(
-                SUPPLY_COUNT * 0.78
-            )
+print(f"✅ {evaluations_created} ارزیابی جدید ایجاد شد. (تعداد کل: {Evaluation.objects.count()})")
+
+# ============================================================
+# ۶. تولید عرضه (Supply) برای تکمیل
+# ============================================================
+
+supply_templates = [
+    {'title': 'تامین تجهیزات پالایشگاهی', 'supply_type': 'product', 'category': 'تجهیزات صنعتی', 'industry': 'نفت و گاز', 'price': 500000000, 'trl': '8', 'status': 'published'},
+    {'title': 'خدمات تعمیرات پتروشیمی', 'supply_type': 'service', 'category': 'خدمات تعمیرات', 'industry': 'پتروشیمی', 'price': 200000000, 'trl': '9', 'status': 'published'},
+    {'title': 'تامین قطعات یدکی معدن', 'supply_type': 'product', 'category': 'قطعات یدکی', 'industry': 'فولاد و معدن', 'price': 100000000, 'trl': '7', 'status': 'approved'},
+    {'title': 'خدمات مشاوره انرژی', 'supply_type': 'service', 'category': 'مشاوره', 'industry': 'برق و انرژی', 'price': 300000000, 'trl': '9', 'status': 'published'},
+    {'title': 'نرم‌افزار مدیریت تولید', 'supply_type': 'product', 'category': 'نرم‌افزار', 'industry': 'فناوری اطلاعات', 'price': 250000000, 'trl': '8', 'status': 'published'},
+    {'title': 'تامین کاتالیست پتروشیمی', 'supply_type': 'product', 'category': 'مواد شیمیایی', 'industry': 'پتروشیمی', 'price': 180000000, 'trl': '8', 'status': 'published'},
+    {'title': 'خدمات نگهداری تاسیسات', 'supply_type': 'service', 'category': 'خدمات فنی', 'industry': 'نفت و گاز', 'price': 350000000, 'trl': '9', 'status': 'published'},
+]
+
+supplies_created = 0
+if Supply is not None:
+    for template in supply_templates:
+        seller = random.choice(list(users.values()))
+        defaults = {k: v for k, v in template.items() if k != 'industry'}
+        defaults['seller'] = seller
+        defaults['created_at'] = random_date(start_date, end_date)
+        supply, created = Supply.objects.get_or_create(
+            title=template['title'],
+            defaults=defaults
         )
+        if created:
+            supplies_created += 1
+            print(f"✅ عرضه ایجاد شد: {supply.title}")
 
-        if is_petro:
+print(f"✅ {supplies_created} عرضه جدید ایجاد شد. (تعداد کل: {Supply.objects.count() if Supply else 0})")
 
-            item = random.choice(
-                PETRO_PRODUCTS
-            )
+# ============================================================
+# ۷. تولید Negotiation (اختیاری)
+# ============================================================
 
-            title, category, technology, description = item
-
-            industry = "پتروشیمی"
-
-            tech = (
-                technology
-                if technology
-                in PETRO_TECHS
-                else random.choice(
-                    PETRO_TECHS
+if Negotiation is not None:
+    negotiations_created = 0
+    # برای هر نیاز، یک مذاکره نمونه ایجاد می‌کنیم (اختیاری)
+    for need in Need.objects.all()[:10]:
+        if not Negotiation.objects.filter(need=need).exists():
+            try:
+                supplier = random.choice(list(users.values()))
+                # مدل Negotiation ممکن است فیلدهای مختلفی داشته باشد، سعی می‌کنیم با فیلدهای رایج
+                negotiation_data = {
+                    'need': need,
+                    'buyer': need.buyer,
+                    'supplier': supplier,
+                    'status': random.choice(['created', 'in_progress', 'accepted', 'contracted']),
+                    'created_at': random_date(start_date, end_date),
+                }
+                # فیلد context_title یا supply را اگر وجود داشت اضافه می‌کنیم
+                if hasattr(Negotiation, 'context_title'):
+                    negotiation_data['context_title'] = f"مذاکره برای {need.title}"
+                if hasattr(Negotiation, 'supply'):
+                    # یک عرضه تصادفی انتخاب می‌کنیم
+                    supply = Supply.objects.first() if Supply else None
+                    if supply:
+                        negotiation_data['supply'] = supply
+                # ایجاد مذاکره
+                negot, created = Negotiation.objects.get_or_create(
+                    need=need,
+                    buyer=need.buyer,
+                    defaults=negotiation_data
                 )
-            )
-
-            city = random.choice(
-                [
-                    "عسلویه",
-                    "ماهشهر",
-                    "تهران",
-                    "بندرعباس",
-                    "اراک",
-                ]
-            )
-
-        else:
-
-            item = random.choice(
-                OTHER_PRODUCTS
-            )
-
-            title, category, technology, description = item
-
-            industry = random.choice(
-                [
-                    "نفت و گاز",
-                    "فولاد و معدن",
-                    "انرژی",
-                    "خودروسازی",
-                    "فناوری اطلاعات",
-                ]
-            )
-
-            tech = technology
-
-            city = random.choice(
-                CITIES
-            )
-
-        supply_data = {
-
-            "seller": seller,
-
-            "title":
-                f"{title} - عرضه صنعتی {i + 1}",
-
-            "supply_type":
-                "product",
-
-            "category":
-                category,
-
-            "industry":
-                industry,
-
-            "technology":
-                tech,
-
-            "city":
-                city,
-
-            "description":
-                description
-                + " این عرضه برای همکاری و تأمین صنعتی "
-                "در بازار فناوری و زنجیره تأمین ثبت شده است.",
-
-            "quantity":
-                random.choice(
-                    [
-                        "20",
-                        "50",
-                        "100",
-                        "250",
-                        "500",
-                        "1000",
-                    ]
-                ),
-
-            "unit":
-                random.choice(
-                    [
-                        "تن",
-                        "کیلوگرم",
-                        "دستگاه",
-                        "مورد",
-                        "پکیج",
-                    ]
-                ),
-
-            "price":
-                random_price(),
-
-            "trl":
-                str(
-                    random.choice(
-                        [
-                            7,
-                            8,
-                            8,
-                            9,
-                        ]
-                    )
-                ),
-
-            "documents":
-                [
-                    {
-                        "type": "technical",
-                        "title": "دیتاشیت فنی",
-                    },
-                    {
-                        "type": "quality",
-                        "title": "گواهی کنترل کیفیت",
-                    },
-                ],
-
-            "status":
-                random.choice(
-                    [
-                        "published",
-                        "published",
-                        "published",
-                        "approved",
-                    ]
-                ),
-        }
-
-        supply = safe_create(
-            Supply,
-            **supply_data
-        )
-
-        supplies.append(
-            supply
-        )
-
-    return supplies
-
+                if created:
+                    negotiations_created += 1
+            except Exception as e:
+                # اگر فیلدها تطابق نداشتند، نادیده بگیر
+                pass
+    print(f"✅ {negotiations_created} مذاکره جدید ایجاد شد.")
 
 # ============================================================
-# Needs
+# جمع‌بندی
 # ============================================================
 
-def create_needs(
-    buyers,
-    industries,
-):
-
-    needs = []
-
-    templates = []
-
-    for item in PETRO_NEEDS:
-
-        templates.append(
-            item
-        )
-
-    for item in OTHER_NEEDS:
-
-        templates.append(
-            item
-        )
-
-    while len(templates) < NEED_COUNT:
-
-        templates.append(
-            random.choice(
-                PETRO_NEEDS
-            )
-        )
-
-    random.shuffle(
-        templates
-    )
-
-    for i in range(
-        NEED_COUNT
-    ):
-
-        title, industry_name, technology, description = (
-            templates[i]
-        )
-
-        buyer = random.choice(
-            buyers
-        )
-
-        industry = industries[
-            industry_name
-        ]
-
-        budget = Decimal(
-            random.randint(
-                500,
-                9000
-            )
-            * 1_000_000
-        )
-
-        need_data = {
-
-            "buyer": buyer,
-
-            "title":
-                title,
-
-            "description":
-                description,
-
-            "industry":
-                industry,
-
-            "current_status":
-                random.choice(
-                    [
-                        "مرحله شناسایی و ارزیابی راهکارها",
-                        "در حال بررسی تأمین‌کنندگان",
-                        "نیاز به اجرای پایلوت",
-                        "در حال آماده‌سازی مناقصه",
-                        "در حال ارزیابی فنی",
-                    ]
-                ),
-
-            "expected_outcome":
-                random.choice(
-                    [
-                        "کاهش حداقل 10 درصد هزینه عملیاتی",
-                        "افزایش قابلیت اطمینان تجهیزات",
-                        "کاهش توقف اضطراری خط تولید",
-                        "بهبود کیفیت محصول",
-                        "کاهش مصرف انرژی",
-                        "افزایش دقت پایش فرآیند",
-                    ]
-                ),
-
-            "constraints":
-                "لزوم سازگاری با تجهیزات موجود، "
-                "رعایت الزامات HSE و امکان استقرار "
-                "در محیط صنعتی.",
-
-            "budget":
-                budget,
-
-            "timeline":
-                random.choice(
-                    [
-                        "3 ماه",
-                        "4 ماه",
-                        "6 ماه",
-                        "9 ماه",
-                        "12 ماه",
-                    ]
-                ),
-
-            "confidentiality":
-                random.choice(
-                    [
-                        "public",
-                        "public",
-                        "private",
-                    ]
-                ),
-
-            "evaluation_criteria":
-                "توان فنی، سابقه صنعتی، TRL، MRL، "
-                "قیمت، زمان اجرا، پشتیبانی و امکان پایلوت.",
-
-            "status":
-                random.choice(
-                    [
-                        "published",
-                        "published",
-                        "receiving_proposals",
-                        "evaluating",
-                        "matched",
-                        "in_negotiation",
-                    ]
-                ),
-        }
-
-        need = safe_create(
-            Need,
-            **need_data
-        )
-
-        needs.append(
-            need
-        )
-
-    return needs
-
-
-# ============================================================
-# Evaluations
-# ============================================================
-
-def create_evaluations(
-    products,
-    buyers,
-):
-
-    if Evaluation is None:
-
-        print(
-            "⚠️ Evaluation پیدا نشد. "
-            "از این مرحله عبور شد."
-        )
-
-        return []
-
-    evaluations = []
-
-    names = field_names(
-        Evaluation
-    )
-
-    # پیدا کردن فیلد ارتباط با Product
-    product_field = None
-
-    for candidate in [
-        "product",
-        "supply",
-        "target",
-    ]:
-
-        if candidate in names:
-            product_field = candidate
-            break
-
-    if not product_field:
-
-        print(
-            "⚠️ Evaluation فیلد product/supply ندارد. "
-            "از ساخت Evaluation عبور شد."
-        )
-
-        return []
-
-    for i in range(
-        EVALUATION_COUNT
-    ):
-
-        product = random.choice(
-            products
-        )
-
-        kwargs = {
-            product_field:
-                product,
-        }
-
-        # reviewer
-        for candidate in [
-            "reviewer",
-            "user",
-            "evaluator",
-        ]:
-
-            if candidate in names:
-
-                kwargs[candidate] = (
-                    random.choice(
-                        buyers
-                    )
-                )
-
-                break
-
-        # rating
-        for candidate in [
-            "rating",
-            "score",
-            "overall_rating",
-        ]:
-
-            if candidate in names:
-
-                kwargs[candidate] = (
-                    Decimal(
-                        str(
-                            random.choice(
-                                [
-                                    3.8,
-                                    4.0,
-                                    4.1,
-                                    4.2,
-                                    4.3,
-                                    4.5,
-                                    4.7,
-                                    4.8,
-                                ]
-                            )
-                        )
-                    )
-                )
-
-                break
-
-        # comment
-        for candidate in [
-            "comment",
-            "review",
-            "description",
-            "text",
-        ]:
-
-            if candidate in names:
-
-                kwargs[candidate] = random.choice(
-                    [
-                        "کیفیت فنی مناسب و قابلیت استقرار صنعتی.",
-                        "راهکار از نظر بلوغ فناوری وضعیت مناسبی دارد.",
-                        "پشتیبانی فنی و مستندات قابل قبول است.",
-                        "گزینه مناسب برای اجرای پایلوت صنعتی.",
-                        "عملکرد محصول در ارزیابی اولیه مناسب بوده است.",
-                    ]
-                )
-
-                break
-
-        try:
-
-            evaluation = safe_create(
-                Evaluation,
-                **kwargs
-            )
-
-            evaluations.append(
-                evaluation
-            )
-
-        except Exception as exc:
-
-            print(
-                "⚠️ Evaluation ایجاد نشد:",
-                exc
-            )
-
-            break
-
-    return evaluations
-
-
-# ============================================================
-# Negotiations
-# ============================================================
-
-def create_negotiations(
-    products,
-    needs,
-    buyers,
-):
-
-    if Negotiation is None:
-
-        print(
-            "⚠️ Negotiation پیدا نشد."
-        )
-
-        return []
-
-    negotiations = []
-
-    names = field_names(
-        Negotiation
-    )
-
-    # نسخه پروژه ممکن است need داشته باشد
-    # یا نداشته باشد.
-
-    possible_products = list(
-        products
-    )
-
-    possible_needs = list(
-        needs
-    )
-
-    for i in range(
-        NEGOTIATION_COUNT
-    ):
-
-        product = random.choice(
-            possible_products
-        )
-
-        buyer = random.choice(
-            [
-                u
-                for u in buyers
-                if u.id != product.seller_id
-            ]
-        )
-
-        kwargs = {}
-
-        if "product" in names:
-            kwargs["product"] = product
-
-        if "need" in names:
-
-            kwargs["need"] = (
-                random.choice(
-                    possible_needs
-                )
-            )
-
-        if "buyer" in names:
-            kwargs["buyer"] = buyer
-
-        if "supplier" in names:
-            kwargs["supplier"] = (
-                product.seller
-            )
-
-        if "status" in names:
-
-            kwargs["status"] = random.choice(
-                [
-                    "created",
-                    "in_progress",
-                    "proposal_sent",
-                    "under_review",
-                    "accepted",
-                    "contracted",
-                ]
-            )
-
-        try:
-
-            negotiation = safe_create(
-                Negotiation,
-                **kwargs
-            )
-
-            negotiations.append(
-                negotiation
-            )
-
-        except Exception as exc:
-
-            print(
-                "⚠️ Negotiation ایجاد نشد:",
-                exc
-            )
-
-            continue
-
-    return negotiations
-
-
-# ============================================================
-# Create additional realistic view counts
-# ============================================================
-
-def refresh_product_views(products):
-
-    for product in products:
-
-        if hasattr(
-            product,
-            "view_count"
-        ):
-
-            product.view_count = (
-                random.randint(
-                    250,
-                    18000
-                )
-            )
-
-            product.save(
-                update_fields=[
-                    "view_count"
-                ]
-            )
-
-
-# ============================================================
-# Main Seed
-# ============================================================
-
-@transaction.atomic
-def run():
-
-    print()
-    print("=" * 70)
-    print(
-        "🚀 شروع تولید داده Market Intelligence"
-    )
-    print("=" * 70)
-    print()
-
-    # --------------------------------------------------------
-    # Users
-    # --------------------------------------------------------
-
-    print(
-        "👥 ایجاد کاربران..."
-    )
-
-    sellers, buyers = create_users()
-
-    print(
-        f"   فروشنده: {len(sellers)}"
-    )
-
-    print(
-        f"   خریدار: {len(buyers)}"
-    )
-
-    # --------------------------------------------------------
-    # Industries
-    # --------------------------------------------------------
-
-    print(
-        "\n🏭 ایجاد صنایع..."
-    )
-
-    industries = create_industries()
-
-    print(
-        f"   صنایع: {len(industries)}"
-    )
-
-    # --------------------------------------------------------
-    # Products
-    # --------------------------------------------------------
-
-    print(
-        "\n📦 ایجاد محصولات..."
-    )
-
-    products = create_products(
-        sellers,
-        industries
-    )
-
-    petro_products = sum(
-        1
-        for p in products
-        if getattr(
-            getattr(
-                p,
-                "industry",
-                None
-            ),
-            "name",
-            ""
-        ) == "پتروشیمی"
-    )
-
-    print(
-        f"   محصولات: {len(products)}"
-    )
-
-    print(
-        f"   محصولات پتروشیمی: {petro_products}"
-    )
-
-    # --------------------------------------------------------
-    # Supplies
-    # --------------------------------------------------------
-
-    print(
-        "\n📈 ایجاد عرضه‌ها..."
-    )
-
-    supplies = create_supplies(
-        sellers
-    )
-
-    petro_supplies = sum(
-        1
-        for s in supplies
-        if getattr(
-            s,
-            "industry",
-            ""
-        ) == "پتروشیمی"
-    )
-
-    print(
-        f"   عرضه‌ها: {len(supplies)}"
-    )
-
-    print(
-        f"   عرضه پتروشیمی: {petro_supplies}"
-    )
-
-    # --------------------------------------------------------
-    # Needs
-    # --------------------------------------------------------
-
-    print(
-        "\n💡 ایجاد نیازها..."
-    )
-
-    needs = create_needs(
-        buyers,
-        industries
-    )
-
-    petro_needs = sum(
-        1
-        for n in needs
-        if getattr(
-            getattr(
-                n,
-                "industry",
-                None
-            ),
-            "name",
-            ""
-        ) == "پتروشیمی"
-    )
-
-    print(
-        f"   نیازها: {len(needs)}"
-    )
-
-    print(
-        f"   نیاز پتروشیمی: {petro_needs}"
-    )
-
-    # --------------------------------------------------------
-    # Evaluations
-    # --------------------------------------------------------
-
-    print(
-        "\n⭐ ایجاد ارزیابی‌ها..."
-    )
-
-    evaluations = create_evaluations(
-        products,
-        buyers
-    )
-
-    print(
-        f"   ارزیابی‌ها: {len(evaluations)}"
-    )
-
-    # --------------------------------------------------------
-    # Negotiations
-    # --------------------------------------------------------
-
-    print(
-        "\n🤝 ایجاد مذاکرات..."
-    )
-
-    negotiations = create_negotiations(
-        products,
-        needs,
-        buyers
-    )
-
-    print(
-        f"   مذاکرات: {len(negotiations)}"
-    )
-
-    # --------------------------------------------------------
-    # Views
-    # --------------------------------------------------------
-
-    print(
-        "\n👁️ تنظیم بازدید محصولات..."
-    )
-
-    refresh_product_views(
-        products
-    )
-
-    # --------------------------------------------------------
-    # Final statistics
-    # --------------------------------------------------------
-
-    print()
-    print("=" * 70)
-    print
+print("\n" + "="*60)
+print("✅ تولید داده‌های نمونه با موفقیت کامل شد.")
+print(f"📊 تعداد کل کاربران: {User.objects.count()}")
+print(f"📊 تعداد کل صنایع: {IndustryCategory.objects.count()}")
+print(f"📊 تعداد کل محصولات: {Product.objects.count()}")
+print(f"📊 تعداد کل محصولات دارای تصویر: {Product.objects.exclude(image='').count()}")
+print(f"📊 تعداد کل نیازها: {Need.objects.count()}")
+print(f"📊 تعداد کل ارزیابی‌ها: {Evaluation.objects.count()}")
+if Supply:
+    print(f"📊 تعداد کل عرضه‌ها: {Supply.objects.count()}")
+if Negotiation:
+    print(f"📊 تعداد کل مذاکرات: {Negotiation.objects.count()}")
+print("="*60)

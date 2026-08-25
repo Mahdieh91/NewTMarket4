@@ -1,3 +1,5 @@
+// src/app/dashboard/page.tsx
+
 'use client';
 
 import {
@@ -328,8 +330,12 @@ export default function DashboardPage() {
             getApiBaseUrl();
 
 
+          // ======================================================
+          // ✅ اصلاح: مسیر صحیح داشبورد
+          // ======================================================
+
           const endpoint =
-            `${apiBaseUrl}/dashboard/`;
+            `${apiBaseUrl}/analytics/dashboard/`;
 
 
           console.log(
@@ -388,7 +394,7 @@ export default function DashboardPage() {
             ) {
 
               setApiError(
-                'API داشبورد در بک‌اند پیدا نشد. مسیر مورد انتظار /api/dashboard/ است.',
+                'API داشبورد در بک‌اند پیدا نشد. مسیر مورد انتظار /api/analytics/dashboard/ است.',
               );
 
             } else {

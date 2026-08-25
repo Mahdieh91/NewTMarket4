@@ -1,4 +1,5 @@
 # analytics/serializers.py
+# Serializerهای تحلیل بازار بر اساس Product و Service (بدون Supply)
 
 from rest_framework import serializers
 
@@ -6,7 +7,6 @@ from rest_framework import serializers
 class MarketSummarySerializer(serializers.Serializer):
     total_products = serializers.IntegerField()
     total_services = serializers.IntegerField()
-    total_supplies = serializers.IntegerField()
     total_needs = serializers.IntegerField()
     published_products = serializers.IntegerField()
     average_price = serializers.FloatField(allow_null=True)
