@@ -1,33 +1,39 @@
 # analytics/services.py
+# نسخه نهایی با مدیریت کامل خطاها
 
 import logging
-
 from collections import defaultdict
-
 from datetime import timedelta
-
 from statistics import mean
-
-from django.db.models import Q, Count, Sum
-
+from django.db.models import Q, Count, Sum, Avg
 from django.utils import timezone
 
 from products.models import Product
 
-from evaluations.models import Evaluation
+try:
+    from industries.models import IndustryCategory
+except ImportError:
+    IndustryCategory = None
 
+try:
+    from evaluation.models import Evaluation
+except ImportError:
+    Evaluation = None
 
 try:
     from needs.models import Need
 except ImportError:
     Need = None
 
-
 try:
     from negotiations.models import Negotiation
 except ImportError:
     Negotiation = None
 
+try:
+    from products.models import Supply
+except ImportError:
+    Supply = None
 
 logger = logging.getLogger(__name__)
 
@@ -45,11 +51,6 @@ MARKET_STATUSES = {
     "completed",
 }
 
-
-# ============================================================
-# Need Statuses
-# ============================================================
-
 ACTIVE_NEED_STATUSES = {
     "published",
     "receiving_proposals",
@@ -60,18 +61,12 @@ ACTIVE_NEED_STATUSES = {
     "executing",
 }
 
-
 OPEN_NEED_STATUSES = {
     "published",
     "receiving_proposals",
     "evaluating",
     "matched",
 }
-
-
-# ============================================================
-# Negotiation Statuses
-# ============================================================
 
 ONGOING_NEGOTIATION_STATUSES = {
     "created",
@@ -81,7 +76,6 @@ ONGOING_NEGOTIATION_STATUSES = {
     "under_review",
 }
 
-
 SUCCESSFUL_NEGOTIATION_STATUSES = {
     "accepted",
     "contracted",
@@ -89,1058 +83,353 @@ SUCCESSFUL_NEGOTIATION_STATUSES = {
 
 
 # ============================================================
-# Utility
+# Utility Functions
 # ============================================================
 
-def clamp(
-    value,
-    minimum=0,
-    maximum=100,
-):
-
+def clamp(value, minimum=0, maximum=100):
     try:
         value = float(value)
-
     except (TypeError, ValueError):
         value = 0
-
-    return max(
-        minimum,
-        min(value, maximum),
-    )
+    return max(minimum, min(value, maximum))
 
 
 def safe_float(value):
-
     if value is None:
         return None
-
     try:
         return float(value)
-
     except (TypeError, ValueError):
         return None
 
 
 def get_seller_name(user):
-
     if not user:
         return "نامشخص"
-
-    company_name = getattr(
-        user,
-        "company_name",
-        None,
-    )
-
+    company_name = getattr(user, "company_name", None)
     if company_name:
         return company_name
-
     try:
-
         full_name = user.get_full_name()
-
         if full_name:
             return full_name
-
     except Exception:
         pass
-
-    return getattr(
-        user,
-        "username",
-        "نامشخص",
-    )
+    return getattr(user, "username", "نامشخص")
 
 
 # ============================================================
-# Evaluation
+# Resolve industry parameter (can be id or name)
+# ============================================================
+
+def resolve_industry_param(value):
+    """
+    تبدیل رشته industry به id صنعت
+    اگر عدد باشد، همان عدد برگردانده می‌شود
+    اگر نام باشد، در IndustryCategory جستجو می‌شود
+    """
+    if value is None or value == "":
+        return None
+
+    # اگر عددی است
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        pass
+
+    # اگر رشته است و مدل IndustryCategory وجود دارد
+    if IndustryCategory is not None:
+        try:
+            industry = IndustryCategory.objects.filter(name__iexact=value).first()
+            if industry:
+                return industry.id
+        except Exception as e:
+            logger.warning(f"Error resolving industry name '{value}': {e}")
+
+    return None
+
+
+# ============================================================
+# Evaluation Helpers
 # ============================================================
 
 def get_latest_evaluation(product):
+    if Evaluation is None:
+        return None
+    try:
+        prefetched = getattr(product, "_latest_evaluations", None)
+        if prefetched is not None:
+            return prefetched[0] if prefetched else None
+        return Evaluation.objects.filter(product=product).order_by("-created_at", "-id").first()
+    except Exception as e:
+        logger.warning(f"Error getting evaluation for product {product.id}: {e}")
+        return None
 
-    prefetched = getattr(
-        product,
-        "_latest_evaluations",
-        None,
-    )
-
-    if prefetched is not None:
-
-        return (
-            prefetched[0]
-            if prefetched
-            else None
-        )
-
-    return (
-        Evaluation.objects
-        .filter(product=product)
-        .order_by(
-            "-created_at",
-            "-id",
-        )
-        .first()
-    )
-
-
-# ============================================================
-# Quality Indicator
-# ============================================================
 
 def get_quality_indicator(product):
+    try:
+        evaluation = get_latest_evaluation(product)
+        if evaluation is not None:
+            return round(clamp(evaluation.quality_score or 0), 2)
 
-    evaluation = get_latest_evaluation(
-        product
-    )
+        trl = product.trl or 0
+        mrl = product.mrl or 0
+        trl_score = ((trl - 1) / 8) * 100 if trl else 0
+        mrl_score = ((mrl - 1) / 8) * 100 if mrl else 0
+        score = trl_score * 0.6 + mrl_score * 0.4
+        return round(clamp(score), 2)
+    except Exception as e:
+        logger.warning(f"Error calculating quality for product {product.id}: {e}")
+        return 0.0
 
-    if evaluation is not None:
-
-        return round(
-            clamp(
-                evaluation.quality_score or 0
-            ),
-            2,
-        )
-
-    trl = product.trl or 0
-
-    mrl = product.mrl or 0
-
-    trl_score = (
-        ((trl - 1) / 8) * 100
-        if trl
-        else 0
-    )
-
-    mrl_score = (
-        ((mrl - 1) / 8) * 100
-        if mrl
-        else 0
-    )
-
-    score = (
-        trl_score * 0.6
-        +
-        mrl_score * 0.4
-    )
-
-    return round(
-        clamp(score),
-        2,
-    )
-
-
-# ============================================================
-# Maturity Risk
-# ============================================================
 
 def get_maturity_risk(product):
-
-    trl = product.trl or 0
-
-    mrl = product.mrl or 0
-
-    trl_maturity = (
-        ((trl - 1) / 8) * 100
-        if trl
-        else 0
-    )
-
-    mrl_maturity = (
-        ((mrl - 1) / 8) * 100
-        if mrl
-        else 0
-    )
-
-    maturity = (
-        trl_maturity * 0.5
-        +
-        mrl_maturity * 0.5
-    )
-
-    risk = 100 - maturity
-
-    return round(
-        clamp(risk),
-        2,
-    )
+    try:
+        trl = product.trl or 0
+        mrl = product.mrl or 0
+        trl_maturity = ((trl - 1) / 8) * 100 if trl else 0
+        mrl_maturity = ((mrl - 1) / 8) * 100 if mrl else 0
+        maturity = trl_maturity * 0.5 + mrl_maturity * 0.5
+        risk = 100 - maturity
+        return round(clamp(risk), 2)
+    except Exception as e:
+        logger.warning(f"Error calculating risk for product {product.id}: {e}")
+        return 50.0
 
 
-# ============================================================
-# Market Readiness
-# ============================================================
+def get_market_readiness(product, industry_products):
+    try:
+        evaluation = get_latest_evaluation(product)
+        if evaluation is not None:
+            evaluation_score = clamp(evaluation.market_readiness_score or 0)
+        else:
+            evaluation_score = None
 
-def get_market_readiness(
-    product,
-    industry_products,
-):
+        trl = product.trl or 0
+        trl_score = ((trl - 1) / 8) * 100 if trl else 0
 
-    evaluation = get_latest_evaluation(
-        product
-    )
+        mrl = product.mrl or 0
+        mrl_score = ((mrl - 1) / 8) * 100 if mrl else 0
 
-    # --------------------------------------------------------
-    # Evaluation
-    # --------------------------------------------------------
+        has_sample_customer = bool(product.sample_customers and product.sample_customers.strip())
+        customer_score = 100 if has_sample_customer else 0
 
-    if evaluation is not None:
+        commercial_score = 100 if product.status in MARKET_STATUSES else 0
 
-        evaluation_score = clamp(
-            evaluation.market_readiness_score or 0
-        )
+        total_views = sum(p.view_count or 0 for p in industry_products)
+        if total_views > 0:
+            view_share = (product.view_count or 0) / total_views
+            view_score = clamp(view_share * 100)
+        else:
+            view_score = 0
 
-    else:
-
-        evaluation_score = None
-
-    # --------------------------------------------------------
-    # TRL
-    # --------------------------------------------------------
-
-    trl = product.trl or 0
-
-    trl_score = (
-        ((trl - 1) / 8) * 100
-        if trl
-        else 0
-    )
-
-    # --------------------------------------------------------
-    # MRL
-    # --------------------------------------------------------
-
-    mrl = product.mrl or 0
-
-    mrl_score = (
-        ((mrl - 1) / 8) * 100
-        if mrl
-        else 0
-    )
-
-    # --------------------------------------------------------
-    # Sample Customer
-    # --------------------------------------------------------
-
-    has_sample_customer = bool(
-        product.sample_customers
-        and product.sample_customers.strip()
-    )
-
-    customer_score = (
-        100
-        if has_sample_customer
-        else 0
-    )
-
-    # --------------------------------------------------------
-    # Commercial Status
-    # --------------------------------------------------------
-
-    commercial_score = (
-        100
-        if product.status in MARKET_STATUSES
-        else 0
-    )
-
-    # --------------------------------------------------------
-    # Views
-    # --------------------------------------------------------
-
-    total_views = sum(
-        p.view_count or 0
-        for p in industry_products
-    )
-
-    if total_views > 0:
-
-        view_share = (
-            (product.view_count or 0)
-            /
-            total_views
-        )
-
-        view_score = clamp(
-            view_share * 100
-        )
-
-    else:
-
-        view_score = 0
-
-    # --------------------------------------------------------
-    # With Evaluation
-    # --------------------------------------------------------
-
-    if evaluation_score is not None:
-
-        score = (
-
-            evaluation_score * 0.45
-
-            +
-
-            mrl_score * 0.20
-
-            +
-
-            trl_score * 0.15
-
-            +
-
-            customer_score * 0.10
-
-            +
-
-            commercial_score * 0.05
-
-            +
-
-            view_score * 0.05
-
-        )
-
-    # --------------------------------------------------------
-    # Without Evaluation
-    # --------------------------------------------------------
-
-    else:
-
-        score = (
-
-            mrl_score * 0.30
-
-            +
-
-            trl_score * 0.25
-
-            +
-
-            customer_score * 0.20
-
-            +
-
-            commercial_score * 0.15
-
-            +
-
-            view_score * 0.10
-
-        )
-
-    return round(
-        clamp(score),
-        2,
-    )
+        if evaluation_score is not None:
+            score = (
+                evaluation_score * 0.45
+                + mrl_score * 0.20
+                + trl_score * 0.15
+                + customer_score * 0.10
+                + commercial_score * 0.05
+                + view_score * 0.05
+            )
+        else:
+            score = (
+                mrl_score * 0.30
+                + trl_score * 0.25
+                + customer_score * 0.20
+                + commercial_score * 0.15
+                + view_score * 0.10
+            )
+        return round(clamp(score), 2)
+    except Exception as e:
+        logger.warning(f"Error calculating market readiness for product {product.id}: {e}")
+        return 0.0
 
 
 # ============================================================
 # Product Indicator
 # ============================================================
 
-def build_product_indicator(
-    product,
-    industry_products,
-):
+def build_product_indicator(product, industry_products):
+    try:
+        evaluation = get_latest_evaluation(product)
+        quality = get_quality_indicator(product)
+        maturity_risk = get_maturity_risk(product)
+        market_readiness = get_market_readiness(product, industry_products)
 
-    evaluation = get_latest_evaluation(
-        product
-    )
-
-    quality = get_quality_indicator(
-        product
-    )
-
-    maturity_risk = get_maturity_risk(
-        product
-    )
-
-    market_readiness = get_market_readiness(
-        product,
-        industry_products,
-    )
-
-    return {
-
-        "product_id":
-            product.id,
-
-        "title":
-            product.title,
-
-        "seller_id":
-            product.seller_id,
-
-        "seller_name":
-            get_seller_name(
-                product.seller
-            ),
-
-        "industry":
-            (
-                product.industry.name
-                if product.industry
-                else None
-            ),
-
-        "category":
-            product.category,
-
-        "trl":
-            product.trl,
-
-        "mrl":
-            product.mrl,
-
-        "quality_indicator":
-            quality,
-
-        "maturity_risk":
-            maturity_risk,
-
-        "market_readiness":
-            market_readiness,
-
-        "view_count":
-            product.view_count or 0,
-
-        "has_sample_customers":
-            bool(
-                product.sample_customers
-                and
-                product.sample_customers.strip()
-            ),
-
-        "has_certificates":
-            bool(
-                product.certificates
-            ),
-
-        "has_documentation":
-            bool(
-                product.documentation
-            ),
-
-        "price":
-            safe_float(
-                product.price
-            ),
-
-        "status":
-            product.status,
-
-        "evaluation_decision":
-            (
-                evaluation.final_decision
-                if evaluation
-                else None
-            ),
-
-        "created_at":
-            (
-                product.created_at.isoformat()
-                if product.created_at
-                else None
-            ),
-    }
+        return {
+            "product_id": product.id,
+            "title": product.title,
+            "seller_id": product.seller_id,
+            "seller_name": get_seller_name(product.seller),
+            "industry": product.industry.name if product.industry else None,
+            "category": product.category,
+            "trl": product.trl,
+            "mrl": product.mrl,
+            "quality_indicator": quality,
+            "maturity_risk": maturity_risk,
+            "market_readiness": market_readiness,
+            "view_count": product.view_count or 0,
+            "has_sample_customers": bool(product.sample_customers and product.sample_customers.strip()),
+            "has_certificates": bool(product.certificates),
+            "has_documentation": bool(product.documentation),
+            "price": safe_float(product.price),
+            "status": product.status,
+            "evaluation_decision": evaluation.final_decision if evaluation else None,
+            "created_at": product.created_at.isoformat() if product.created_at else None,
+        }
+    except Exception as e:
+        logger.error(f"Error building product indicator for product {product.id}: {e}")
+        return None
 
 
 # ============================================================
 # Competitor Dataset
 # ============================================================
 
-def build_competitor_dataset(
-    product_indicators
-):
+def build_competitor_dataset(product_indicators):
+    try:
+        competitors = defaultdict(list)
+        for product in product_indicators:
+            if product is not None:
+                competitors[product["seller_id"]].append(product)
 
-    competitors = defaultdict(list)
+        result = []
+        for seller_id, products in competitors.items():
+            if not products:
+                continue
+            quality_values = [p["quality_indicator"] for p in products]
+            risk_values = [p["maturity_risk"] for p in products]
+            readiness_values = [p["market_readiness"] for p in products]
+            active_products = sum(1 for p in products if p["status"] in MARKET_STATUSES)
+            sample_customer_products = sum(1 for p in products if p["has_sample_customers"])
+            certified_products = sum(1 for p in products if p["has_certificates"])
+            total_views = sum(p["view_count"] for p in products)
 
-    for product in product_indicators:
+            result.append({
+                "seller_id": seller_id,
+                "seller_name": products[0]["seller_name"],
+                "product_count": len(products),
+                "active_product_count": active_products,
+                "total_views": total_views,
+                "sample_customer_product_count": sample_customer_products,
+                "certified_product_count": certified_products,
+                "average_quality": round(mean(quality_values), 2) if quality_values else 0,
+                "average_maturity_risk": round(mean(risk_values), 2) if risk_values else 0,
+                "average_market_readiness": round(mean(readiness_values), 2) if readiness_values else 0,
+                "products": [
+                    {
+                        "product_id": p["product_id"],
+                        "title": p["title"],
+                        "category": p["category"],
+                        "quality_indicator": p["quality_indicator"],
+                        "maturity_risk": p["maturity_risk"],
+                        "market_readiness": p["market_readiness"],
+                        "view_count": p["view_count"],
+                        "trl": p["trl"],
+                        "mrl": p["mrl"],
+                        "status": p["status"],
+                    }
+                    for p in products
+                ],
+            })
 
-        competitors[
-            product["seller_id"]
-        ].append(product)
-
-    result = []
-
-    for seller_id, products in competitors.items():
-
-        if not products:
-            continue
-
-        quality_values = [
-            p["quality_indicator"]
-            for p in products
-        ]
-
-        risk_values = [
-            p["maturity_risk"]
-            for p in products
-        ]
-
-        readiness_values = [
-            p["market_readiness"]
-            for p in products
-        ]
-
-        active_products = sum(
-            1
-            for p in products
-            if p["status"] in MARKET_STATUSES
+        result.sort(
+            key=lambda x: (
+                x["average_market_readiness"],
+                x["average_quality"],
+                -x["average_maturity_risk"],
+                x["total_views"],
+            ),
+            reverse=True,
         )
-
-        sample_customer_products = sum(
-            1
-            for p in products
-            if p["has_sample_customers"]
-        )
-
-        certified_products = sum(
-            1
-            for p in products
-            if p["has_certificates"]
-        )
-
-        total_views = sum(
-            p["view_count"]
-            for p in products
-        )
-
-        result.append({
-
-            "seller_id":
-                seller_id,
-
-            "seller_name":
-                products[0]["seller_name"],
-
-            "product_count":
-                len(products),
-
-            "active_product_count":
-                active_products,
-
-            "total_views":
-                total_views,
-
-            "sample_customer_product_count":
-                sample_customer_products,
-
-            "certified_product_count":
-                certified_products,
-
-            "average_quality":
-                round(
-                    mean(
-                        quality_values
-                    ),
-                    2,
-                ),
-
-            "average_maturity_risk":
-                round(
-                    mean(
-                        risk_values
-                    ),
-                    2,
-                ),
-
-            "average_market_readiness":
-                round(
-                    mean(
-                        readiness_values
-                    ),
-                    2,
-                ),
-
-            "products": [
-
-                {
-                    "product_id":
-                        p["product_id"],
-
-                    "title":
-                        p["title"],
-
-                    "category":
-                        p["category"],
-
-                    "quality_indicator":
-                        p["quality_indicator"],
-
-                    "maturity_risk":
-                        p["maturity_risk"],
-
-                    "market_readiness":
-                        p["market_readiness"],
-
-                    "view_count":
-                        p["view_count"],
-
-                    "trl":
-                        p["trl"],
-
-                    "mrl":
-                        p["mrl"],
-
-                    "status":
-                        p["status"],
-                }
-
-                for p in products
-
-            ],
-        })
-
-    result.sort(
-        key=lambda x: (
-            x["average_market_readiness"],
-            x["average_quality"],
-            -x["average_maturity_risk"],
-            x["total_views"],
-        ),
-        reverse=True,
-    )
-
-    return result
+        return result
+    except Exception as e:
+        logger.error(f"Error building competitor dataset: {e}")
+        return []
 
 
 # ============================================================
 # Needs Dataset
 # ============================================================
 
-def build_needs_dataset(
-    industry_id=None,
-    category=None,
-):
-
+def build_needs_dataset(industry_id=None, category=None):
     if Need is None:
         return []
-
     try:
-
-        queryset = (
-            Need.objects
-            .select_related(
-                "buyer",
-                "industry",
-            )
-            .exclude(
-                status="draft"
-            )
-        )
-
+        queryset = Need.objects.select_related("buyer", "industry").exclude(status="draft")
         if industry_id:
-
-            queryset = queryset.filter(
-                industry_id=industry_id
-            )
-
+            queryset = queryset.filter(industry_id=industry_id)
         needs = list(queryset)
-
     except Exception as exc:
-
-        logger.exception(
-            "Error loading needs: %s",
-            exc,
-        )
-
+        logger.exception("Error loading needs: %s", exc)
         return []
 
     result = []
-
     for need in needs:
-
         result.append({
-
-            "id":
-                need.id,
-
-            "title":
-                need.title,
-
-            "industry":
-                (
-                    need.industry.name
-                    if need.industry
-                    else None
-                ),
-
-            "industry_id":
-                need.industry_id,
-
-            "status":
-                need.status,
-
-            "budget":
-                safe_float(
-                    need.budget
-                ),
-
-            "timeline":
-                need.timeline,
-
-            "created_at":
-                (
-                    need.created_at.isoformat()
-                    if need.created_at
-                    else None
-                ),
+            "id": need.id,
+            "title": need.title,
+            "industry": need.industry.name if need.industry else None,
+            "industry_id": need.industry_id,
+            "status": need.status,
+            "budget": safe_float(need.budget),
+            "timeline": need.timeline,
+            "created_at": need.created_at.isoformat() if need.created_at else None,
         })
-
     return result
-
-
-# ============================================================
-# LLM Reasoning
-# ============================================================
-
-def generate_llm_reasoning(
-    industry_name,
-    competitor_data,
-):
-
-    if not competitor_data:
-
-        return (
-            "داده کافی برای تحلیل رقبا "
-            "در این صنعت وجود ندارد."
-        )
-
-    competitors_text = "\n\n".join(
-
-        [
-
-            (
-                f"رقیب: {item['seller_name']}\n"
-                f"تعداد محصولات: {item['product_count']}\n"
-                f"محصولات فعال: {item['active_product_count']}\n"
-                f"بازدید کل: {item['total_views']}\n"
-                f"میانگین کیفیت: {item['average_quality']}\n"
-                f"میانگین ریسک بلوغ: "
-                f"{item['average_maturity_risk']}\n"
-                f"میانگین آمادگی بازار: "
-                f"{item['average_market_readiness']}\n"
-                f"محصول دارای مشتری نمونه: "
-                f"{item['sample_customer_product_count']}\n"
-                f"محصول دارای گواهی: "
-                f"{item['certified_product_count']}"
-            )
-
-            for item in competitor_data
-
-        ]
-
-    )
-
-    prompt = f"""
-شما تحلیلگر Market Intelligence هستید.
-
-صنعت:
-{industry_name}
-
-داده‌های زیر قبلاً توسط سیستم و با
-Rule-Based Logic محاسبه شده‌اند.
-
-مهم:
-
-- هیچ عدد جدیدی محاسبه نکن.
-- هیچ Match Score تولید نکن.
-- داده‌ای که در ورودی نیست فرض نکن.
-- فقط از شواهد موجود استفاده کن.
-- اگر داده کافی نیست صریحاً بگو:
-  «داده کافی وجود ندارد».
-
-تحلیل:
-
-1. رقبای قوی‌تر
-2. نقاط قوت اصلی
-3. نقاط ضعف قابل مشاهده
-4. تفاوت جایگاه رقبا
-5. فرصت‌های قابل مشاهده
-6. پیشنهاد اقدام
-
-داده‌ها:
-
-{competitors_text}
-"""
-
-    try:
-
-        from django.conf import settings
-
-        import requests
-
-        api_key = getattr(
-            settings,
-            "OPENROUTER_API_KEY",
-            None,
-        )
-
-        if not api_key:
-
-            return (
-                "LLM فعال نیست. "
-                "داده ساختاریافته رقبا در دسترس است."
-            )
-
-        base_url = getattr(
-            settings,
-            "OPENROUTER_BASE_URL",
-            "https://openrouter.ai/api/v1",
-        )
-
-        model = getattr(
-            settings,
-            "OPENROUTER_MODEL",
-            "openai/gpt-oss-20b:free",
-        )
-
-        max_tokens = getattr(
-            settings,
-            "OPENROUTER_MAX_TOKENS",
-            500,
-        )
-
-        temperature = getattr(
-            settings,
-            "OPENROUTER_TEMPERATURE",
-            0.1,
-        )
-
-        response = requests.post(
-
-            f"{base_url}/chat/completions",
-
-            headers={
-
-                "Authorization":
-                    f"Bearer {api_key}",
-
-                "Content-Type":
-                    "application/json",
-            },
-
-            json={
-
-                "model":
-                    model,
-
-                "messages": [
-
-                    {
-                        "role":
-                            "system",
-
-                        "content":
-                            "You are a market intelligence analyst.",
-                    },
-
-                    {
-                        "role":
-                            "user",
-
-                        "content":
-                            prompt,
-                    },
-
-                ],
-
-                "temperature":
-                    temperature,
-
-                "max_tokens":
-                    max_tokens,
-            },
-
-            timeout=60,
-        )
-
-        response.raise_for_status()
-
-        data = response.json()
-
-        return (
-            data
-            .get(
-                "choices",
-                [{}]
-            )[0]
-            .get(
-                "message",
-                {}
-            )
-            .get(
-                "content",
-                ""
-            )
-            .strip()
-        )
-
-    except Exception as exc:
-
-        logger.exception(
-            "Market Intelligence LLM error: %s",
-            exc,
-        )
-
-        return (
-            "تحلیل LLM در دسترس نبود. "
-            "داده‌های عددی و ساختاریافته "
-            "همچنان معتبر هستند."
-        )
 
 
 # ============================================================
 # Monthly Trend
 # ============================================================
 
-def build_monthly_trend(
-    industry_id=None,
-    months=6,
-):
-
+def build_monthly_trend(industry_id=None, months=6):
     now = timezone.now()
-
     result = []
-
-    for offset in range(
-        months - 1,
-        -1,
-        -1,
-    ):
-
-        current = now.replace(
-            day=1,
-            hour=0,
-            minute=0,
-            second=0,
-            microsecond=0,
-        )
-
-        month_start = (
-            current
-            -
-            timedelta(
-                days=32 * offset
-            )
-        ).replace(
-            day=1
-        )
-
+    for offset in range(months - 1, -1, -1):
+        current = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        month_start = (current - timedelta(days=32 * offset)).replace(day=1)
         if offset == 0:
-
             month_end = now
-
         else:
-
-            next_month = (
-                month_start
-                +
-                timedelta(days=32)
-            ).replace(
-                day=1
-            )
-
+            next_month = (month_start + timedelta(days=32)).replace(day=1)
             month_end = next_month
 
-        # ----------------------------------------------------
-        # Supply
-        # ----------------------------------------------------
+        product_qs = Product.objects.filter(
+            status__in=MARKET_STATUSES,
+            created_at__gte=month_start,
+            created_at__lt=month_end,
+        )
+        if industry_id:
+            product_qs = product_qs.filter(industry_id=industry_id)
+        supply_count = product_qs.count()
 
-        product_qs = (
-            Product.objects
-            .filter(
-                status__in=MARKET_STATUSES,
+        demand_count = 0
+        if Need is not None:
+            need_qs = Need.objects.exclude(status="draft").filter(
                 created_at__gte=month_start,
                 created_at__lt=month_end,
             )
-        )
-
-        if industry_id:
-
-            product_qs = product_qs.filter(
-                industry_id=industry_id
-            )
-
-        supply_count = (
-            product_qs.count()
-        )
-
-        # ----------------------------------------------------
-        # Demand
-        # ----------------------------------------------------
-
-        demand_count = 0
-
-        if Need is not None:
-
-            need_qs = (
-                Need.objects
-                .exclude(
-                    status="draft"
-                )
-                .filter(
-                    created_at__gte=month_start,
-                    created_at__lt=month_end,
-                )
-            )
-
             if industry_id:
-
-                need_qs = need_qs.filter(
-                    industry_id=industry_id
-                )
-
-            demand_count = (
-                need_qs.count()
-            )
-
-        # ----------------------------------------------------
-        # Deals
-        # ----------------------------------------------------
+                need_qs = need_qs.filter(industry_id=industry_id)
+            demand_count = need_qs.count()
 
         deals_count = 0
-
         if Negotiation is not None:
-
-            deals_qs = (
-                Negotiation.objects
-                .filter(
-                    created_at__gte=month_start,
-                    created_at__lt=month_end,
-                    status__in=
-                        SUCCESSFUL_NEGOTIATION_STATUSES,
-                )
+            deals_qs = Negotiation.objects.filter(
+                created_at__gte=month_start,
+                created_at__lt=month_end,
+                status__in=SUCCESSFUL_NEGOTIATION_STATUSES,
             )
-
-            deals_count = (
-                deals_qs.count()
-            )
-
-        # ----------------------------------------------------
-        # Label
-        # ----------------------------------------------------
-
-        month_label = (
-            month_start.strftime("%Y-%m")
-        )
+            deals_count = deals_qs.count()
 
         result.append({
-
-            "month":
-                month_label,
-
-            "تقاضا":
-                demand_count,
-
-            "عرضه":
-                supply_count,
-
-            "معاملات":
-                deals_count,
+            "month": month_start.strftime("%Y-%m"),
+            "تقاضا": demand_count,
+            "عرضه": supply_count,
+            "معاملات": deals_count,
         })
-
     return result
 
 
@@ -1148,1197 +437,366 @@ def build_monthly_trend(
 # Main Market Intelligence
 # ============================================================
 
-def generate_market_intelligence(
-    industry_id=None,
-    category=None,
-    trl_min=None,
-    trl_max=None,
-):
+def generate_market_intelligence(industry=None, category=None, trl_min=None, trl_max=None):
+    try:
+        industry_id = resolve_industry_param(industry)
 
-    # ========================================================
-    # Product Query
-    # ========================================================
+        # Product Query
+        product_queryset = Product.objects.select_related("seller", "industry").filter(status__in=MARKET_STATUSES)
 
-    product_queryset = (
+        if industry_id is not None:
+            product_queryset = product_queryset.filter(industry_id=industry_id)
 
-        Product.objects
+        if category:
+            product_queryset = product_queryset.filter(category=category)
 
-        .select_related(
-            "seller",
-            "industry",
-        )
+        if trl_min is not None:
+            product_queryset = product_queryset.filter(trl__gte=trl_min)
+        if trl_max is not None:
+            product_queryset = product_queryset.filter(trl__lte=trl_max)
 
-        .filter(
-            status__in=MARKET_STATUSES
-        )
+        products = list(product_queryset)
 
-    )
+        if not products:
+            return {
+                "filters": {
+                    "industry": industry,
+                    "category": category,
+                    "trl_min": trl_min,
+                    "trl_max": trl_max,
+                },
+                "summary": {
+                    "total_products": 0,
+                    "total_services": 0,
+                    "total_supplies": 0,
+                    "total_needs": 0,
+                    "published_products": 0,
+                    "average_price": None,
+                    "average_trl": None,
+                    "average_mrl": None,
+                },
+                "categories": [],
+                "industries": [],
+                "trl_distribution": [],
+                "mrl_distribution": [],
+                "price": {"min_price": None, "max_price": None, "average_price": None, "median_price": None},
+                "providers": [],
+                "needs": {"total": 0, "receiving_proposals": 0, "matched": 0, "evaluating": 0},
+                "insights": ["داده کافی برای تحلیل وجود ندارد."],
+            }
 
-    if industry_id:
+        indicators = []
+        for product in products:
+            ind = build_product_indicator(product, products)
+            if ind is not None:
+                indicators.append(ind)
 
-        product_queryset = (
-            product_queryset
-            .filter(
-                industry_id=industry_id
-            )
-        )
+        # Summary
+        total_products = len(products)
+        total_services = sum(1 for p in products if p.category == "service")
+        total_supplies = 0
+        if Supply is not None:
+            try:
+                total_supplies = Supply.objects.filter(status__in=["approved", "published"]).count()
+            except Exception:
+                pass
 
-    if category:
+        total_needs = 0
+        if Need is not None:
+            try:
+                total_needs = Need.objects.filter(status__in=OPEN_NEED_STATUSES).count()
+            except Exception:
+                pass
 
-        product_queryset = (
-            product_queryset
-            .filter(
-                category=category
-            )
-        )
+        published_products = sum(1 for p in products if p.status == "published")
 
-    if trl_min is not None:
+        price_data = [p.price for p in products if p.price is not None]
+        average_price = mean(price_data) if price_data else None
 
-        product_queryset = (
-            product_queryset
-            .filter(
-                trl__gte=trl_min
-            )
-        )
+        trl_data = [p.trl for p in products if p.trl is not None]
+        average_trl = mean(trl_data) if trl_data else None
 
-    if trl_max is not None:
+        mrl_data = [p.mrl for p in products if p.mrl is not None]
+        average_mrl = mean(mrl_data) if mrl_data else None
 
-        product_queryset = (
-            product_queryset
-            .filter(
-                trl__lte=trl_max
-            )
-        )
+        summary = {
+            "total_products": total_products,
+            "total_services": total_services,
+            "total_supplies": total_supplies,
+            "total_needs": total_needs,
+            "published_products": published_products,
+            "average_price": safe_float(average_price),
+            "average_trl": safe_float(average_trl),
+            "average_mrl": safe_float(average_mrl),
+        }
 
-    products = list(
-        product_queryset
-    )
+        # Category Distribution
+        categories = []
+        category_counts = {}
+        for p in products:
+            cat = p.category or "نامشخص"
+            category_counts[cat] = category_counts.get(cat, 0) + 1
+        for cat, count in category_counts.items():
+            categories.append({
+                "category": cat,
+                "count": count,
+                "percentage": round((count / total_products) * 100, 2) if total_products else 0
+            })
+        categories.sort(key=lambda x: x["count"], reverse=True)
 
-    # ========================================================
-    # Empty
-    # ========================================================
+        # Industry Distribution
+        industries = []
+        industry_counts = {}
+        for p in products:
+            ind = p.industry.name if p.industry else "بدون صنعت"
+            industry_counts[ind] = industry_counts.get(ind, 0) + 1
+        for ind, count in industry_counts.items():
+            industries.append({
+                "industry": ind,
+                "count": count,
+                "percentage": round((count / total_products) * 100, 2) if total_products else 0
+            })
+        industries.sort(key=lambda x: x["count"], reverse=True)
 
-    if not products:
+        # TRL Distribution
+        trl_distribution = []
+        trl_counts = {}
+        for p in products:
+            trl = p.trl or 0
+            trl_counts[trl] = trl_counts.get(trl, 0) + 1
+        for trl, count in sorted(trl_counts.items()):
+            trl_distribution.append({
+                "trl": trl,
+                "count": count,
+                "percentage": round((count / total_products) * 100, 2) if total_products else 0
+            })
+
+        # MRL Distribution
+        mrl_distribution = []
+        mrl_counts = {}
+        for p in products:
+            mrl = p.mrl or 0
+            mrl_counts[mrl] = mrl_counts.get(mrl, 0) + 1
+        for mrl, count in sorted(mrl_counts.items()):
+            mrl_distribution.append({
+                "mrl": mrl,
+                "count": count,
+                "percentage": round((count / total_products) * 100, 2) if total_products else 0
+            })
+
+        # Price Analysis
+        prices = [safe_float(p.price) for p in products if p.price is not None]
+        price_analysis = {
+            "min_price": min(prices) if prices else None,
+            "max_price": max(prices) if prices else None,
+            "average_price": mean(prices) if prices else None,
+            "median_price": sorted(prices)[len(prices)//2] if prices else None,
+        }
+
+        # Providers
+        providers = []
+        provider_data = {}
+        for p in indicators:
+            seller = p["seller_name"]
+            if seller not in provider_data:
+                provider_data[seller] = {
+                    "provider": seller,
+                    "product_count": 0,
+                    "average_trl": [],
+                    "average_mrl": [],
+                }
+            provider_data[seller]["product_count"] += 1
+            if p["trl"] is not None:
+                provider_data[seller]["average_trl"].append(p["trl"])
+            if p["mrl"] is not None:
+                provider_data[seller]["average_mrl"].append(p["mrl"])
+        for data in provider_data.values():
+            providers.append({
+                "provider": data["provider"],
+                "product_count": data["product_count"],
+                "average_trl": round(mean(data["average_trl"]), 2) if data["average_trl"] else None,
+                "average_mrl": round(mean(data["average_mrl"]), 2) if data["average_mrl"] else None,
+            })
+        providers.sort(key=lambda x: x["product_count"], reverse=True)
+
+        # Needs
+        needs_data = {"total": 0, "receiving_proposals": 0, "matched": 0, "evaluating": 0}
+        if Need is not None:
+            try:
+                needs_queryset = Need.objects.exclude(status="draft")
+                if industry_id:
+                    needs_queryset = needs_queryset.filter(industry_id=industry_id)
+                needs_data["total"] = needs_queryset.count()
+                needs_data["receiving_proposals"] = needs_queryset.filter(status="receiving_proposals").count()
+                needs_data["matched"] = needs_queryset.filter(status="matched").count()
+                needs_data["evaluating"] = needs_queryset.filter(status="evaluating").count()
+            except Exception as e:
+                logger.warning("Could not fetch needs data: %s", e)
+
+        # Insights
+        insights = []
+        if total_products == 0:
+            insights.append("در این محدوده فیلتری، محصولی یافت نشد.")
+        else:
+            if average_trl is not None and average_trl >= 7:
+                insights.append("سطح آمادگی فناوری غالب در بازار نسبتاً بالا است.")
+            elif average_trl is not None and average_trl >= 5:
+                insights.append("بازار ترکیبی از فناوری‌های در حال بلوغ و آماده بهره‌برداری دارد.")
+            elif average_trl is not None:
+                insights.append("بخش قابل توجهی از فناوری‌های بازار هنوز در مراحل پایین آمادگی قرار دارند.")
+
+            if categories:
+                top_cat = categories[0]
+                insights.append(
+                    f"بیشترین تمرکز بازار در دسته «{top_cat['category']}» است "
+                    f"با {top_cat['percentage']} درصد از محصولات."
+                )
+
+            if industries:
+                top_ind = industries[0]
+                insights.append(
+                    f"بیشترین حضور عرضه‌کنندگان مربوط به صنعت «{top_ind['industry']}» است."
+                )
+
+            if price_analysis["average_price"] is not None:
+                insights.append(
+                    f"میانگین قیمت محصولات در این بازار {price_analysis['average_price']:,.0f} تومان است."
+                )
+
+            if needs_data["total"] > 0:
+                insights.append(
+                    f"در محدوده انتخاب‌شده {needs_data['total']} نیاز فعال در سامانه ثبت شده است."
+                )
+            else:
+                insights.append("در محدوده انتخاب‌شده نیاز فعال قابل توجهی ثبت نشده است.")
 
         return {
-
-            "market_overview": {
-
-                "industry":
-                    None,
-
-                "product_count":
-                    0,
-
-                "seller_count":
-                    0,
-
-                "total_views":
-                    0,
-
-                "average_quality":
-                    0,
-
-                "average_maturity_risk":
-                    0,
-
-                "average_market_readiness":
-                    0,
-
-                "need_count":
-                    0,
-
-                "open_need_count":
-                    0,
-
-                "negotiation_count":
-                    0,
-
-                "successful_deal_count":
-                    0,
+            "filters": {
+                "industry": industry,
+                "category": category,
+                "trl_min": trl_min,
+                "trl_max": trl_max,
             },
-
-            "top_products":
-                [],
-
-            "readiness_analysis":
-                {},
-
-            "competitors":
-                [],
-
-            "competitor_reasoning":
-                "داده کافی برای تحلیل وجود ندارد.",
-
-            "trends":
-                build_monthly_trend(
-                    industry_id=industry_id
-                ),
-
-            "needs":
-                [],
-
-            "recommendations":
-                [],
+            "summary": summary,
+            "categories": categories,
+            "industries": industries,
+            "trl_distribution": trl_distribution,
+            "mrl_distribution": mrl_distribution,
+            "price": price_analysis,
+            "providers": providers,
+            "needs": needs_data,
+            "insights": insights,
         }
-
-    # ========================================================
-    # Indicators
-    # ========================================================
-
-    indicators = [
-
-        build_product_indicator(
-            product,
-            products,
-        )
-
-        for product in products
-
-    ]
-
-    # ========================================================
-    # Competitors
-    # ========================================================
-
-    competitors = (
-        build_competitor_dataset(
-            indicators
-        )
-    )
-
-    # ========================================================
-    # Industry
-    # ========================================================
-
-    industry_names = {
-
-        p["industry"]
-
-        for p in indicators
-
-        if p["industry"]
-
-    }
-
-    if len(industry_names) == 1:
-
-        industry_name = next(
-            iter(industry_names)
-        )
-
-    elif industry_names:
-
-        industry_name = "چند صنعت"
-
-    else:
-
-        industry_name = "نامشخص"
-
-    # ========================================================
-    # Needs
-    # ========================================================
-
-    needs = build_needs_dataset(
-        industry_id=industry_id,
-        category=category,
-    )
-
-    need_count = len(needs)
-
-    open_need_count = sum(
-
-        1
-
-        for n in needs
-
-        if n["status"]
-        in OPEN_NEED_STATUSES
-
-    )
-
-    # ========================================================
-    # Negotiations
-    # ========================================================
-
-    negotiation_count = 0
-
-    successful_deal_count = 0
-
-    if Negotiation is not None:
-
-        try:
-
-            negotiation_queryset = (
-                Negotiation.objects.all()
-            )
-
-            # ------------------------------------------------
-            # Important:
-            #
-            # supply.industry is currently a CharField
-            # according to the supplied model information.
-            #
-            # Therefore we DO NOT pretend that
-            # industry_id can be applied to it.
-            #
-            # If later the exact mapping between
-            # Supply.industry and Industry is known,
-            # this filter can be implemented.
-            # ------------------------------------------------
-
-            negotiation_count = (
-                negotiation_queryset.count()
-            )
-
-            successful_deal_count = (
-
-                negotiation_queryset
-
-                .filter(
-                    status__in=
-                        SUCCESSFUL_NEGOTIATION_STATUSES
-                )
-
-                .count()
-
-            )
-
-        except Exception as exc:
-
-            logger.warning(
-
-                "Could not calculate negotiations: %s",
-
-                exc,
-
-            )
-
-    # ========================================================
-    # Quality / Readiness / Risk
-    # ========================================================
-
-    readiness_values = [
-
-        p["market_readiness"]
-
-        for p in indicators
-
-    ]
-
-    quality_values = [
-
-        p["quality_indicator"]
-
-        for p in indicators
-
-    ]
-
-    risk_values = [
-
-        p["maturity_risk"]
-
-        for p in indicators
-
-    ]
-
-    average_readiness = round(
-        mean(readiness_values),
-        2,
-    )
-
-    average_quality = round(
-        mean(quality_values),
-        2,
-    )
-
-    average_risk = round(
-        mean(risk_values),
-        2,
-    )
-
-    # ========================================================
-    # Top Products
-    # ========================================================
-
-    top_products = sorted(
-
-        indicators,
-
-        key=lambda p: (
-
-            p["market_readiness"],
-
-            p["quality_indicator"],
-
-            -p["maturity_risk"],
-
-            p["view_count"],
-
-        ),
-
-        reverse=True,
-
-    )[:10]
-
-    # ========================================================
-    # Readiness Analysis
-    # ========================================================
-
-    readiness_analysis = {
-
-        "average":
-            average_readiness,
-
-        "high_readiness_count":
-            sum(
-
-                1
-
-                for p in indicators
-
-                if p["market_readiness"] >= 70
-
-            ),
-
-        "medium_readiness_count":
-            sum(
-
-                1
-
-                for p in indicators
-
-                if 40 <= p["market_readiness"] < 70
-
-            ),
-
-        "low_readiness_count":
-            sum(
-
-                1
-
-                for p in indicators
-
-                if p["market_readiness"] < 40
-
-            ),
-    }
-
-    # ========================================================
-    # Recommendations
-    # ========================================================
-
-    recommendations = []
-
-    if average_readiness < 40:
-
-        recommendations.append(
-
-            "آمادگی بازار محصولات پایین است. "
-            "اعتبارسنجی تقاضا، جذب مشتری اولیه "
-            "و تکمیل شواهد بازار پیشنهاد می‌شود."
-
-        )
-
-    if average_quality < 50:
-
-        recommendations.append(
-
-            "میانگین شاخص کیفیت پایین است. "
-            "تمرکز بر ارتقای کیفیت و بلوغ فناوری "
-            "و تولید پیشنهاد می‌شود."
-
-        )
-
-    if average_risk > 60:
-
-        recommendations.append(
-
-            "ریسک بلوغ فناوری و بازار نسبتاً بالا است. "
-            "کاهش شکاف TRL و MRL پیشنهاد می‌شود."
-
-        )
-
-    if open_need_count > len(products):
-
-        recommendations.append(
-
-            "تعداد نیازهای باز از تعداد محصولات "
-            "بیشتر است. این وضعیت می‌تواند نشان‌دهنده "
-            "فرصت توسعه عرضه در بازار باشد."
-
-        )
-
-    if successful_deal_count > 0:
-
-        recommendations.append(
-
-            "در داده‌های ثبت‌شده معاملات موفق وجود دارد. "
-            "شناسایی الگوهای محصولات و عرضه‌کنندگان "
-            "موفق برای توسعه بازار پیشنهاد می‌شود."
-
-        )
-
-    if not recommendations:
-
-        recommendations.append(
-
-            "شاخص‌های فعلی وضعیت نسبتاً مناسبی دارند. "
-            "تمرکز بر توسعه بازار، افزایش تعامل "
-            "و تبدیل نیازهای باز به معامله پیشنهاد می‌شود."
-
-        )
-
-    # ========================================================
-    # LLM
-    # ========================================================
-
-    competitor_reasoning = (
-        generate_llm_reasoning(
-            industry_name,
-            competitors,
-        )
-    )
-
-    # ========================================================
-    # Trends
-    # ========================================================
-
-    trends = build_monthly_trend(
-        industry_id=industry_id,
-    )
-
-    # ========================================================
-    # Return
-    # ========================================================
-
-    return {
-
-        "market_overview": {
-
-            "industry":
-                industry_name,
-
-            "product_count":
-                len(products),
-
-            "seller_count":
-                len(competitors),
-
-            "total_views":
-                sum(
-                    p["view_count"]
-                    for p in indicators
-                ),
-
-            "average_quality":
-                average_quality,
-
-            "average_maturity_risk":
-                average_risk,
-
-            "average_market_readiness":
-                average_readiness,
-
-            "need_count":
-                need_count,
-
-            "open_need_count":
-                open_need_count,
-
-            "negotiation_count":
-                negotiation_count,
-
-            "successful_deal_count":
-                successful_deal_count,
-        },
-
-        "top_products":
-            top_products,
-
-        "readiness_analysis":
-            readiness_analysis,
-
-        "competitors":
-            competitors,
-
-        "competitor_reasoning":
-            competitor_reasoning,
-
-        "trends":
-            trends,
-
-        "needs":
-            needs,
-
-        "recommendations":
-            recommendations,
-    }
+    except Exception as e:
+        logger.exception("Unexpected error in generate_market_intelligence: %s", e)
+        raise  # اجازه می‌دهیم خطا به view برود تا پیام مناسب نشان داده شود
 
 
 # ============================================================
-# Transform Market Intelligence For Frontend
+# Competitor Analysis
 # ============================================================
 
-def transform_market_intelligence_for_frontend(
-    raw_data
-):
+def generate_competitor_analysis(product_id, limit=20):
+    try:
+        product = Product.objects.select_related("industry", "seller").get(id=product_id)
+    except Product.DoesNotExist:
+        raise ValueError("محصول مورد نظر پیدا نشد.")
 
-    overview = raw_data.get(
-        "market_overview",
-        {},
-    )
+    queryset = Product.objects.select_related("industry", "seller").filter(
+        status__in=MARKET_STATUSES
+    ).exclude(id=product.id)
 
-    readiness = raw_data.get(
-        "readiness_analysis",
-        {},
-    )
+    if product.industry_id:
+        queryset = queryset.filter(industry_id=product.industry_id)
+    if product.category:
+        queryset = queryset.filter(category=product.category)
 
-    competitors = raw_data.get(
-        "competitors",
-        [],
-    )
+    competitors_qs = queryset[:limit]
 
-    needs = raw_data.get(
-        "needs",
-        [],
-    )
+    competitors = []
+    for comp in competitors_qs:
+        quality = get_quality_indicator(comp)
+        risk = get_maturity_risk(comp)
+        readiness = get_market_readiness(comp, list(competitors_qs) + [product])
 
-    # ========================================================
-    # KPI
-    # ========================================================
-
-    kpi_data = [
-
-        {
-            "label":
-                "محصولات فعال",
-
-            "value":
-                str(
-                    overview.get(
-                        "product_count",
-                        0,
-                    )
-                ),
-
-            "change":
-                (
-                    f"{overview.get('average_quality', 0):.1f}٪ کیفیت"
-                ),
-
-            "icon":
-                "Package",
-
-            "color":
-                "bg-blue-50 text-blue-600",
-        },
-
-        {
-            "label":
-                "عرضه‌کنندگان",
-
-            "value":
-                str(
-                    overview.get(
-                        "seller_count",
-                        0,
-                    )
-                ),
-
-            "change":
-                (
-                    f"{overview.get('average_market_readiness', 0):.1f}٪ آمادگی"
-                ),
-
-            "icon":
-                "Users",
-
-            "color":
-                "bg-emerald-50 text-emerald-600",
-        },
-
-        {
-            "label":
-                "آمادگی بازار",
-
-            "value":
-                (
-                    f"{readiness.get('average', 0):.1f}٪"
-                ),
-
-            "change":
-                (
-                    f"{readiness.get('high_readiness_count', 0)} محصول پیشرو"
-                ),
-
-            "icon":
-                "CheckCircle",
-
-            "color":
-                "bg-amber-50 text-amber-600",
-        },
-
-        {
-            "label":
-                "نیازهای باز",
-
-            "value":
-                str(
-                    overview.get(
-                        "open_need_count",
-                        0,
-                    )
-                ),
-
-            "change":
-                (
-                    f"{overview.get('need_count', 0)} نیاز ثبت‌شده"
-                ),
-
-            "icon":
-                "Target",
-
-            "color":
-                "bg-purple-50 text-purple-600",
-        },
-
-    ]
-
-    # ========================================================
-    # Trend
-    # ========================================================
-
-    trend_data = raw_data.get(
-        "trends",
-        [],
-    )
-
-    # ========================================================
-    # Heatmap
-    # ========================================================
-
-    heatmap_data = []
-
-    for comp in competitors[:10]:
-
-        readiness_score = comp.get(
-            "average_market_readiness",
-            0,
+        competitive_score = round(
+            (readiness * 0.4) +
+            (quality * 0.3) +
+            ((100 - risk) * 0.3),
+            2
         )
 
-        if readiness_score >= 70:
-
-            activity_level = "hot"
-
-        elif readiness_score >= 40:
-
-            activity_level = "warm"
-
-        else:
-
-            activity_level = "cold"
-
-        heatmap_data.append({
-
-            "industry":
-                overview.get(
-                    "industry",
-                    "نامشخص",
-                ),
-
-            "region":
-                "نامشخص",
-
-            "tech":
-                "نامشخص",
-
-            "supplier":
-                comp.get(
-                    "seller_name",
-                    "نامشخص",
-                ),
-
-            # داده واقعی نداریم
-            "demandGrowth":
-                None,
-
-            "supplyCount":
-                comp.get(
-                    "product_count",
-                    0,
-                ),
-
-            # داده واقعی نداریم
-            "dealValue":
-                None,
-
-            "activityLevel":
-                activity_level,
-
-            # داده زمانی واقعی برای این supplier
-            # نداریم، پس trend جعل نمی‌شود.
-            "trend":
-                None,
+        competitors.append({
+            "product_id": comp.id,
+            "title": comp.title,
+            "provider": get_seller_name(comp.seller),
+            "category": comp.category or "",
+            "industry": comp.industry.name if comp.industry else None,
+            "trl": comp.trl,
+            "mrl": comp.mrl,
+            "price": safe_float(comp.price),
+            "quality_score": quality,
+            "risk_score": risk,
+            "market_readiness_score": readiness,
+            "evaluation_count": 1 if get_latest_evaluation(comp) else 0,
+            "competitive_score": competitive_score,
+            "competitive_advantage": comp.competitive_advantage or "",
         })
 
-    # ========================================================
-    # Competitors
-    # ========================================================
+    competitors.sort(key=lambda x: x["competitive_score"], reverse=True)
 
-    competitor_list = []
+    summary = {
+        "total_competitors": len(competitors),
+        "average_price": None,
+        "average_trl": None,
+        "average_mrl": None,
+        "average_quality": None,
+        "average_market_readiness": None,
+    }
+    if competitors:
+        prices = [c["price"] for c in competitors if c["price"] is not None]
+        trls = [c["trl"] for c in competitors if c["trl"] is not None]
+        mrls = [c["mrl"] for c in competitors if c["mrl"] is not None]
+        qualities = [c["quality_score"] for c in competitors if c["quality_score"] is not None]
+        readinesses = [c["market_readiness_score"] for c in competitors if c["market_readiness_score"] is not None]
+        if prices:
+            summary["average_price"] = round(mean(prices), 2)
+        if trls:
+            summary["average_trl"] = round(mean(trls), 2)
+        if mrls:
+            summary["average_mrl"] = round(mean(mrls), 2)
+        if qualities:
+            summary["average_quality"] = round(mean(qualities), 2)
+        if readinesses:
+            summary["average_market_readiness"] = round(mean(readinesses), 2)
 
-    for comp in competitors:
-
-        strengths = []
-
-        weaknesses = []
-
-        rating_reasons = []
-
-        quality = comp.get(
-            "average_quality",
-            0,
+    insights = []
+    if competitors:
+        strongest = competitors[0]
+        insights.append(
+            f"قوی‌ترین رقیب شناسایی‌شده «{strongest['title']}» است "
+            f"با امتیاز رقابتی {strongest['competitive_score']}."
         )
-
-        readiness_score = comp.get(
-            "average_market_readiness",
-            0,
-        )
-
-        risk = comp.get(
-            "average_maturity_risk",
-            0,
-        )
-
-        if quality >= 70:
-
-            strengths.append(
-                "کیفیت بالا"
-            )
-
-            rating_reasons.append(
-                "کیفیت بالا"
-            )
-
-        if readiness_score >= 70:
-
-            strengths.append(
-                "آمادگی بازار مناسب"
-            )
-
-            rating_reasons.append(
-                "آمادگی بازار"
-            )
-
-        if risk < 30:
-
-            strengths.append(
-                "ریسک بلوغ پایین"
-            )
-
-            rating_reasons.append(
-                "ریسک پایین"
-            )
-
-        if quality < 50:
-
-            weaknesses.append(
-                "کیفیت پایین"
-            )
-
-        if readiness_score < 40:
-
-            weaknesses.append(
-                "آمادگی بازار پایین"
-            )
-
-        if risk > 60:
-
-            weaknesses.append(
-                "ریسک بلوغ بالا"
-            )
-
-        if not strengths:
-
-            strengths.append(
-                "عملکرد متوسط"
-            )
-
-            rating_reasons.append(
-                "عملکرد متوسط"
-            )
-
-        competitor_list.append({
-
-            "name":
-                comp.get(
-                    "seller_name",
-                    "نامشخص",
-                ),
-
-            "products":
-                comp.get(
-                    "product_count",
-                    0,
-                ),
-
-            "marketShare":
-                0,
-
-            "avgRating":
-                round(
-                    quality / 100 * 5,
-                    1,
-                ),
-
-            "strengths":
-                strengths[:3],
-
-            "weaknesses":
-                weaknesses[:3],
-
-            "industries": [
-
-                overview.get(
-                    "industry",
-                    "نامشخص",
-                )
-
-            ],
-
-            "regions": [
-                "نامشخص"
-            ],
-
-            "techs": [
-                "نامشخص"
-            ],
-
-            "ratingReasons":
-                rating_reasons[:3],
-
-            "averageQuality":
-                quality,
-
-            "averageRisk":
-                risk,
-
-            "averageMarketReadiness":
-                readiness_score,
-        })
-
-    # ========================================================
-    # Product Share
-    # ========================================================
-
-    total_product_count = sum(
-
-        item["products"]
-
-        for item in competitor_list
-
-    )
-
-    for item in competitor_list:
-
-        if total_product_count > 0:
-
-            item["marketShare"] = round(
-
-                (
-                    item["products"]
-                    /
-                    total_product_count
-                )
-                * 100,
-
-                2,
-
-            )
-
-    # ========================================================
-    # Emerging Technologies
-    # ========================================================
-
-    # Product فعلاً technology ندارد.
-    emerging_techs = []
-
-    # ========================================================
-    # Top Needs
-    # ========================================================
-
-    top_needs = []
-
-    for need in needs[:10]:
-
-        top_needs.append({
-
-            "title":
-                need.get(
-                    "title",
-                    "بدون عنوان",
-                ),
-
-            "count":
-                1,
-
-            # رشد واقعی نداریم
-            "growth":
-                None,
-
-            "industry":
-                need.get(
-                    "industry",
-                    "نامشخص",
-                ),
-
-            "tech":
-                "نامشخص",
-
-            "status":
-                need.get(
-                    "status"
-                ),
-
-            "budget":
-                need.get(
-                    "budget"
-                ),
-        })
-
-    # ========================================================
-    # Top Products
-    # ========================================================
-
-    top_products_raw = raw_data.get(
-        "top_products",
-        [],
-    )
-
-    top_products = []
-
-    for product in top_products_raw[:10]:
-
-        top_products.append({
-
-            "title":
-                product.get(
-                    "title",
-                    "بدون عنوان",
-                ),
-
-            "rating":
-                round(
-                    product.get(
-                        "quality_indicator",
-                        0,
-                    )
-                    /
-                    100
-                    *
-                    5,
-                    1,
-                ),
-
-            "views":
-                product.get(
-                    "view_count",
-                    0,
-                ),
-
-            "industry":
-                product.get(
-                    "industry",
-                    "نامشخص",
-                ),
-
-            "tech":
-                "نامشخص",
-
-            "trl":
-                product.get(
-                    "trl"
-                ),
-
-            "mrl":
-                product.get(
-                    "mrl"
-                ),
-        })
-
-    # ========================================================
-    # Product Share
-    # ========================================================
-
-    market_share = [
-
-        {
-            "name":
-                item["name"],
-
-            "value":
-                item["marketShare"],
-        }
-
-        for item in competitor_list[:10]
-
-    ]
-
-    # ========================================================
-    # Recommendations
-    # ========================================================
-
-    recommendations = []
-
-    for idx, rec in enumerate(
-
-        raw_data.get(
-            "recommendations",
-            [],
-        )
-
-    ):
-
-        recommendations.append({
-
-            "id":
-                idx + 1,
-
-            "title":
-                rec[:60],
-
-            "description":
-                rec,
-
-            "action":
-                "بررسی",
-
-            "priority":
-                (
-                    "high"
-                    if idx == 0
-                    else "medium"
-                ),
-
-            "impact":
-                (
-                    "بالا"
-                    if idx == 0
-                    else "متوسط"
-                ),
-
-            "icon":
-                (
-                    "Lightbulb"
-                    if idx == 0
-                    else "Zap"
-                ),
-        })
-
-    # ========================================================
-    # Gap Analysis
-    # ========================================================
-
-    gap_analysis = []
-
-    industry_product_count = overview.get(
-        "product_count",
-        0,
-    )
-
-    industry_need_count = overview.get(
-        "need_count",
-        0,
-    )
-
-    if (
-        industry_need_count
-        >
-        industry_product_count
-    ):
-
-        gap_type = "شکاف عرضه"
-
-    elif (
-        industry_product_count
-        >
-        industry_need_count
-    ):
-
-        gap_type = "شکاف تقاضا"
-
+        if summary["average_price"] is not None:
+            insights.append(f"میانگین قیمت رقبا {summary['average_price']:,.0f} تومان است.")
+        if summary["average_trl"] is not None:
+            insights.append(f"میانگین TRL رقبا {summary['average_trl']:.1f} است.")
+        if summary["average_quality"] is not None:
+            insights.append(f"میانگین امتیاز کیفیت رقبا {summary['average_quality']:.1f} از 100 است.")
+        if summary["average_market_readiness"] is not None:
+            insights.append(f"میانگین آمادگی بازار رقبا {summary['average_market_readiness']:.1f} از 100 است.")
     else:
-
-        gap_type = "متوازن"
-
-    gap_analysis.append({
-
-        "industry":
-            overview.get(
-                "industry",
-                "نامشخص",
-            ),
-
-        # Growth واقعی موجود نیست
-        "demandGrowth":
-            None,
-
-        # تعداد واقعی نیاز
-        "needCount":
-            industry_need_count,
-
-        "supplyCount":
-            industry_product_count,
-
-        "gap":
-            gap_type,
-    })
-
-    # ========================================================
-    # Final
-    # ========================================================
+        insights.append("رقیب قابل مقایسه‌ای بر اساس صنعت و دسته محصول پیدا نشد.")
 
     return {
-
-        "kpiData":
-            kpi_data,
-
-        "trendData":
-            trend_data,
-
-        "heatmapData":
-            heatmap_data,
-
-        "competitors":
-            competitor_list,
-
-        "emergingTechs":
-            emerging_techs,
-
-        "topNeeds":
-            top_needs,
-
-        "topProducts":
-            top_products,
-
-        "marketShare":
-            market_share,
-
-        "recommendations":
-            recommendations,
-
-        "gapAnalysis":
-            gap_analysis,
-
-        "marketOverview":
-            overview,
-
-        "competitorReasoning":
-            raw_data.get(
-                "competitor_reasoning",
-                "",
-            ),
+        "filters": {
+            "product_id": product_id,
+            "industry": product.industry.name if product.industry else None,
+            "category": product.category,
+        },
+        "summary": summary,
+        "competitors": competitors,
+        "insights": insights,
     }
 
 
@@ -2347,612 +805,159 @@ def transform_market_intelligence_for_frontend(
 # ============================================================
 
 def generate_dashboard_data(user):
-
-    # ========================================================
     # Products
-    # ========================================================
-
     try:
-
-        total_products = (
-
-            Product.objects
-
-            .filter(
-                seller=user,
-                status__in=MARKET_STATUSES,
-            )
-
-            .count()
-
-        )
-
+        total_products = Product.objects.filter(seller=user, status__in=MARKET_STATUSES).count()
     except Exception:
-
         total_products = 0
+        logger.exception("Error counting products")
 
-        logger.exception(
-            "Error counting products"
-        )
-
-    # ========================================================
     # Needs
-    # ========================================================
-
     active_needs = 0
-
     if Need is not None:
-
         try:
-
-            active_needs = (
-
-                Need.objects
-
-                .filter(
-                    buyer=user,
-                    status__in=
-                        ACTIVE_NEED_STATUSES,
-                )
-
-                .count()
-
-            )
-
+            active_needs = Need.objects.filter(buyer=user, status__in=ACTIVE_NEED_STATUSES).count()
         except Exception:
+            logger.exception("Error counting needs")
 
-            logger.exception(
-                "Error counting needs"
-            )
-
-    # ========================================================
     # Negotiations
-    # ========================================================
-
     ongoing_negotiations = 0
-
     successful_deals = 0
-
     recent_activities = []
-
     conversion_funnel = []
 
     if Negotiation is not None:
-
         try:
+            user_negotiations = Negotiation.objects.filter(
+                Q(buyer=user) | Q(supplier=user)
+            ).select_related("buyer", "supplier", "supply").order_by("-created_at")
 
-            user_negotiations = (
+            ongoing_negotiations = user_negotiations.filter(status__in=ONGOING_NEGOTIATION_STATUSES).count()
+            successful_deals = user_negotiations.filter(status__in=SUCCESSFUL_NEGOTIATION_STATUSES).count()
 
-                Negotiation.objects
-
-                .filter(
-
-                    Q(buyer=user)
-                    |
-                    Q(supplier=user)
-
-                )
-
-                .select_related(
-
-                    "buyer",
-
-                    "supplier",
-
-                    "supply",
-
-                )
-
-                .order_by(
-                    "-created_at"
-                )
-
-            )
-
-            # ------------------------------------------------
-            # Ongoing
-            # ------------------------------------------------
-
-            ongoing_negotiations = (
-
-                user_negotiations
-
-                .filter(
-                    status__in=
-                        ONGOING_NEGOTIATION_STATUSES
-                )
-
-                .count()
-
-            )
-
-            # ------------------------------------------------
-            # Successful
-            # ------------------------------------------------
-
-            successful_deals = (
-
-                user_negotiations
-
-                .filter(
-                    status__in=
-                        SUCCESSFUL_NEGOTIATION_STATUSES
-                )
-
-                .count()
-
-            )
-
-            # ------------------------------------------------
-            # Recent Activities
-            # ------------------------------------------------
-
-            recent_negotiations = (
-                user_negotiations[:5]
-            )
-
-            status_labels = dict(
-                Negotiation.STATUS_CHOICES
-            )
-
+            recent_negotiations = user_negotiations[:5]
+            status_labels = dict(Negotiation.STATUS_CHOICES)
             for neg in recent_negotiations:
-
                 if neg.buyer_id == user.id:
-
                     other_user = neg.supplier
-
                 else:
-
                     other_user = neg.buyer
-
                 recent_activities.append({
-
-                    "id":
-                        str(neg.id),
-
-                    "title":
-                        (
-                            neg.context_title
-                            or
-                            (
-                                neg.supply.title
-                                if neg.supply
-                                else
-                                f"مذاکره #{neg.id}"
-                            )
-                        ),
-
-                    "user":
-                        get_seller_name(
-                            other_user
-                        ),
-
-                    "status":
-                        neg.status,
-
-                    "statusLabel":
-                        status_labels.get(
-                            neg.status,
-                            neg.status,
-                        ),
-
-                    "time":
-                        (
-                            neg.created_at.isoformat()
-                            if neg.created_at
-                            else None
-                        ),
+                    "id": str(neg.id),
+                    "title": neg.context_title or (neg.supply.title if neg.supply else f"مذاکره #{neg.id}"),
+                    "user": get_seller_name(other_user),
+                    "status": neg.status,
+                    "statusLabel": status_labels.get(neg.status, neg.status),
+                    "time": neg.created_at.isoformat() if neg.created_at else None,
                 })
 
-            # ------------------------------------------------
-            # Conversion Funnel
-            # ------------------------------------------------
-
-            funnel_data = (
-
-                user_negotiations
-
-                .values(
-                    "status"
-                )
-
-                .annotate(
-                    count=Count("id")
-                )
-
-                .order_by(
-                    "status"
-                )
-
-            )
-
-            total_negotiations = sum(
-
-                item["count"]
-
-                for item in funnel_data
-
-            )
-
+            funnel_data = user_negotiations.values("status").annotate(count=Count("id")).order_by("status")
+            total_negotiations = sum(item["count"] for item in funnel_data)
             for item in funnel_data:
-
-                percentage = (
-
-                    (
-                        item["count"]
-                        /
-                        total_negotiations
-                    )
-                    * 100
-
-                    if total_negotiations
-
-                    else 0
-
-                )
-
+                percentage = (item["count"] / total_negotiations) * 100 if total_negotiations else 0
                 conversion_funnel.append({
-
-                    "label":
-                        status_labels.get(
-                            item["status"],
-                            item["status"],
-                        ),
-
-                    "status":
-                        item["status"],
-
-                    "value":
-                        item["count"],
-
-                    "percent":
-                        round(
-                            percentage
-                        ),
+                    "label": status_labels.get(item["status"], item["status"]),
+                    "status": item["status"],
+                    "value": item["count"],
+                    "percent": round(percentage),
                 })
-
         except Exception as exc:
+            logger.exception("Could not fetch negotiation data: %s", exc)
 
-            logger.exception(
-
-                "Could not fetch negotiation data: %s",
-
-                exc,
-
-            )
-
-    # ========================================================
     # Monthly Deals
-    # ========================================================
-
     monthly_deals = []
-
     if Negotiation is not None:
-
         try:
-
             now = timezone.now()
-
-            for offset in range(
-                5,
-                -1,
-                -1,
-            ):
-
-                current = now.replace(
-
-                    day=1,
-
-                    hour=0,
-
-                    minute=0,
-
-                    second=0,
-
-                    microsecond=0,
-
-                )
-
-                month_start = (
-
-                    current
-
-                    -
-                    timedelta(
-                        days=32 * offset
-                    )
-
-                ).replace(
-                    day=1
-                )
-
-                month_end = (
-
-                    month_start
-
-                    +
-                    timedelta(
-                        days=32
-                    )
-
-                ).replace(
-                    day=1
-                )
-
-                count = (
-
-                    Negotiation.objects
-
-                    .filter(
-
-                        (
-                            Q(buyer=user)
-                            |
-                            Q(supplier=user)
-                        ),
-
-                        status__in=
-                            SUCCESSFUL_NEGOTIATION_STATUSES,
-
-                        created_at__gte=
-                            month_start,
-
-                        created_at__lt=
-                            month_end,
-
-                    )
-
-                    .count()
-
-                )
-
+            for offset in range(5, -1, -1):
+                current = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                month_start = (current - timedelta(days=32 * offset)).replace(day=1)
+                month_end = (month_start + timedelta(days=32)).replace(day=1)
+                count = Negotiation.objects.filter(
+                    (Q(buyer=user) | Q(supplier=user)),
+                    status__in=SUCCESSFUL_NEGOTIATION_STATUSES,
+                    created_at__gte=month_start,
+                    created_at__lt=month_end,
+                ).count()
                 monthly_deals.append({
-
-                    "month":
-                        month_start.strftime(
-                            "%Y-%m"
-                        ),
-
-                    "value":
-                        count,
+                    "month": month_start.strftime("%Y-%m"),
+                    "value": count,
                 })
-
         except Exception:
+            logger.exception("Error calculating monthly deals")
 
-            logger.exception(
-                "Error calculating monthly deals"
-            )
-
-    # ========================================================
     # Top Suppliers
-    # ========================================================
-
     top_suppliers = []
-
     try:
-
         supplier_stats = (
-
             Product.objects
-
-            .filter(
-                status__in=
-                    MARKET_STATUSES
-            )
-
-            .exclude(
-                seller=user
-            )
-
-            .values(
-
-                "seller_id",
-
-                "seller__company_name",
-
-                "seller__username",
-
-            )
-
-            .annotate(
-
-                product_count=
-                    Count("id"),
-
-                total_views=
-                    Sum("view_count"),
-
-            )
-
-            .order_by(
-
-                "-product_count",
-
-                "-total_views",
-
-            )[:5]
-
+            .filter(status__in=MARKET_STATUSES)
+            .exclude(seller=user)
+            .values("seller_id", "seller__company_name", "seller__username")
+            .annotate(product_count=Count("id"), total_views=Sum("view_count"))
+            .order_by("-product_count", "-total_views")[:5]
         )
-
         for item in supplier_stats:
-
-            name = (
-
-                item[
-                    "seller__company_name"
-                ]
-
-                or
-
-                item[
-                    "seller__username"
-                ]
-
-                or
-
-                "نامشخص"
-
-            )
-
+            name = item["seller__company_name"] or item["seller__username"] or "نامشخص"
             top_suppliers.append({
-
-                "id":
-                    item["seller_id"],
-
-                "name":
-                    name,
-
-                "productCount":
-                    item["product_count"],
-
-                "views":
-                    item["total_views"] or 0,
+                "id": item["seller_id"],
+                "name": name,
+                "productCount": item["product_count"],
+                "views": item["total_views"] or 0,
             })
-
     except Exception:
+        logger.exception("Error calculating top suppliers")
 
-        logger.exception(
-            "Error calculating top suppliers"
-        )
-
-    # ========================================================
     # Smart Suggestions
-    # ========================================================
-
     smart_suggestions = []
-
-    if (
-        active_needs > 0
-        and
-        total_products == 0
-    ):
-
+    if active_needs > 0 and total_products == 0:
         smart_suggestions.append({
-
-            "title":
-                "نیازهای فعال شما آماده بررسی هستند",
-
-            "description":
-                "برای نیازهای فعال، عرضه‌کنندگان "
-                "و محصولات مرتبط را بررسی کنید.",
-
-            "action":
-                "مشاهده نیازها",
+            "title": "نیازهای فعال شما آماده بررسی هستند",
+            "description": "برای نیازهای فعال، عرضه‌کنندگان و محصولات مرتبط را بررسی کنید.",
+            "action": "مشاهده نیازها",
         })
-
-    if (
-        total_products > 0
-        and
-        active_needs == 0
-    ):
-
+    if total_products > 0 and active_needs == 0:
         smart_suggestions.append({
-
-            "title":
-                "برای محصولات خود بازار هدف پیدا کنید",
-
-            "description":
-                "ثبت نیازهای مرتبط می‌تواند "
-                "فرصت‌های جدیدی ایجاد کند.",
-
-            "action":
-                "مشاهده بازار",
+            "title": "برای محصولات خود بازار هدف پیدا کنید",
+            "description": "ثبت نیازهای مرتبط می‌تواند فرصت‌های جدیدی ایجاد کند.",
+            "action": "مشاهده بازار",
         })
-
     if successful_deals == 0:
-
         smart_suggestions.append({
-
-            "title":
-                "هنوز معامله موفقی ثبت نشده است",
-
-            "description":
-                "پیگیری مذاکرات فعال می‌تواند "
-                "به افزایش نرخ تبدیل کمک کند.",
-
-            "action":
-                "مشاهده مذاکرات",
+            "title": "هنوز معامله موفقی ثبت نشده است",
+            "description": "پیگیری مذاکرات فعال می‌تواند به افزایش نرخ تبدیل کمک کند.",
+            "action": "مشاهده مذاکرات",
         })
 
-    # ========================================================
     # Negotiation Insights
-    # ========================================================
-
     negotiation_insights = []
-
     if ongoing_negotiations > 0:
-
         negotiation_insights.append({
-
-            "type":
-                "info",
-
-            "title":
-                "مذاکرات فعال",
-
-            "value":
-                ongoing_negotiations,
-
-            "description":
-                "مذاکره فعال در جریان است.",
+            "type": "info",
+            "title": "مذاکرات فعال",
+            "value": ongoing_negotiations,
+            "description": "مذاکره فعال در جریان است.",
         })
-
     if successful_deals > 0:
-
         negotiation_insights.append({
-
-            "type":
-                "success",
-
-            "title":
-                "معاملات موفق",
-
-            "value":
-                successful_deals,
-
-            "description":
-                "مذاکره به پذیرش یا قرارداد رسیده است.",
+            "type": "success",
+            "title": "معاملات موفق",
+            "value": successful_deals,
+            "description": "مذاکره به پذیرش یا قرارداد رسیده است.",
         })
-
-    # ========================================================
-    # Final Dashboard
-    # ========================================================
 
     return {
-
         "stats": {
-
-            "totalProducts":
-                total_products,
-
-            "activeNeeds":
-                active_needs,
-
-            "ongoingNegotiations":
-                ongoing_negotiations,
-
-            "successfulDeals":
-                successful_deals,
+            "totalProducts": total_products,
+            "activeNeeds": active_needs,
+            "ongoingNegotiations": ongoing_negotiations,
+            "successfulDeals": successful_deals,
         },
-
-        "industryData":
-            [],
-
-        "monthlyDeals":
-            monthly_deals,
-
-        "recentActivities":
-            recent_activities,
-
-        "smartSuggestions":
-            smart_suggestions,
-
-        "conversionFunnel":
-            conversion_funnel,
-
-        "topSuppliers":
-            top_suppliers,
-
-        "negotiationInsights":
-            negotiation_insights,
+        "industryData": [],
+        "monthlyDeals": monthly_deals,
+        "recentActivities": recent_activities,
+        "smartSuggestions": smart_suggestions,
+        "conversionFunnel": conversion_funnel,
+        "topSuppliers": top_suppliers,
+        "negotiationInsights": negotiation_insights,
     }
