@@ -1,4 +1,4 @@
-# backend/matching/views.py
+# matching/views.py
 
 import json
 import logging
@@ -32,9 +32,6 @@ logger = logging.getLogger(__name__)
 # ============================================================
 
 class MatchResultViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet برای مدیریت نتایج تطبیق
-    """
     queryset = MatchResult.objects.select_related(
         'need', 'product', 'product__seller', 'product__industry'
     )
@@ -186,9 +183,6 @@ class MatchResultViewSet(viewsets.ModelViewSet):
 # ============================================================
 
 class MatchingRequestViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet برای مدیریت درخواست‌های تطبیق با استفاده از Celery + LLM
-    """
     queryset = MatchingRequest.objects.select_related('need', 'user')
     serializer_class = MatchingRequestSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -210,10 +204,6 @@ class MatchingRequestViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], url_path='trigger/(?P<need_id>[^/.]+)')
     def trigger_matching(self, request, need_id=None):
-        """
-        راه‌اندازی فرآیند تطبیق با استفاده از Celery
-        پاسخ فوری با status='pending' برمی‌گردد
-        """
         need = get_object_or_404(Need, id=need_id)
 
         # اصلاح: need.buyer به جای need.user
@@ -223,7 +213,6 @@ class MatchingRequestViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # بررسی وجود درخواست قبلی در حال پردازش
         existing_request = MatchingRequest.objects.filter(
             need=need,
             status__in=['pending', 'processing']
@@ -239,20 +228,17 @@ class MatchingRequestViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_409_CONFLICT
             )
 
-        # ایجاد درخواست جدید
         matching_request = MatchingRequest.objects.create(
             need=need,
             user=request.user,
             status='pending'
         )
 
-        # ارسال به Celery برای پردازش پس‌زمینه
         try:
             from .tasks import process_matching_task
             process_matching_task.delay(matching_request.id)
             logger.info(f'✅ Task Celery برای نیاز {need.id} ارسال شد (request_id: {matching_request.id})')
         except ImportError:
-            # اگر Celery تنظیم نشده، به صورت هم‌زمان اجرا کن
             logger.warning('⚠️ Celery در دسترس نیست. پردازش به صورت هم‌زمان انجام می‌شود.')
             try:
                 process_matching_sync(matching_request.id)
@@ -277,7 +263,6 @@ class MatchingRequestViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-        # پاسخ فوری با status pending
         serializer = self.get_serializer(matching_request)
         return Response(
             {
@@ -291,9 +276,6 @@ class MatchingRequestViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'], url_path='status')
     def check_status(self, request, pk=None):
-        """
-        بررسی وضعیت یک درخواست تطبیق
-        """
         matching_request = self.get_object()
 
         if request.user != matching_request.user and not request.user.is_staff:
@@ -316,9 +298,6 @@ class MatchingRequestViewSet(viewsets.ModelViewSet):
 # ============================================================
 
 def process_matching_sync(matching_request_id):
-    """
-    پردازش هم‌زمان تطبیق (که توسط Celery Task صدا زده می‌شود)
-    """
     matching_request = MatchingRequest.objects.get(id=matching_request_id)
     need = matching_request.need
 
@@ -489,7 +468,6 @@ def _get_llm_match_score(need, product):
         if not content:
             return None
 
-        import re, json
         json_match = re.search(r'\{.*\}', content, re.DOTALL)
         if json_match:
             result = json.loads(json_match.group())
@@ -574,6 +552,7 @@ def _calculate_match_score(need, product):
     if need.industry and product.industry and need.industry == product.industry:
         score += 25
     elif need.industry and product.industry:
+        # اگر صنایع متفاوت هستند اما هر دو وجود دارند
         score += 10
 
     # 2. تطابق دسته‌بندی (وزن: 15)
