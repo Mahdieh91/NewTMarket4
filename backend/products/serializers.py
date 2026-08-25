@@ -14,10 +14,7 @@ from .models import Product, Supply, SupplyImage
 
 class ProductSerializer(serializers.ModelSerializer):
 
-    seller_name = serializers.CharField(
-        source='seller.username',
-        read_only=True,
-    )
+    seller_name = serializers.SerializerMethodField()  # ← فقط این خط تغییر کرده
 
     class Meta:
         model = Product
@@ -30,6 +27,11 @@ class ProductSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         )
+
+    def get_seller_name(self, obj):   # ← این متد اضافه شده
+        if obj.seller:
+            return obj.seller.username
+        return None
 
 
 # ============================================================

@@ -1,2544 +1,765 @@
-
-// MarketIntelligencePage.tsx
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-
 import {
-  BarChart3,
-  TrendingUp,
-  PieChart,
-  Lightbulb,
-  Filter,
-  Calendar,
-  Target,
-  ArrowLeft,
-  Star,
-  Zap,
-  Activity,
-  Cpu,
-  Thermometer,
-  LineChart,
-  Layers,
-  Eye,
-  CheckCircle,
-  AlertCircle,
-  Clock,
-  Bookmark,
-  Users,
-  Package,
-  Lock,
-  RefreshCw,
+  BarChart3, TrendingUp, PieChart, Lightbulb, Filter, Sparkles,
+  Calendar, Target, ArrowLeft, Star, Zap,
+  Activity, Cpu, Thermometer, LineChart, Layers, Eye, CheckCircle,
+  AlertCircle, Clock, Bookmark,
+  Users, Package, ArrowRight, User, Lock, Info,
 } from 'lucide-react';
-
 import {
-  LineChart as ReLineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  PieChart as RePieChart,
-  Pie,
-  Cell,
+  LineChart as ReLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, AreaChart, Area, PieChart as RePieChart,
+  Pie, Cell,
 } from 'recharts';
 
-import { authenticatedFetch } from '@/store/auth-store';
+const COLORS = ['#1E3A8A', '#14B8A6', '#D4A547', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
-// ============================================================
-// Constants
-// ============================================================
+// ==================== Types ====================
+interface TrendPoint { month: string; تقاضا: number; عرضه: number; معاملات: number; }
+interface HeatmapItem { industry: string; region: string; tech: string; demandGrowth: number; supplyCount: number; dealValue: number; activityLevel: 'hot' | 'warm' | 'cold'; trend: 'up' | 'stable' | 'down'; }
+interface Competitor { name: string; products: number; marketShare: number; avgRating: number; strengths: string[]; weaknesses: string[]; industries: string[]; regions: string[]; techs: string[]; ratingReasons: string[]; }
+interface EmergingTech { name: string; category: string; growthRate: number; maturityLevel: string; opportunityScore: number; industries: string[]; regions: string[]; }
+interface TopItem { title: string; count?: number; views?: number; rating?: number; growth?: string; industry: string; tech: string; }
+interface Recommendation { id: number; title: string; description: string; action: string; priority: 'high' | 'medium' | 'low'; impact: string; icon: any; }
 
-const COLORS = [
-  '#1E3A8A',
-  '#14B8A6',
-  '#D4A547',
-  '#3B82F6',
-  '#10B981',
-  '#F59E0B',
-  '#EF4444',
-  '#8B5CF6',
+// ==================== داده‌های پایه نمودار برای هر صنعت ====================
+const months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
+
+const industryBaseTrends: Record<string, TrendPoint[]> = {
+  'نفت و گاز': months.map((m, i) => ({ month: m, تقاضا: 45 + i * 5, عرضه: 38 + i * 4, معاملات: 22 + i * 3 })),
+  'پتروشیمی': months.map((m, i) => ({ month: m, تقاضا: 40 + i * 4, عرضه: 35 + i * 3, معاملات: 20 + i * 2 })),
+  'فولاد و معدن': months.map((m, i) => ({ month: m, تقاضا: 35 + i * 3, عرضه: 30 + i * 2, معاملات: 18 + i * 1 })),
+  'سلامت': months.map((m, i) => ({ month: m, تقاضا: 50 + i * 6, عرضه: 45 + i * 5, معاملات: 28 + i * 4 })),
+  'کشاورزی': months.map((m, i) => ({ month: m, تقاضا: 25 + i * 2, عرضه: 20 + i * 1, معاملات: 12 + i * 1 })),
+  'حمل‌ونقل': months.map((m, i) => ({ month: m, تقاضا: 30 + i * 3, عرضه: 28 + i * 2, معاملات: 15 + i * 2 })),
+  'خودروسازی': months.map((m, i) => ({ month: m, تقاضا: 20 + i * 1, عرضه: 25 + i * 2, معاملات: 10 + i * 1 })),
+  'انرژی': months.map((m, i) => ({ month: m, تقاضا: 55 + i * 7, عرضه: 48 + i * 6, معاملات: 32 + i * 5 })),
+  'فناوری اطلاعات': months.map((m, i) => ({ month: m, تقاضا: 60 + i * 8, عرضه: 55 + i * 7, معاملات: 35 + i * 6 })),
+  'محیط زیست': months.map((m, i) => ({ month: m, تقاضا: 28 + i * 2, عرضه: 22 + i * 1, معاملات: 14 + i * 1 })),
+};
+
+const regionMultiplier: Record<string, number> = {
+  'تهران': 1.3, 'اصفهان': 1.1, 'شیراز': 0.9, 'تبریز': 0.8, 'مشهد': 0.7,
+};
+const techMultiplier: Record<string, number> = {
+  'هوش مصنوعی': 1.4, 'اینترنت اشیاء': 1.2, 'دوقلوی دیجیتال': 1.3,
+  'رباتیک': 0.9, 'بلاکچین': 0.8, 'داده‌کاوی': 1.1,
+};
+
+// ==================== داده‌های نمونه ====================
+const allHeatmap: HeatmapItem[] = [
+  { industry: 'نفت و گاز', region: 'تهران', tech: 'هوش مصنوعی', demandGrowth: 28, supplyCount: 45, dealValue: 12500, activityLevel: 'hot', trend: 'up' },
+  { industry: 'نفت و گاز', region: 'اصفهان', tech: 'دوقلوی دیجیتال', demandGrowth: 22, supplyCount: 38, dealValue: 11000, activityLevel: 'hot', trend: 'up' },
+  { industry: 'پتروشیمی', region: 'تهران', tech: 'اینترنت اشیاء', demandGrowth: 22, supplyCount: 38, dealValue: 9800, activityLevel: 'hot', trend: 'up' },
+  { industry: 'پتروشیمی', region: 'شیراز', tech: 'هوش مصنوعی', demandGrowth: 18, supplyCount: 32, dealValue: 8500, activityLevel: 'warm', trend: 'up' },
+  { industry: 'فولاد و معدن', region: 'اصفهان', tech: 'رباتیک', demandGrowth: 18, supplyCount: 32, dealValue: 7500, activityLevel: 'warm', trend: 'up' },
+  { industry: 'فولاد و معدن', region: 'تبریز', tech: 'دوقلوی دیجیتال', demandGrowth: 15, supplyCount: 28, dealValue: 6800, activityLevel: 'warm', trend: 'stable' },
+  { industry: 'سلامت', region: 'تهران', tech: 'هوش مصنوعی', demandGrowth: 25, supplyCount: 55, dealValue: 6200, activityLevel: 'hot', trend: 'up' },
+  { industry: 'سلامت', region: 'مشهد', tech: 'اینترنت اشیاء', demandGrowth: 20, supplyCount: 48, dealValue: 5800, activityLevel: 'hot', trend: 'up' },
+  { industry: 'کشاورزی', region: 'شیراز', tech: 'رباتیک', demandGrowth: 12, supplyCount: 20, dealValue: 3400, activityLevel: 'warm', trend: 'stable' },
+  { industry: 'کشاورزی', region: 'اصفهان', tech: 'بلاکچین', demandGrowth: 10, supplyCount: 18, dealValue: 3000, activityLevel: 'warm', trend: 'stable' },
+  { industry: 'حمل‌ونقل', region: 'تهران', tech: 'اینترنت اشیاء', demandGrowth: 15, supplyCount: 28, dealValue: 5600, activityLevel: 'warm', trend: 'up' },
+  { industry: 'حمل‌ونقل', region: 'تبریز', tech: 'هوش مصنوعی', demandGrowth: 12, supplyCount: 25, dealValue: 5000, activityLevel: 'warm', trend: 'up' },
+  { industry: 'خودروسازی', region: 'تهران', tech: 'رباتیک', demandGrowth: 8, supplyCount: 35, dealValue: 8900, activityLevel: 'cold', trend: 'down' },
+  { industry: 'خودروسازی', region: 'اصفهان', tech: 'دوقلوی دیجیتال', demandGrowth: 5, supplyCount: 30, dealValue: 7800, activityLevel: 'cold', trend: 'down' },
+  { industry: 'انرژی', region: 'تهران', tech: 'هوش مصنوعی', demandGrowth: 32, supplyCount: 42, dealValue: 15000, activityLevel: 'hot', trend: 'up' },
+  { industry: 'انرژی', region: 'شیراز', tech: 'اینترنت اشیاء', demandGrowth: 28, supplyCount: 38, dealValue: 13500, activityLevel: 'hot', trend: 'up' },
+  { industry: 'فناوری اطلاعات', region: 'تهران', tech: 'هوش مصنوعی', demandGrowth: 35, supplyCount: 65, dealValue: 11000, activityLevel: 'hot', trend: 'up' },
+  { industry: 'فناوری اطلاعات', region: 'مشهد', tech: 'بلاکچین', demandGrowth: 30, supplyCount: 58, dealValue: 9800, activityLevel: 'hot', trend: 'up' },
+  { industry: 'محیط زیست', region: 'تهران', tech: 'اینترنت اشیاء', demandGrowth: 20, supplyCount: 18, dealValue: 4200, activityLevel: 'warm', trend: 'up' },
+  { industry: 'محیط زیست', region: 'اصفهان', tech: 'هوش مصنوعی', demandGrowth: 18, supplyCount: 15, dealValue: 3800, activityLevel: 'warm', trend: 'up' },
 ];
 
-// ============================================================
-// Types
-// ============================================================
+const allCompetitors: Competitor[] = [
+  { name: 'فناوران نوین', products: 28, marketShare: 18, avgRating: 4.8, strengths: ['هوش مصنوعی', 'پشتیبانی ۲۴/۷'], weaknesses: ['قیمت بالا'], industries: ['نفت و گاز', 'پتروشیمی', 'انرژی'], regions: ['تهران', 'اصفهان'], techs: ['هوش مصنوعی', 'دوقلوی دیجیتال'], ratingReasons: ['کیفیت بالای مستندات فنی', 'پاسخگویی سریع', 'رضایت مشتریان قبلی', 'نوآوری در محصول'] },
+  { name: 'مهندسی انرژی پویا', products: 22, marketShare: 14, avgRating: 4.5, strengths: ['تجربه بالا', 'گواهینامه‌ها'], weaknesses: ['زمان تحویل طولانی'], industries: ['انرژی', 'نفت و گاز'], regions: ['تهران', 'شیراز'], techs: ['اینترنت اشیاء', 'هوش مصنوعی'], ratingReasons: ['سابقه طولانی در صنعت', 'گواهینامه‌های معتبر', 'تحویل به‌موقع در پروژه‌های قبلی'] },
+  { name: 'هوشمندسازان یزد', products: 18, marketShare: 11, avgRating: 4.6, strengths: ['نوآوری', 'قیمت رقابتی'], weaknesses: ['تیم کوچک'], industries: ['فولاد و معدن', 'خودروسازی'], regions: ['اصفهان', 'تبریز'], techs: ['رباتیک', 'دوقلوی دیجیتال'], ratingReasons: ['راهکارهای خلاقانه', 'قیمت مناسب', 'انعطاف‌پذیری بالا'] },
+  { name: 'کنترل صنعتی پارس', products: 25, marketShare: 16, avgRating: 4.3, strengths: ['سابقه طولانی', 'محصولات متنوع'], weaknesses: ['فناوری قدیمی'], industries: ['پتروشیمی', 'حمل‌ونقل'], regions: ['تهران', 'مشهد'], techs: ['اینترنت اشیاء', 'بلاکچین'], ratingReasons: ['تنوع محصولات', 'پشتیبانی گسترده', 'قیمت متوسط'] },
+  { name: 'پردازش داده‌های هوشمند', products: 15, marketShare: 9, avgRating: 4.7, strengths: ['دقت بالا', 'سرعت'], weaknesses: ['بازار محدود'], industries: ['فناوری اطلاعات', 'سلامت'], regions: ['تهران'], techs: ['هوش مصنوعی', 'دوقلوی دیجیتال'], ratingReasons: ['دقت الگوریتم‌ها', 'سرعت پردازش بالا', 'تخصص در داده‌کاوی'] },
+  { name: 'راهکارهای سبز', products: 12, marketShare: 7, avgRating: 4.4, strengths: ['قیمت مناسب', 'سفارشی‌سازی'], weaknesses: ['مقیاس کوچک'], industries: ['محیط زیست', 'کشاورزی'], regions: ['شیراز', 'اصفهان'], techs: ['اینترنت اشیاء', 'رباتیک'], ratingReasons: ['سفارشی‌سازی بالا', 'قیمت رقابتی', 'پشتیبانی محلی'] },
+];
 
-interface TrendPoint {
-  month: string;
-  تقاضا: number;
-  عرضه: number;
-  معاملات: number;
-}
+const allEmergingTechs: EmergingTech[] = [
+  { name: 'دوقلوی دیجیتال', category: 'Industry 4.0', growthRate: 45, maturityLevel: 'در حال رشد', opportunityScore: 92, industries: ['نفت و گاز', 'پتروشیمی', 'فولاد و معدن'], regions: ['تهران', 'اصفهان'] },
+  { name: 'بهینه‌سازی با AI', category: 'هوش مصنوعی', growthRate: 38, maturityLevel: 'بالغ', opportunityScore: 88, industries: ['انرژی', 'فناوری اطلاعات', 'سلامت'], regions: ['تهران', 'مشهد'] },
+  { name: 'اینترنت اشیاء صنعتی', category: 'IIoT', growthRate: 32, maturityLevel: 'در حال رشد', opportunityScore: 85, industries: ['حمل‌ونقل', 'پتروشیمی', 'محیط زیست'], regions: ['تهران', 'شیراز'] },
+  { name: 'تحلیل پیش‌بینانه', category: 'داده‌کاوی', growthRate: 28, maturityLevel: 'بالغ', opportunityScore: 80, industries: ['فناوری اطلاعات', 'سلامت', 'انرژی'], regions: ['تهران', 'اصفهان'] },
+  { name: 'رباتیک صنعتی', category: 'اتوماسیون', growthRate: 25, maturityLevel: 'نوظهور', opportunityScore: 78, industries: ['خودروسازی', 'فولاد و معدن'], regions: ['تبریز', 'اصفهان'] },
+  { name: 'بلاکچین صنعتی', category: 'امنیت', growthRate: 20, maturityLevel: 'نوظهور', opportunityScore: 65, industries: ['فناوری اطلاعات', 'کشاورزی'], regions: ['تهران', 'مشهد'] },
+];
 
-interface HeatmapItem {
-  industry: string;
-  region: string;
-  tech: string;
-  demandGrowth: number;
-  supplyCount: number;
-  dealValue: number;
-  activityLevel: 'hot' | 'warm' | 'cold';
-  trend: 'up' | 'stable' | 'down';
-}
+const allTopNeeds: TopItem[] = [
+  { title: 'بهینه‌سازی مصرف انرژی', count: 48, growth: '+۲۸٪', industry: 'انرژی', tech: 'هوش مصنوعی' },
+  { title: 'پایش هوشمند تجهیزات', count: 42, growth: '+۲۲٪', industry: 'نفت و گاز', tech: 'اینترنت اشیاء' },
+  { title: 'اتوماسیون فرآیندها', count: 38, growth: '+۱۸٪', industry: 'پتروشیمی', tech: 'رباتیک' },
+  { title: 'تحلیل داده‌های صنعتی', count: 35, growth: '+۳۰٪', industry: 'فناوری اطلاعات', tech: 'داده‌کاوی' },
+  { title: 'مدیریت زنجیره تأمین', count: 31, growth: '+۱۵٪', industry: 'حمل‌ونقل', tech: 'بلاکچین' },
+  { title: 'تشخیص نقص تجهیزات', count: 28, growth: '+۲۵٪', industry: 'فولاد و معدن', tech: 'هوش مصنوعی' },
+  { title: 'پایش کیفیت محصول', count: 25, growth: '+۲۰٪', industry: 'سلامت', tech: 'اینترنت اشیاء' },
+  { title: 'بهینه‌سازی مصرف آب', count: 22, growth: '+۱۲٪', industry: 'کشاورزی', tech: 'دوقلوی دیجیتال' },
+  { title: 'کاهش آلایندگی', count: 20, growth: '+۱۸٪', industry: 'محیط زیست', tech: 'اینترنت اشیاء' },
+  { title: 'طراحی ربات صنعتی', count: 18, growth: '+۱۰٪', industry: 'خودروسازی', tech: 'رباتیک' },
+];
 
-interface Competitor {
-  name: string;
-  products: number;
-  marketShare: number;
-  avgRating: number;
-  strengths: string[];
-  weaknesses: string[];
-  industries: string[];
-  regions: string[];
-  techs: string[];
-  ratingReasons: string[];
-}
+const allTopProducts: TopItem[] = [
+  { title: 'سامانه پایش هوشمند کوره', views: 1250, rating: 4.8, industry: 'نفت و گاز', tech: 'هوش مصنوعی' },
+  { title: 'نرم‌افزار Digital Twin', views: 980, rating: 4.6, industry: 'پتروشیمی', tech: 'دوقلوی دیجیتال' },
+  { title: 'سیستم کنترل پیشرفته APC', views: 850, rating: 4.5, industry: 'انرژی', tech: 'هوش مصنوعی' },
+  { title: 'مشاوره بهینه‌سازی انرژی', views: 720, rating: 4.9, industry: 'انرژی', tech: 'داده‌کاوی' },
+  { title: 'راهکار یکپارچه IIoT', views: 680, rating: 4.4, industry: 'حمل‌ونقل', tech: 'اینترنت اشیاء' },
+  { title: 'ربات بازرسی خط لوله', views: 550, rating: 4.7, industry: 'نفت و گاز', tech: 'رباتیک' },
+  { title: 'پلتفرم تحلیل داده سلامت', views: 520, rating: 4.8, industry: 'سلامت', tech: 'داده‌کاوی' },
+  { title: 'سامانه مدیریت هوشمند گلخانه', views: 480, rating: 4.3, industry: 'کشاورزی', tech: 'اینترنت اشیاء' },
+  { title: 'نرم‌افزار شبیه‌سازی فرآیند', views: 450, rating: 4.6, industry: 'فولاد و معدن', tech: 'دوقلوی دیجیتال' },
+  { title: 'بلاکچین ردیابی محصول', views: 400, rating: 4.5, industry: 'فناوری اطلاعات', tech: 'بلاکچین' },
+];
 
-interface EmergingTech {
-  name: string;
-  category: string;
-  growthRate: number;
-  maturityLevel: string;
-  opportunityScore: number;
-  industries: string[];
-  regions: string[];
-}
+const allMarketShareData = [
+  { name: 'فناوران نوین', value: 18 },
+  { name: 'کنترل پارس', value: 16 },
+  { name: 'انرژی پویا', value: 14 },
+  { name: 'هوشمندسازان', value: 11 },
+  { name: 'پردازش هوشمند', value: 9 },
+  { name: 'راهکار سبز', value: 7 },
+  { name: 'سایر', value: 25 },
+];
 
-interface TopItem {
-  title: string;
-  count?: number;
-  views?: number;
-  rating?: number;
-  growth?: string;
-  industry: string;
-  tech: string;
-}
+const smartRecommendations: Recommendation[] = [
+  { id: 1, title: 'فرصت طلایی در صنعت انرژی', description: 'تقاضا برای راهکارهای بهینه‌سازی مصرف انرژی ۳۲٪ رشد داشته است.', action: 'ثبت محصول در حوزه انرژی', priority: 'high', impact: 'بالا', icon: Zap },
+  { id: 2, title: 'شکاف عرضه در سلامت', description: 'نیازهای ثبت‌شده در حوزه سلامت ۲۵٪ افزایش یافته اما عرضه فقط ۱۵٪ رشد داشته.', action: 'بررسی نیازهای سلامت', priority: 'high', impact: 'متوسط', icon: Activity },
+  { id: 3, title: 'فناوری دوقلوی دیجیتال', description: 'رشد ۴۵٪ در جستجوهای مرتبط با Digital Twin. رقابت هنوز کم است.', action: 'توسعه محصول دوقلوی دیجیتال', priority: 'medium', impact: 'بالا', icon: Cpu },
+  { id: 4, title: 'کاهش رقابت در خودروسازی', description: 'نرخ رشد تقاضا در خودروسازی کاهش یافته. بازنگری استراتژی توصیه می‌شود.', action: 'تنوع‌بخشی به صنایع هدف', priority: 'medium', impact: 'متوسط', icon: AlertCircle },
+];
 
-interface Recommendation {
-  id: number;
-  title: string;
-  description: string;
-  action: string;
-  priority: 'high' | 'medium' | 'low';
-  impact: string;
-  icon: string;
-}
-
-interface KPIItem {
-  label: string;
-  value: string;
-  change: string;
-  icon: string;
-  color: string;
-}
-
-interface MarketShareItem {
-  name: string;
-  value: number;
-}
-
-interface GapAnalysis {
-  industry: string;
-  demandGrowth: number;
-  supplyCount: number;
-  gap: string;
-}
-
-interface MarketIntelligenceData {
-  kpiData: KPIItem[];
-  trendData: TrendPoint[];
-  heatmapData: HeatmapItem[];
-  competitors: Competitor[];
-  emergingTechs: EmergingTech[];
-  topNeeds: TopItem[];
-  topProducts: TopItem[];
-  marketShare: MarketShareItem[];
-  recommendations: Recommendation[];
-  gapAnalysis: GapAnalysis[];
-}
-
-// ============================================================
-// API Helpers
-// ============================================================
-
-function getApiBaseUrl(): string {
-  const url =
-    process.env.NEXT_PUBLIC_API_URL ||
-    process.env.NEXT_PUBLIC_API_BASE_URL ||
-    'http://127.0.0.1:8000/api';
-
-  return url.replace(/\/+$/, '');
-}
-
-/**
- * پاسخ API را بدون نمایش HTML مربوط به Django Debug Toolbar
- * به یک پیام خطای قابل فهم تبدیل می‌کند.
- */
-async function extractApiError(response: Response): Promise<string> {
-  try {
-    const contentType =
-      response.headers.get('content-type')?.toLowerCase() || '';
-
-    const text = await response.text();
-
-    // ----------------------------------------------------------
-    // JSON Error
-    // ----------------------------------------------------------
-
-    if (
-      contentType.includes('application/json') ||
-      text.trim().startsWith('{') ||
-      text.trim().startsWith('[')
-    ) {
-      try {
-        const json = JSON.parse(text);
-
-        if (typeof json === 'string') {
-          return json;
-        }
-
-        if (json.detail) {
-          return String(json.detail);
-        }
-
-        if (json.message) {
-          return String(json.message);
-        }
-
-        if (json.error) {
-          return String(json.error);
-        }
-
-        if (json.errors && typeof json.errors === 'object') {
-          const messages: string[] = [];
-
-          Object.entries(json.errors).forEach(([field, value]) => {
-            if (Array.isArray(value)) {
-              messages.push(`${field}: ${value.join(', ')}`);
-            } else {
-              messages.push(`${field}: ${String(value)}`);
-            }
-          });
-
-          if (messages.length > 0) {
-            return messages.join(' | ');
-          }
-        }
-
-        return `خطای سرور (${response.status})`;
-      } catch {
-        // JSON ناقص یا نامعتبر
-      }
-    }
-
-    // ----------------------------------------------------------
-    // HTML Error
-    // ----------------------------------------------------------
-
-    if (
-      contentType.includes('text/html') ||
-      text.trim().startsWith('<!DOCTYPE') ||
-      text.trim().startsWith('<html')
-    ) {
-      switch (response.status) {
-        case 400:
-          return 'درخواست ارسال‌شده به سرور نامعتبر است.';
-        case 401:
-          return 'نشست شما منقضی شده است. لطفاً مجدداً وارد شوید.';
-        case 403:
-          return 'شما اجازه دسترسی به این اطلاعات را ندارید.';
-        case 404:
-          return 'مسیر API تحلیل بازار پیدا نشد.';
-        case 500:
-          return 'خطای داخلی سرور در دریافت تحلیل بازار رخ داده است.';
-        case 502:
-          return 'سرور واسط پاسخ معتبری از بک‌اند دریافت نکرد.';
-        case 503:
-          return 'سرویس تحلیل بازار موقتاً در دسترس نیست.';
-        default:
-          return `خطای سرور (${response.status})`;
-      }
-    }
-
-    // ----------------------------------------------------------
-    // Plain Text
-    // ----------------------------------------------------------
-
-    const cleanText = text
-      .replace(/<[^>]*>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    if (cleanText) {
-      return cleanText.substring(0, 500);
-    }
-
-    return `خطای سرور (${response.status})`;
-  } catch (error) {
-    console.error('❌ Failed to parse API error:', error);
-
-    return `خطا در ارتباط با سرور (${response.status})`;
-  }
-}
-
-// ============================================================
-// Main Component
-// ============================================================
-
+// ==================== Main Component ====================
 export default function MarketIntelligencePage() {
   const [mounted, setMounted] = useState(false);
-
-  const [loading, setLoading] = useState(true);
-
-  const [refreshing, setRefreshing] = useState(false);
-
-  const [error, setError] = useState<string | null>(null);
-
-  const [data, setData] =
-    useState<MarketIntelligenceData | null>(null);
-
-  // ----------------------------------------------------------
-  // Filters
-  // ----------------------------------------------------------
-
-  const [selectedIndustry, setSelectedIndustry] =
-    useState('all');
-
-  const [selectedRegion, setSelectedRegion] =
-    useState('all');
-
-  const [selectedTech, setSelectedTech] =
-    useState('all');
-
-  const [selectedTimeRange, setSelectedTimeRange] =
-    useState('12m');
-
-  const [activeTab, setActiveTab] = useState<
-    'overview' | 'trends' | 'competitors' | 'opportunities'
-  >('overview');
-
+  const [selectedIndustry, setSelectedIndustry] = useState('all');
+  const [selectedRegion, setSelectedRegion] = useState('all');
+  const [selectedTech, setSelectedTech] = useState('all');
+  const [selectedTimeRange, setSelectedTimeRange] = useState('12m');
+  const [activeTab, setActiveTab] = useState<'overview' | 'trends' | 'competitors' | 'opportunities'>('overview');
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-
-  // ==========================================================
-  // Fetch Data
-  // ==========================================================
-
-  const fetchData = useCallback(
-    async (showLoading = true) => {
-      if (showLoading) {
-        setLoading(true);
-      } else {
-        setRefreshing(true);
-      }
-
-      setError(null);
-
-      try {
-        // ------------------------------------------------------
-        // Build API URL
-        // ------------------------------------------------------
-
-        const apiBaseUrl = getApiBaseUrl();
-
-        // ⚠️ مسیر صحیح بر اساس urls.py بک‌اند
-        const endpoint =
-          `${apiBaseUrl}/analytics/services/`;
-
-        const params = new URLSearchParams();
-
-        if (selectedIndustry !== 'all') {
-          params.append(
-            'industry',
-            selectedIndustry
-          );
-        }
-
-        if (selectedRegion !== 'all') {
-          params.append(
-            'region',
-            selectedRegion
-          );
-        }
-
-        if (selectedTech !== 'all') {
-          params.append(
-            'tech',
-            selectedTech
-          );
-        }
-
-        if (selectedTimeRange !== '12m') {
-          params.append(
-            'timeRange',
-            selectedTimeRange
-          );
-        }
-
-        const queryString = params.toString();
-
-        const url = queryString
-          ? `${endpoint}?${queryString}`
-          : endpoint;
-
-        console.log(
-          '📊 Market Intelligence API:',
-          {
-            url,
-            method: 'GET',
-            filters: {
-              industry: selectedIndustry,
-              region: selectedRegion,
-              tech: selectedTech,
-              timeRange: selectedTimeRange,
-            },
-          }
-        );
-
-        // ------------------------------------------------------
-        // Authenticated Fetch
-        // ------------------------------------------------------
-
-        const response = await authenticatedFetch(
-          url,
-          {
-            method: 'GET',
-            headers: {
-              Accept: 'application/json',
-            },
-          }
-        );
-
-        console.log(
-          '📡 Market Intelligence Status:',
-          response.status
-        );
-
-        // ------------------------------------------------------
-        // Unauthorized
-        // ------------------------------------------------------
-
-        if (response.status === 401) {
-          const message =
-            'نشست شما منقضی شده است. لطفاً مجدداً وارد شوید.';
-
-          setError(message);
-
-          setToast(message);
-
-          return;
-        }
-
-        // ------------------------------------------------------
-        // Forbidden
-        // ------------------------------------------------------
-
-        if (response.status === 403) {
-          setError(
-            'شما اجازه دسترسی به مرکز تحلیل بازار را ندارید.'
-          );
-
-          return;
-        }
-
-        // ------------------------------------------------------
-        // Any other HTTP error
-        // ------------------------------------------------------
-
-        if (!response.ok) {
-          const errorMessage =
-            await extractApiError(response);
-
-          console.error(
-            '❌ Market Intelligence API Error:',
-            {
-              url: response.url,
-              status: response.status,
-              statusText: response.statusText,
-              ok: response.ok,
-              contentType:
-                response.headers.get('content-type'),
-              message: errorMessage,
-            }
-          );
-
-          setError(errorMessage);
-
-          return;
-        }
-
-        // ------------------------------------------------------
-        // Content Type Validation
-        // ------------------------------------------------------
-
-        const contentType =
-          response.headers
-            .get('content-type')
-            ?.toLowerCase() || '';
-
-        if (
-          !contentType.includes(
-            'application/json'
-          )
-        ) {
-          console.error(
-            '❌ API returned non-JSON response:',
-            contentType
-          );
-
-          setError(
-            'پاسخ دریافتی از سرور معتبر نیست. انتظار JSON داشتیم.'
-          );
-
-          return;
-        }
-
-        // ------------------------------------------------------
-        // Parse JSON
-        // ------------------------------------------------------
-
-        let result: any;
-
-        try {
-          result = await response.json();
-        } catch (jsonError) {
-          console.error(
-            '❌ Invalid JSON response:',
-            jsonError
-          );
-
-          setError(
-            'پاسخ سرور قابل پردازش نیست.'
-          );
-
-          return;
-        }
-
-        console.log(
-          '✅ Market Intelligence Response:',
-          result
-        );
-
-        // ------------------------------------------------------
-        // Validate API Structure
-        // ------------------------------------------------------
-
-        if (
-          result?.status === 'success' &&
-          result?.data
-        ) {
-          setData(result.data);
-          setError(null);
-
-          return;
-        }
-
-        // Some APIs may return data directly
-        if (
-          result &&
-          typeof result === 'object' &&
-          result.kpiData
-        ) {
-          setData(result);
-          setError(null);
-
-          return;
-        }
-
-        // ------------------------------------------------------
-        // API returned unsuccessful response
-        // ------------------------------------------------------
-
-        const backendMessage =
-          result?.message ||
-          result?.detail ||
-          'ساختار پاسخ API معتبر نیست.';
-
-        console.error(
-          '❌ Invalid API structure:',
-          result
-        );
-
-        setError(
-          String(backendMessage)
-        );
-      } catch (err: unknown) {
-        console.error(
-          '❌ Error fetching market intelligence:',
-          err
-        );
-
-        // ------------------------------------------------------
-        // Network Error
-        // ------------------------------------------------------
-
-        if (
-          err instanceof TypeError &&
-          err.message
-            .toLowerCase()
-            .includes('fetch')
-        ) {
-          setError(
-            'ارتباط با سرور برقرار نشد. لطفاً مطمئن شوید بک‌اند Django در حال اجرا است.'
-          );
-
-          return;
-        }
-
-        // ------------------------------------------------------
-        // Standard Error
-        // ------------------------------------------------------
-
-        if (err instanceof Error) {
-          setError(
-            err.message ||
-              'خطا در دریافت اطلاعات بازار.'
-          );
-
-          return;
-        }
-
-        setError(
-          'خطای غیرمنتظره‌ای در دریافت اطلاعات رخ داد.'
-        );
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [
-      selectedIndustry,
-      selectedRegion,
-      selectedTech,
-      selectedTimeRange,
-    ]
-  );
-
-  // ==========================================================
-  // Initial Load
-  // ==========================================================
 
   useEffect(() => {
     setMounted(true);
+    const token = localStorage.getItem('token');
+    if (token) setIsLoggedIn(true);
   }, []);
 
-  useEffect(() => {
-    if (!mounted) {
-      return;
-    }
+  // ==================== Filtering Logic ====================
 
-    fetchData(true);
-  }, [mounted]);
-
-  // ==========================================================
-  // Refetch when filters change
-  // ==========================================================
-
-  useEffect(() => {
-    if (!mounted) {
-      return;
-    }
-
-    // در اولین render دوباره درخواست نزن
-    if (loading) {
-      return;
-    }
-
-    fetchData(false);
-  }, [
-    selectedIndustry,
-    selectedRegion,
-    selectedTech,
-    selectedTimeRange,
-  ]);
-
-  // ==========================================================
-  // Filtered Data
-  // ==========================================================
-
+  // 1. Filter heatmap
   const filteredHeatmap = useMemo(() => {
-    if (!data?.heatmapData) {
-      return [];
-    }
-
-    return data.heatmapData.filter((item) => {
-      if (
-        selectedIndustry !== 'all' &&
-        item.industry !== selectedIndustry
-      ) {
-        return false;
-      }
-
-      if (
-        selectedRegion !== 'all' &&
-        item.region !== selectedRegion
-      ) {
-        return false;
-      }
-
-      if (
-        selectedTech !== 'all' &&
-        item.tech !== selectedTech
-      ) {
-        return false;
-      }
-
+    return allHeatmap.filter(item => {
+      if (selectedIndustry !== 'all' && item.industry !== selectedIndustry) return false;
+      if (selectedRegion !== 'all' && item.region !== selectedRegion) return false;
+      if (selectedTech !== 'all' && item.tech !== selectedTech) return false;
       return true;
     });
-  }, [
-    data?.heatmapData,
-    selectedIndustry,
-    selectedRegion,
-    selectedTech,
-  ]);
+  }, [selectedIndustry, selectedRegion, selectedTech]);
 
+  // 2. Filter trend data
   const filteredTrendData = useMemo(() => {
-    return data?.trendData || [];
-  }, [data?.trendData]);
+    let base: TrendPoint[];
+    if (selectedIndustry !== 'all') {
+      base = industryBaseTrends[selectedIndustry] || industryBaseTrends['فناوری اطلاعات'];
+    } else {
+      const allIndustries = Object.keys(industryBaseTrends);
+      base = months.map((m, i) => {
+        const sum = allIndustries.reduce((acc, ind) => {
+          const point = industryBaseTrends[ind][i];
+          return { تقاضا: acc.تقاضا + point.تقاضا, عرضه: acc.عرضه + point.عرضه, معاملات: acc.معاملات + point.معاملات };
+        }, { تقاضا: 0, عرضه: 0, معاملات: 0 });
+        return {
+          month: m,
+          تقاضا: Math.round(sum.تقاضا / allIndustries.length),
+          عرضه: Math.round(sum.عرضه / allIndustries.length),
+          معاملات: Math.round(sum.معاملات / allIndustries.length),
+        };
+      });
+    }
 
+    let multiplier = 1;
+    if (selectedRegion !== 'all') multiplier *= regionMultiplier[selectedRegion] || 1;
+    if (selectedTech !== 'all') multiplier *= techMultiplier[selectedTech] || 1;
+
+    let data = base.map(point => ({
+      month: point.month,
+      تقاضا: Math.round(point.تقاضا * multiplier),
+      عرضه: Math.round(point.عرضه * multiplier),
+      معاملات: Math.round(point.معاملات * multiplier),
+    }));
+
+    const monthsCount = selectedTimeRange === '3m' ? 3 : selectedTimeRange === '6m' ? 6 : selectedTimeRange === '12m' ? 12 : 24;
+    if (monthsCount <= 12) {
+      data = data.slice(-monthsCount);
+    } else {
+      data = [...data, ...data.map(d => ({ ...d, month: d.month + '۲' }))];
+    }
+    return data;
+  }, [selectedIndustry, selectedRegion, selectedTech, selectedTimeRange]);
+
+  // 3. Filter competitors
   const filteredCompetitors = useMemo(() => {
-    if (!data?.competitors) {
-      return [];
-    }
-
-    return data.competitors.filter((comp) => {
-      if (
-        selectedIndustry !== 'all' &&
-        !comp.industries.includes(
-          selectedIndustry
-        )
-      ) {
-        return false;
-      }
-
-      if (
-        selectedRegion !== 'all' &&
-        !comp.regions.includes(selectedRegion)
-      ) {
-        return false;
-      }
-
-      if (
-        selectedTech !== 'all' &&
-        !comp.techs.includes(selectedTech)
-      ) {
-        return false;
-      }
-
+    return allCompetitors.filter(comp => {
+      if (selectedIndustry !== 'all' && !comp.industries.includes(selectedIndustry)) return false;
+      if (selectedRegion !== 'all' && !comp.regions.includes(selectedRegion)) return false;
+      if (selectedTech !== 'all' && !comp.techs.includes(selectedTech)) return false;
       return true;
     });
-  }, [
-    data?.competitors,
-    selectedIndustry,
-    selectedRegion,
-    selectedTech,
-  ]);
+  }, [selectedIndustry, selectedRegion, selectedTech]);
 
+  // 4. Filter emerging techs
   const filteredEmergingTechs = useMemo(() => {
-    if (!data?.emergingTechs) {
-      return [];
-    }
-
-    return data.emergingTechs.filter((tech) => {
-      if (
-        selectedIndustry !== 'all' &&
-        !tech.industries.includes(
-          selectedIndustry
-        )
-      ) {
-        return false;
-      }
-
-      if (
-        selectedRegion !== 'all' &&
-        !tech.regions.includes(selectedRegion)
-      ) {
-        return false;
-      }
-
+    return allEmergingTechs.filter(tech => {
+      if (selectedIndustry !== 'all' && !tech.industries.includes(selectedIndustry)) return false;
+      if (selectedRegion !== 'all' && !tech.regions.includes(selectedRegion)) return false;
+      if (selectedTech !== 'all' && tech.category !== selectedTech) return false;
       return true;
     });
-  }, [
-    data?.emergingTechs,
-    selectedIndustry,
-    selectedRegion,
-  ]);
+  }, [selectedIndustry, selectedRegion, selectedTech]);
 
+  // 5. Filter needs and products
   const filteredTopNeeds = useMemo(() => {
-    if (!data?.topNeeds) {
-      return [];
-    }
-
-    return data.topNeeds.filter((need) => {
-      if (
-        selectedIndustry !== 'all' &&
-        need.industry !== selectedIndustry
-      ) {
-        return false;
-      }
-
-      if (
-        selectedTech !== 'all' &&
-        need.tech !== selectedTech
-      ) {
-        return false;
-      }
-
+    return allTopNeeds.filter(need => {
+      if (selectedIndustry !== 'all' && need.industry !== selectedIndustry) return false;
+      if (selectedTech !== 'all' && need.tech !== selectedTech) return false;
       return true;
     });
-  }, [
-    data?.topNeeds,
-    selectedIndustry,
-    selectedTech,
-  ]);
+  }, [selectedIndustry, selectedTech]);
 
   const filteredTopProducts = useMemo(() => {
-    if (!data?.topProducts) {
-      return [];
-    }
-
-    return data.topProducts.filter((product) => {
-      if (
-        selectedIndustry !== 'all' &&
-        product.industry !== selectedIndustry
-      ) {
-        return false;
-      }
-
-      if (
-        selectedTech !== 'all' &&
-        product.tech !== selectedTech
-      ) {
-        return false;
-      }
-
+    return allTopProducts.filter(prod => {
+      if (selectedIndustry !== 'all' && prod.industry !== selectedIndustry) return false;
+      if (selectedTech !== 'all' && prod.tech !== selectedTech) return false;
       return true;
     });
-  }, [
-    data?.topProducts,
-    selectedIndustry,
-    selectedTech,
-  ]);
+  }, [selectedIndustry, selectedTech]);
 
-  const filteredGapData = useMemo(() => {
-    return data?.gapAnalysis || [];
-  }, [data?.gapAnalysis]);
+  // 6. Dynamic KPI calculations
+  const kpiData = useMemo(() => {
+    const totalNeeds = filteredTopNeeds.reduce((sum, n) => sum + (n.count || 0), 0);
+    const totalProducts = filteredHeatmap.reduce((sum, h) => sum + h.supplyCount, 0);
+    const totalDeals = filteredHeatmap.reduce((sum, h) => sum + h.dealValue, 0);
+    const avgGrowth = filteredHeatmap.length > 0
+      ? Math.round(filteredHeatmap.reduce((sum, h) => sum + h.demandGrowth, 0) / filteredHeatmap.length)
+      : 0;
+    return [
+      { label: 'نیازهای فعال', value: totalNeeds.toLocaleString('fa-IR'), change: '+۱۲٪', icon: Lightbulb, color: 'bg-[#1E3A8A]/10 text-[#1E3A8A]' },
+      { label: 'محصولات ثبت‌شده', value: totalProducts.toLocaleString('fa-IR'), change: '+۱۸٪', icon: Package, color: 'bg-[#14B8A6]/10 text-[#14B8A6]' },
+      { label: 'ارزش معاملات (میلیون)', value: (totalDeals / 1000).toFixed(0).toLocaleString('fa-IR'), change: '+۲۲٪', icon: CheckCircle, color: 'bg-emerald-50 text-emerald-600' },
+      { label: 'میانگین رشد تقاضا', value: `${avgGrowth}٪`, change: '+۵٪', icon: Target, color: 'bg-amber-50 text-amber-600' },
+    ];
+  }, [filteredTopNeeds, filteredHeatmap]);
 
-  // ==========================================================
-  // Helpers
-  // ==========================================================
+  // 7. Gap analysis data
+  const gapData = useMemo(() => filteredHeatmap.slice(0, 6), [filteredHeatmap]);
 
-  const getActivityColor = (
-    level: string
-  ) => {
+  // ==================== Helper functions ====================
+  const getActivityColor = (level: string) => {
     switch (level) {
-      case 'hot':
-        return 'bg-red-100 text-red-700 border-red-200';
-
-      case 'warm':
-        return 'bg-amber-100 text-amber-700 border-amber-200';
-
-      case 'cold':
-        return 'bg-blue-100 text-blue-700 border-blue-200';
-
-      default:
-        return 'bg-slate-100 text-slate-600';
+      case 'hot': return 'bg-red-100 text-red-700 border-red-200';
+      case 'warm': return 'bg-amber-100 text-amber-700 border-amber-200';
+      case 'cold': return 'bg-blue-100 text-blue-700 border-blue-200';
+      default: return 'bg-slate-100 text-slate-600';
     }
   };
-
-  const getActivityLabel = (
-    level: string
-  ) => {
+  const getActivityLabel = (level: string) => {
     switch (level) {
-      case 'hot':
-        return 'داغ 🔥';
-
-      case 'warm':
-        return 'گرم 🌤️';
-
-      case 'cold':
-        return 'سرد ❄️';
-
-      default:
-        return level;
+      case 'hot': return 'داغ 🔥';
+      case 'warm': return 'گرم 🌤️';
+      case 'cold': return 'سرد ❄️';
+      default: return level;
     }
   };
-
-  const getTrendIcon = (
-    trend: string
-  ) => {
+  const getTrendIcon = (trend: string) => {
     switch (trend) {
-      case 'up':
-        return (
-          <TrendingUp
-            size={14}
-            className="text-emerald-600"
-          />
-        );
-
-      case 'down':
-        return (
-          <TrendingUp
-            size={14}
-            className="text-red-600 rotate-180"
-          />
-        );
-
-      case 'stable':
-        return (
-          <Activity
-            size={14}
-            className="text-slate-600"
-          />
-        );
-
-      default:
-        return null;
+      case 'up': return <TrendingUp size={14} className="text-emerald-600" />;
+      case 'down': return <TrendingUp size={14} className="text-red-600 rotate-180" />;
+      case 'stable': return <Activity size={14} className="text-slate-600" />;
+      default: return null;
     }
   };
-
-  const getPriorityBadge = (
-    priority: string
-  ) => {
+  const getPriorityBadge = (priority: string) => {
     switch (priority) {
-      case 'high':
-        return 'bg-red-100 text-red-700';
-
-      case 'medium':
-        return 'bg-amber-100 text-amber-700';
-
-      case 'low':
-        return 'bg-blue-100 text-blue-700';
-
-      default:
-        return 'bg-slate-100 text-slate-600';
+      case 'high': return 'bg-red-100 text-red-700';
+      case 'medium': return 'bg-amber-100 text-amber-700';
+      case 'low': return 'bg-blue-100 text-blue-700';
+      default: return 'bg-slate-100 text-slate-600';
     }
   };
 
-  const getPriorityLabel = (
-    priority: string
-  ) => {
-    switch (priority) {
-      case 'high':
-        return 'اولویت بالا';
-
-      case 'medium':
-        return 'اولویت متوسط';
-
-      case 'low':
-        return 'اولویت پایین';
-
-      default:
-        return priority;
-    }
-  };
-
-  const getIconComponent = (
-    iconName: string
-  ) => {
-    switch (iconName) {
-      case 'Activity':
-        return Activity;
-
-      case 'Cpu':
-        return Cpu;
-
-      case 'AlertCircle':
-        return AlertCircle;
-
-      case 'Lightbulb':
-        return Lightbulb;
-
-      case 'Package':
-        return Package;
-
-      case 'CheckCircle':
-        return CheckCircle;
-
-      case 'Target':
-        return Target;
-
-      case 'Zap':
-      default:
-        return Zap;
-    }
-  };
-
-  // ==========================================================
-  // Empty State
-  // ==========================================================
-
-  const EmptyState = ({
-    message,
-    subMessage,
-  }: {
-    message: string;
-    subMessage?: string;
-  }) => (
-    <div className="text-center py-12">
-      <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-slate-100 flex items-center justify-center">
-        <Activity
-          size={40}
-          className="text-slate-300"
-        />
-      </div>
-
-      <p className="text-slate-500 font-medium">
-        {message}
-      </p>
-
-      {subMessage && (
-        <p className="text-xs text-slate-400 mt-1">
-          {subMessage}
-        </p>
-      )}
-    </div>
-  );
-
-  // ==========================================================
-  // Loading
-  // ==========================================================
-
-  if (!mounted || loading) {
+  if (!mounted) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-white">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] flex items-center justify-center animate-pulse">
             <BarChart3 className="w-8 h-8 text-white" />
           </div>
-
-          <p className="text-slate-500">
-            در حال بارگذاری تحلیل بازار...
-          </p>
+          <p className="text-slate-500">در حال بارگذاری تحلیل بازار...</p>
         </div>
       </div>
     );
   }
-
-  // ==========================================================
-  // Error
-  // ==========================================================
-
-  if (error) {
-    const isAuthError =
-      error.includes('نشست') ||
-      error.includes('وارد');
-
-    return (
-      <div
-        className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-white p-4"
-        dir="rtl"
-      >
-        <div className="max-w-lg w-full text-center">
-          <div
-            className={`w-20 h-20 mx-auto mb-4 rounded-2xl flex items-center justify-center ${
-              isAuthError
-                ? 'bg-amber-50'
-                : 'bg-red-50'
-            }`}
-          >
-            {isAuthError ? (
-              <Lock
-                size={40}
-                className="text-amber-500"
-              />
-            ) : (
-              <AlertCircle
-                size={40}
-                className="text-red-500"
-              />
-            )}
-          </div>
-
-          <h3 className="text-lg font-bold text-slate-800 mb-2">
-            {isAuthError
-              ? 'نیاز به ورود مجدد'
-              : 'خطا در دریافت اطلاعات'}
-          </h3>
-
-          <p className="text-sm text-slate-500 mb-6 leading-7">
-            {error}
-          </p>
-
-          <div className="flex items-center justify-center gap-3">
-            <button
-              onClick={() => fetchData(true)}
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] text-white font-bold hover:shadow-lg transition"
-            >
-              <RefreshCw size={18} />
-              تلاش مجدد
-            </button>
-
-            {isAuthError && (
-              <Link
-                href="/login"
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold hover:bg-slate-50 transition"
-              >
-                ورود مجدد
-              </Link>
-            )}
-          </div>
-
-          {!isAuthError && (
-            <p className="text-xs text-slate-400 mt-6">
-              اگر این خطا ادامه داشت، لاگ Django را بررسی کنید.
-            </p>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // ==========================================================
-  // Render
-  // ==========================================================
 
   return (
-    <div
-      className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#f0fdfa]"
-      style={{
-        fontFamily:
-          "'Vazir', 'Vazirmatn', 'Iran Sans', Tahoma, sans-serif",
-      }}
-      dir="rtl"
-    >
+    <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#f0fdfa]" style={{ fontFamily: "'Vazir', 'Vazirmatn', 'Iran Sans', Tahoma, sans-serif" }} dir="rtl">
+
       {/* Toast */}
-
       {toast && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-amber-50 border border-amber-200 text-amber-700 px-6 py-3 rounded-2xl shadow-lg flex items-center gap-2">
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-amber-50 border border-amber-200 text-amber-700 px-6 py-3 rounded-2xl shadow-lg flex items-center gap-2 animate-bounce">
           <Lock size={16} />
-
-          <span className="text-sm font-bold">
-            {toast}
-          </span>
-
-          <button
-            onClick={() => setToast(null)}
-            className="mr-2 text-amber-500 hover:text-amber-700"
-          >
-            ×
-          </button>
+          <span className="text-sm font-bold">{toast}</span>
         </div>
       )}
 
+     
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-        {/* ======================================================
-            Header
-        ====================================================== */}
-
+        {/* ===== Page Header ===== */}
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#1E3A8A] via-[#1E3A8A] to-[#14B8A6] p-6 sm:p-8 text-white">
           <div className="absolute inset-0 opacity-10">
             <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-
             <div className="absolute bottom-0 left-0 w-64 h-64 bg-[#D4A547] rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
           </div>
-
           <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-black">
-                مرکز هوشمند تحلیل بازار
-              </h1>
-
-              <p className="mt-2 text-white/80 text-sm sm:text-base">
-                تحلیل روندها، رقبا، فرصت‌ها و شکاف‌های بازار فناوری — داده‌محور و به‌روز
-              </p>
+              <h1 className="text-2xl sm:text-3xl font-black">مرکز هوشمند تحلیل بازار</h1>
+              <p className="mt-2 text-white/80 text-sm sm:text-base">تحلیل روندها، رقبا، فرصت‌ها و شکاف‌های بازار فناوری — داده‌محور و به‌روز</p>
             </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => fetchData(false)}
-                disabled={refreshing}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition text-xs font-medium disabled:opacity-50"
-              >
-                <RefreshCw
-                  size={14}
-                  className={
-                    refreshing
-                      ? 'animate-spin'
-                      : ''
-                  }
-                />
-
-                {refreshing
-                  ? 'در حال به‌روزرسانی...'
-                  : 'به‌روزرسانی'}
-              </button>
-
-              <div className="flex items-center gap-2 text-xs text-white/70">
-                <Clock size={14} />
-
-                آخرین به‌روزرسانی:
-                {' '}
-                {new Date().toLocaleDateString(
-                  'fa-IR'
-                )}
-              </div>
+            <div className="flex items-center gap-2 text-xs text-white/70">
+              <Clock size={14} />
+              آخرین به‌روزرسانی: {new Date().toLocaleDateString('fa-IR')}
             </div>
           </div>
         </div>
 
-        {/* ======================================================
-            Filters
-        ====================================================== */}
-
+        {/* ===== Filters Bar ===== */}
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center gap-3">
-            <Filter
-              size={18}
-              className="text-slate-400"
-            />
-
-            <select
-              value={selectedIndustry}
-              onChange={(e) =>
-                setSelectedIndustry(
-                  e.target.value
-                )
-              }
-              className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-600 bg-white outline-none cursor-pointer hover:border-slate-300"
-            >
-              <option value="all">
-                همه صنایع
-              </option>
-
-              <option value="نفت و گاز">
-                نفت و گاز
-              </option>
-
-              <option value="پتروشیمی">
-                پتروشیمی
-              </option>
-
-              <option value="فولاد و معدن">
-                فولاد و معدن
-              </option>
-
-              <option value="سلامت">
-                سلامت
-              </option>
-
-              <option value="کشاورزی">
-                کشاورزی
-              </option>
-
-              <option value="حمل‌ونقل">
-                حمل‌ونقل
-              </option>
-
-              <option value="خودروسازی">
-                خودروسازی
-              </option>
-
-              <option value="انرژی">
-                انرژی
-              </option>
-
-              <option value="فناوری اطلاعات">
-                فناوری اطلاعات
-              </option>
-
-              <option value="محیط زیست">
-                محیط زیست
-              </option>
+            <Filter size={18} className="text-slate-400" />
+            <select value={selectedIndustry} onChange={(e) => setSelectedIndustry(e.target.value)} className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-600 bg-white outline-none cursor-pointer hover:border-slate-300">
+              <option value="all">همه صنایع</option>
+              {Object.keys(industryBaseTrends).map(ind => (
+                <option key={ind} value={ind}>{ind}</option>
+              ))}
             </select>
-
-            <select
-              value={selectedRegion}
-              onChange={(e) =>
-                setSelectedRegion(
-                  e.target.value
-                )
-              }
-              className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-600 bg-white outline-none cursor-pointer hover:border-slate-300"
-            >
-              <option value="all">
-                همه مناطق
-              </option>
-
-              <option value="تهران">
-                تهران
-              </option>
-
-              <option value="اصفهان">
-                اصفهان
-              </option>
-
-              <option value="شیراز">
-                شیراز
-              </option>
-
-              <option value="تبریز">
-                تبریز
-              </option>
-
-              <option value="مشهد">
-                مشهد
-              </option>
+            <select value={selectedRegion} onChange={(e) => setSelectedRegion(e.target.value)} className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-600 bg-white outline-none cursor-pointer hover:border-slate-300">
+              <option value="all">همه مناطق</option>
+              <option value="تهران">تهران</option>
+              <option value="اصفهان">اصفهان</option>
+              <option value="شیراز">شیراز</option>
+              <option value="تبریز">تبریز</option>
+              <option value="مشهد">مشهد</option>
             </select>
-
-            <select
-              value={selectedTech}
-              onChange={(e) =>
-                setSelectedTech(
-                  e.target.value
-                )
-              }
-              className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-600 bg-white outline-none cursor-pointer hover:border-slate-300"
-            >
-              <option value="all">
-                همه فناوری‌ها
-              </option>
-
-              <option value="هوش مصنوعی">
-                هوش مصنوعی
-              </option>
-
-              <option value="اینترنت اشیاء">
-                اینترنت اشیاء
-              </option>
-
-              <option value="دوقلوی دیجیتال">
-                دوقلوی دیجیتال
-              </option>
-
-              <option value="رباتیک">
-                رباتیک
-              </option>
-
-              <option value="بلاکچین">
-                بلاکچین
-              </option>
-
-              <option value="داده‌کاوی">
-                داده‌کاوی
-              </option>
+            <select value={selectedTech} onChange={(e) => setSelectedTech(e.target.value)} className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-600 bg-white outline-none cursor-pointer hover:border-slate-300">
+              <option value="all">همه فناوری‌ها</option>
+              <option value="هوش مصنوعی">هوش مصنوعی</option>
+              <option value="اینترنت اشیاء">اینترنت اشیاء</option>
+              <option value="دوقلوی دیجیتال">دوقلوی دیجیتال</option>
+              <option value="رباتیک">رباتیک</option>
+              <option value="بلاکچین">بلاکچین</option>
+              <option value="داده‌کاوی">داده‌کاوی</option>
             </select>
-
-            <select
-              value={selectedTimeRange}
-              onChange={(e) =>
-                setSelectedTimeRange(
-                  e.target.value
-                )
-              }
-              className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-600 bg-white outline-none cursor-pointer hover:border-slate-300"
-            >
-              <option value="3m">
-                ۳ ماه اخیر
-              </option>
-
-              <option value="6m">
-                ۶ ماه اخیر
-              </option>
-
-              <option value="12m">
-                ۱۲ ماه اخیر
-              </option>
-
-              <option value="24m">
-                ۲۴ ماه اخیر
-              </option>
+            <select value={selectedTimeRange} onChange={(e) => setSelectedTimeRange(e.target.value)} className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-600 bg-white outline-none cursor-pointer hover:border-slate-300">
+              <option value="3m">۳ ماه اخیر</option>
+              <option value="6m">۶ ماه اخیر</option>
+              <option value="12m">۱۲ ماه اخیر</option>
+              <option value="24m">۲۴ ماه اخیر</option>
             </select>
-
             <span className="text-xs text-slate-400 mr-auto">
-              {filteredHeatmap.length}
-              {' '}
-              نتیجه
+              {filteredHeatmap.length} نتیجه
             </span>
           </div>
         </div>
 
-        {/* ======================================================
-            Tabs
-        ====================================================== */}
-
-        <div className="flex items-center gap-1 border-b border-slate-200 pb-0 overflow-x-auto">
+        {/* ===== Tab Navigation ===== */}
+        <div className="flex items-center gap-1 border-b border-slate-200 pb-0">
           {[
-            {
-              key: 'overview',
-              label: 'نمای کلی',
-              icon: Layers,
-            },
-            {
-              key: 'trends',
-              label: 'روندها',
-              icon: TrendingUp,
-            },
-            {
-              key: 'competitors',
-              label: 'تحلیل رقبا',
-              icon: Users,
-            },
-            {
-              key: 'opportunities',
-              label: 'فرصت‌ها',
-              icon: Target,
-            },
+            { key: 'overview', label: 'نمای کلی', icon: Layers },
+            { key: 'trends', label: 'روندها', icon: TrendingUp },
+            { key: 'competitors', label: 'تحلیل رقبا', icon: Users },
+            { key: 'opportunities', label: 'فرصت‌ها', icon: Target },
           ].map((tab) => (
             <button
               key={tab.key}
-              onClick={() =>
-                setActiveTab(
-                  tab.key as
-                    | 'overview'
-                    | 'trends'
-                    | 'competitors'
-                    | 'opportunities'
-                )
-              }
-              className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-bold rounded-t-xl transition border-b-2 -mb-[2px] whitespace-nowrap ${
+              onClick={() => setActiveTab(tab.key as any)}
+              className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-bold rounded-t-xl transition border-b-2 -mb-[2px] ${
                 activeTab === tab.key
                   ? 'text-[#1E3A8A] border-[#1E3A8A] bg-[#1E3A8A05]'
                   : 'text-slate-500 border-transparent hover:text-slate-700 hover:bg-slate-50'
               }`}
             >
               <tab.icon size={16} />
-
               {tab.label}
             </button>
           ))}
         </div>
 
-        {/* ======================================================
-            KPI
-        ====================================================== */}
-
+        {/* ===== KPI Cards ===== */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {data?.kpiData &&
-          data.kpiData.length > 0 ? (
-            data.kpiData.map(
-              (kpi, i) => (
-                <div
-                  key={i}
-                  className="rounded-2xl border border-slate-200 bg-white p-5 hover:shadow-md transition"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-medium text-slate-500">
-                      {kpi.label}
-                    </span>
-
-                    <div
-                      className={`p-2 rounded-xl ${kpi.color}`}
-                    >
-                      {kpi.icon ===
-                        'Lightbulb' && (
-                        <Lightbulb size={16} />
-                      )}
-
-                      {kpi.icon ===
-                        'Package' && (
-                        <Package size={16} />
-                      )}
-
-                      {kpi.icon ===
-                        'CheckCircle' && (
-                        <CheckCircle size={16} />
-                      )}
-
-                      {kpi.icon === 'Target' && (
-                        <Target size={16} />
-                      )}
-
-                      {kpi.icon === 'Activity' && (
-                        <Activity size={16} />
-                      )}
-
-                      {kpi.icon === 'Zap' && (
-                        <Zap size={16} />
-                      )}
-                    </div>
-                  </div>
-
-                  <p className="text-2xl font-black text-slate-900">
-                    {kpi.value}
-                  </p>
-
-                  <p className="text-xs text-emerald-600 font-medium mt-1">
-                    {kpi.change}
-                    {' '}
-                    نسبت به ماه قبل
-                  </p>
-                </div>
-              )
-            )
-          ) : (
-            <div className="col-span-4">
-              <EmptyState
-                message="هیچ داده‌ای برای نمایش وجود ندارد"
-                subMessage="لطفاً فیلترهای خود را تغییر دهید"
-              />
+          {kpiData.map((kpi, i) => (
+            <div key={i} className="rounded-2xl border border-slate-200 bg-white p-5 hover:shadow-md transition">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-medium text-slate-500">{kpi.label}</span>
+                <div className={`p-2 rounded-xl ${kpi.color}`}><kpi.icon size={16} /></div>
+              </div>
+              <p className="text-2xl font-black text-slate-900">{kpi.value}</p>
+              <p className="text-xs text-emerald-600 font-medium mt-1">{kpi.change} نسبت به ماه قبل</p>
             </div>
-          )}
+          ))}
         </div>
 
-        {/* ======================================================
-            Overview
-        ====================================================== */}
-
+        {/* ===== Tab Content ===== */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
-
-            {/* Trend */}
-
+            {/* Trend Chart */}
             <div className="rounded-2xl border border-slate-200 bg-white p-6">
               <h2 className="text-base font-extrabold text-slate-900 mb-4 flex items-center gap-2">
-                <LineChart
-                  size={20}
-                  className="text-[#1E3A8A]"
-                />
-
-                روند تقاضا، عرضه و معاملات
-
-                {selectedIndustry !==
-                'all'
-                  ? ` (${selectedIndustry})`
-                  : selectedRegion !==
-                    'all'
-                  ? ` (${selectedRegion})`
-                  : selectedTech !==
-                    'all'
-                  ? ` (${selectedTech})`
-                  : ''}
+                <LineChart size={20} className="text-[#1E3A8A]" />
+                روند تقاضا، عرضه و معاملات {selectedIndustry !== 'all' ? `(${selectedIndustry})` : selectedRegion !== 'all' ? `(${selectedRegion})` : selectedTech !== 'all' ? `(${selectedTech})` : '(همه)'}
               </h2>
-
-              {filteredTrendData.length >
-              0 ? (
-                <ResponsiveContainer
-                  width="100%"
-                  height={350}
-                >
-                  <ReLineChart
-                    data={
-                      filteredTrendData
-                    }
-                  >
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="#E2E8F0"
-                    />
-
-                    <XAxis
-                      dataKey="month"
-                      tick={{
-                        fontSize: 12,
-                      }}
-                    />
-
-                    <YAxis
-                      tick={{
-                        fontSize: 12,
-                      }}
-                    />
-
-                    <Tooltip />
-
-                    <Legend />
-
-                    <Line
-                      type="monotone"
-                      dataKey="تقاضا"
-                      stroke="#1E3A8A"
-                      strokeWidth={3}
-                      dot={{ r: 4 }}
-                    />
-
-                    <Line
-                      type="monotone"
-                      dataKey="عرضه"
-                      stroke="#14B8A6"
-                      strokeWidth={3}
-                      dot={{ r: 4 }}
-                    />
-
-                    <Line
-                      type="monotone"
-                      dataKey="معاملات"
-                      stroke="#D4A547"
-                      strokeWidth={3}
-                      dot={{ r: 4 }}
-                    />
-                  </ReLineChart>
-                </ResponsiveContainer>
-              ) : (
-                <EmptyState
-                  message="داده‌ای برای نمایش روند وجود ندارد"
-                  subMessage="هیچ داده‌ای در بازه زمانی انتخاب‌شده یافت نشد"
-                />
-              )}
+              <ResponsiveContainer width="100%" height={350}>
+                <ReLineChart data={filteredTrendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                  <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="تقاضا" stroke="#1E3A8A" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                  <Line type="monotone" dataKey="عرضه" stroke="#14B8A6" strokeWidth={3} dot={{ r: 4 }} />
+                  <Line type="monotone" dataKey="معاملات" stroke="#D4A547" strokeWidth={3} dot={{ r: 4 }} />
+                </ReLineChart>
+              </ResponsiveContainer>
             </div>
 
-            {/* Heatmap */}
-
+            {/* Heatmap + Needs/Products */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="rounded-2xl border border-slate-200 bg-white p-6">
                 <h2 className="text-base font-extrabold text-slate-900 mb-4 flex items-center gap-2">
-                  <Thermometer
-                    size={20}
-                    className="text-[#14B8A6]"
-                  />
-
+                  <Thermometer size={20} className="text-[#14B8A6]" />
                   نقشه حرارتی صنایع
                 </h2>
-
-                {filteredHeatmap.length >
-                0 ? (
-                  <div className="space-y-3 max-h-[500px] overflow-y-auto">
-                    {filteredHeatmap.map(
-                      (item, i) => (
-                        <div
-                          key={i}
-                          className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition border border-transparent hover:border-slate-200"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`w-3 h-3 rounded-full ${
-                                item.activityLevel ===
-                                'hot'
-                                  ? 'bg-red-500'
-                                  : item.activityLevel ===
-                                    'warm'
-                                  ? 'bg-amber-500'
-                                  : 'bg-blue-500'
-                              }`}
-                            />
-
-                            <div>
-                              <p className="text-sm font-bold text-slate-800">
-                                {
-                                  item.industry
-                                }
-                              </p>
-
-                              <p className="text-xs text-slate-500">
-                                {
-                                  item.supplyCount
-                                }
-                                {' '}
-                                محصول |
-                                {' '}
-                                {Number(
-                                  item.dealValue ||
-                                    0
-                                ).toLocaleString()}
-                                {' '}
-                                میلیون تومان
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-3">
-                            <div className="text-right">
-                              <p className="text-sm font-bold text-emerald-600">
-                                +
-                                {
-                                  item.demandGrowth
-                                }
-                                ٪
-                              </p>
-
-                              <p className="text-xs text-slate-400">
-                                رشد تقاضا
-                              </p>
-                            </div>
-
-                            <span
-                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getActivityColor(
-                                item.activityLevel
-                              )}`}
-                            >
-                              {getTrendIcon(
-                                item.trend
-                              )}
-
-                              {getActivityLabel(
-                                item.activityLevel
-                              )}
-                            </span>
-                          </div>
+                <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                  {filteredHeatmap.map((item, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition border border-transparent hover:border-slate-200">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-3 h-3 rounded-full ${item.activityLevel === 'hot' ? 'bg-red-500' : item.activityLevel === 'warm' ? 'bg-amber-500' : 'bg-blue-500'}`} />
+                        <div>
+                          <p className="text-sm font-bold text-slate-800">{item.industry}</p>
+                          <p className="text-xs text-slate-500">{item.supplyCount} محصول | {item.dealValue.toLocaleString()} میلیون تومان</p>
                         </div>
-                      )
-                    )}
-                  </div>
-                ) : (
-                  <EmptyState
-                    message="هیچ داده‌ای برای نقشه حرارتی وجود ندارد"
-                    subMessage="فیلترهای خود را تغییر دهید"
-                  />
-                )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p className="text-sm font-bold text-emerald-600">+{item.demandGrowth}٪</p>
+                          <p className="text-xs text-slate-400">رشد تقاضا</p>
+                        </div>
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getActivityColor(item.activityLevel)}`}>
+                          {getTrendIcon(item.trend)}
+                          {getActivityLabel(item.activityLevel)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              {/* Needs / Products */}
-
               <div className="space-y-6">
-
                 <div className="rounded-2xl border border-slate-200 bg-white p-6">
                   <h2 className="text-base font-extrabold text-slate-900 mb-4 flex items-center gap-2">
-                    <Lightbulb
-                      size={20}
-                      className="text-[#D4A547]"
-                    />
-
+                    <Lightbulb size={20} className="text-[#D4A547]" />
                     نیازهای پرتکرار
                   </h2>
-
-                  {filteredTopNeeds.length >
-                  0 ? (
-                    <div className="space-y-3">
-                      {filteredTopNeeds.map(
-                        (need, i) => (
-                          <div
-                            key={i}
-                            className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-slate-400 w-6">
-                                {i + 1}
-                              </span>
-
-                              <span className="text-sm font-medium text-slate-700">
-                                {
-                                  need.title
-                                }
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-slate-600">
-                                {need.count ??
-                                  0}
-                                {' '}
-                                مورد
-                              </span>
-
-                              <span className="text-xs text-emerald-600 font-medium">
-                                {
-                                  need.growth
-                                }
-                              </span>
-                            </div>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  ) : (
-                    <EmptyState message="هیچ نیازی یافت نشد" />
-                  )}
+                  <div className="space-y-3">
+                    {filteredTopNeeds.map((need, i) => (
+                      <div key={i} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-400 w-6">{i + 1}</span>
+                          <span className="text-sm font-medium text-slate-700">{need.title}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-600">{need.count} مورد</span>
+                          <span className="text-xs text-emerald-600 font-medium">{need.growth}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 bg-white p-6">
                   <h2 className="text-base font-extrabold text-slate-900 mb-4 flex items-center gap-2">
-                    <Eye
-                      size={20}
-                      className="text-[#14B8A6]"
-                    />
-
+                    <Eye size={20} className="text-[#14B8A6]" />
                     محصولات پربازدید
                   </h2>
-
-                  {filteredTopProducts.length >
-                  0 ? (
-                    <div className="space-y-3">
-                      {filteredTopProducts.map(
-                        (product, i) => (
-                          <div
-                            key={i}
-                            className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-slate-400 w-6">
-                                {i + 1}
-                              </span>
-
-                              <span className="text-sm font-medium text-slate-700">
-                                {
-                                  product.title
-                                }
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <div className="flex items-center gap-0.5">
-                                <Star
-                                  size={12}
-                                  className="text-[#D4A547] fill-[#D4A547]"
-                                />
-
-                                <span className="text-xs font-bold text-slate-600">
-                                  {product.rating ??
-                                    0}
-                                </span>
-                              </div>
-
-                              <span className="text-xs text-slate-400">
-                                {product.views ??
-                                  0}
-                                {' '}
-                                بازدید
-                              </span>
-                            </div>
+                  <div className="space-y-3">
+                    {filteredTopProducts.map((product, i) => (
+                      <div key={i} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-400 w-6">{i + 1}</span>
+                          <span className="text-sm font-medium text-slate-700">{product.title}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-0.5">
+                            <Star size={12} className="text-[#D4A547] fill-[#D4A547]" />
+                            <span className="text-xs font-bold text-slate-600">{product.rating}</span>
                           </div>
-                        )
-                      )}
-                    </div>
-                  ) : (
-                    <EmptyState message="هیچ محصولی یافت نشد" />
-                  )}
+                          <span className="text-xs text-slate-400">{product.views} بازدید</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Market Share + Emerging */}
-
+            {/* Market Share + Emerging Tech */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
               <div className="rounded-2xl border border-slate-200 bg-white p-6">
                 <h2 className="text-base font-extrabold text-slate-900 mb-4 flex items-center gap-2">
-                  <PieChart
-                    size={20}
-                    className="text-[#1E3A8A]"
-                  />
-
+                  <PieChart size={20} className="text-[#1E3A8A]" />
                   سهم بازار عرضه‌کنندگان
                 </h2>
-
-                {data?.marketShare &&
-                data.marketShare.length >
-                  0 ? (
-                  <ResponsiveContainer
-                    width="100%"
-                    height={280}
-                  >
-                    <RePieChart>
-                      <Pie
-                        data={
-                          data.marketShare
-                        }
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={100}
-                        dataKey="value"
-                        label={({
-                          name,
-                          value,
-                        }) =>
-                          `${name} (${value}%)`
-                        }
-                      >
-                        {data.marketShare.map(
-                          (_, i) => (
-                            <Cell
-                              key={i}
-                              fill={
-                                COLORS[
-                                  i %
-                                    COLORS.length
-                                ]
-                              }
-                            />
-                          )
-                        )}
-                      </Pie>
-
-                      <Tooltip />
-                    </RePieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <EmptyState message="داده‌ای برای سهم بازار وجود ندارد" />
-                )}
+                <ResponsiveContainer width="100%" height={280}>
+                  <RePieChart>
+                    <Pie data={allMarketShareData} cx="50%" cy="50%" outerRadius={100} dataKey="value" label={({ name, value }) => `${name} (${value}%)`}>
+                      {allMarketShareData.map((_, i) => (<Cell key={i} fill={COLORS[i % COLORS.length]} />))}
+                    </Pie>
+                    <Tooltip />
+                  </RePieChart>
+                </ResponsiveContainer>
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-white p-6">
                 <h2 className="text-base font-extrabold text-slate-900 mb-4 flex items-center gap-2">
-                  <Cpu
-                    size={20}
-                    className="text-[#14B8A6]"
-                  />
-
+                  <Cpu size={20} className="text-[#14B8A6]" />
                   فناوری‌های نوظهور
                 </h2>
-
-                {filteredEmergingTechs.length >
-                0 ? (
-                  <div className="space-y-3">
-                    {filteredEmergingTechs.map(
-                      (tech, i) => (
-                        <div
-                          key={i}
-                          className="flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-[#1E3A8A02] to-[#14B8A602] border border-[#14B8A610]"
-                        >
-                          <div>
-                            <p className="text-sm font-bold text-slate-800">
-                              {tech.name}
-                            </p>
-
-                            <p className="text-xs text-slate-500">
-                              {tech.category}
-                              {' • '}
-                              {
-                                tech.maturityLevel
-                              }
-                            </p>
+                <div className="space-y-3">
+                  {filteredEmergingTechs.map((tech, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-[#1E3A8A02] to-[#14B8A602] border border-[#14B8A610]">
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">{tech.name}</p>
+                        <p className="text-xs text-slate-500">{tech.category} • {tech.maturityLevel}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-emerald-600">+{tech.growthRate}٪</p>
+                        <div className="flex items-center gap-1 mt-1">
+                          <div className="w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                            <div className="h-full bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] rounded-full" style={{ width: `${tech.opportunityScore}%` }} />
                           </div>
-
-                          <div className="text-right">
-                            <p className="text-sm font-bold text-emerald-600">
-                              +
-                              {
-                                tech.growthRate
-                              }
-                              ٪
-                            </p>
-
-                            <div className="flex items-center gap-1 mt-1">
-                              <div className="w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] rounded-full"
-                                  style={{
-                                    width: `${Math.min(
-                                      100,
-                                      Math.max(
-                                        0,
-                                        tech.opportunityScore ||
-                                          0
-                                      )
-                                    )}%`,
-                                  }}
-                                />
-                              </div>
-
-                              <span className="text-xs text-slate-500">
-                                {
-                                  tech.opportunityScore
-                                }
-                                /۱۰۰
-                              </span>
-                            </div>
-                          </div>
+                          <span className="text-xs text-slate-500">{tech.opportunityScore}/۱۰۰</span>
                         </div>
-                      )
-                    )}
-                  </div>
-                ) : (
-                  <EmptyState message="هیچ فناوری نوظهوری یافت نشد" />
-                )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
         )}
-
-        {/* ======================================================
-            Trends
-        ====================================================== */}
 
         {activeTab === 'trends' && (
           <div className="rounded-2xl border border-slate-200 bg-white p-6">
-            <h2 className="text-base font-extrabold text-slate-900 mb-4">
-              روند تفصیلی تقاضا بر اساس صنعت
-            </h2>
-
-            {filteredTrendData.length >
-            0 ? (
-              <ResponsiveContainer
-                width="100%"
-                height={400}
-              >
-                <AreaChart
-                  data={
-                    filteredTrendData
-                  }
-                >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="#E2E8F0"
-                  />
-
-                  <XAxis
-                    dataKey="month"
-                    tick={{
-                      fontSize: 12,
-                    }}
-                  />
-
-                  <YAxis
-                    tick={{
-                      fontSize: 12,
-                    }}
-                  />
-
-                  <Tooltip />
-
-                  <Legend />
-
-                  <Area
-                    type="monotone"
-                    dataKey="تقاضا"
-                    stroke="#1E3A8A"
-                    fill="#1E3A8A20"
-                    strokeWidth={2}
-                  />
-
-                  <Area
-                    type="monotone"
-                    dataKey="عرضه"
-                    stroke="#14B8A6"
-                    fill="#14B8A620"
-                    strokeWidth={2}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <EmptyState
-                message="داده‌ای برای نمایش روند وجود ندارد"
-                subMessage="هیچ داده‌ای در بازه زمانی انتخاب‌شده یافت نشد"
-              />
-            )}
+            <h2 className="text-base font-extrabold text-slate-900 mb-4">روند تفصیلی تقاضا بر اساس صنعت</h2>
+            <ResponsiveContainer width="100%" height={400}>
+              <AreaChart data={filteredTrendData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip />
+                <Legend />
+                <Area type="monotone" dataKey="تقاضا" stroke="#1E3A8A" fill="#1E3A8A20" strokeWidth={2} />
+                <Area type="monotone" dataKey="عرضه" stroke="#14B8A6" fill="#14B8A620" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
         )}
-
-        {/* ======================================================
-            Competitors
-        ====================================================== */}
 
         {activeTab === 'competitors' && (
           <div className="rounded-2xl border border-slate-200 bg-white p-6 overflow-x-auto">
             <h2 className="text-base font-extrabold text-slate-900 mb-4 flex items-center gap-2">
-              <Users
-                size={20}
-                className="text-[#1E3A8A]"
-              />
-
+              <Users size={20} className="text-[#1E3A8A]" />
               جدول تحلیل رقبا
             </h2>
-
-            {filteredCompetitors.length >
-            0 ? (
-              <>
-                <table className="w-full text-sm min-w-[800px]">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-right">
-                      <th className="py-3 px-3 text-slate-500 font-medium">
-                        شرکت
-                      </th>
-
-                      <th className="py-3 px-3 text-slate-500 font-medium text-center">
-                        محصولات
-                      </th>
-
-                      <th className="py-3 px-3 text-slate-500 font-medium text-center">
-                        سهم بازار
-                      </th>
-
-                      <th className="py-3 px-3 text-slate-500 font-medium text-center">
-                        امتیاز
-                      </th>
-
-                      <th className="py-3 px-3 text-slate-500 font-medium hidden lg:table-cell">
-                        دلایل امتیاز
-                      </th>
-
-                      <th className="py-3 px-3 text-slate-500 font-medium">
-                        نقاط قوت
-                      </th>
-
-                      <th className="py-3 px-3 text-slate-500 font-medium">
-                        نقاط ضعف
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {filteredCompetitors.map(
-                      (comp, i) => (
-                        <tr
-                          key={i}
-                          className="border-b border-slate-100 hover:bg-slate-50 transition"
-                        >
-                          <td className="py-3 px-3 font-bold text-slate-800">
-                            {comp.name}
-                          </td>
-
-                          <td className="py-3 px-3 text-center text-slate-600">
-                            {
-                              comp.products
-                            }
-                          </td>
-
-                          <td className="py-3 px-3 text-center">
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 h-2 bg-slate-200 rounded-full">
-                                <div
-                                  className="h-full bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] rounded-full"
-                                  style={{
-                                    width: `${Math.min(
-                                      100,
-                                      Math.max(
-                                        0,
-                                        comp.marketShare ||
-                                          0
-                                      )
-                                    )}%`,
-                                  }}
-                                />
-                              </div>
-
-                              <span className="text-xs font-bold text-slate-600">
-                                {Math.round(
-                                  comp.marketShare ||
-                                    0
-                                )}
-                                ٪
-                              </span>
-                            </div>
-                          </td>
-
-                          <td className="py-3 px-3 text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              <Star
-                                size={14}
-                                className="text-[#D4A547] fill-[#D4A547]"
-                              />
-
-                              <span className="font-bold text-slate-700">
-                                {Number(
-                                  comp.avgRating ||
-                                    0
-                                ).toFixed(1)}
-                              </span>
-                            </div>
-                          </td>
-
-                          <td className="py-3 px-3 hidden lg:table-cell">
-                            <div className="flex flex-wrap gap-1">
-                              {(comp.ratingReasons ||
-                                [])
-                                .slice(0, 3)
-                                .map(
-                                  (
-                                    reason,
-                                    j
-                                  ) => (
-                                    <span
-                                      key={j}
-                                      className="px-2 py-0.5 rounded-full bg-[#1E3A8A10] text-[#1E3A8A] text-xs font-medium"
-                                    >
-                                      {reason}
-                                    </span>
-                                  )
-                                )}
-                            </div>
-                          </td>
-
-                          <td className="py-3 px-3">
-                            <div className="flex flex-wrap gap-1">
-                              {(comp.strengths ||
-                                [])
-                                .slice(0, 2)
-                                .map(
-                                  (
-                                    strength,
-                                    j
-                                  ) => (
-                                    <span
-                                      key={j}
-                                      className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs"
-                                    >
-                                      {strength}
-                                    </span>
-                                  )
-                                )}
-                            </div>
-                          </td>
-
-                          <td className="py-3 px-3">
-                            <div className="flex flex-wrap gap-1">
-                              {(comp.weaknesses ||
-                                [])
-                                .slice(0, 2)
-                                .map(
-                                  (
-                                    weakness,
-                                    j
-                                  ) => (
-                                    <span
-                                      key={j}
-                                      className="px-2 py-0.5 rounded-full bg-red-50 text-red-600 text-xs"
-                                    >
-                                      {weakness}
-                                    </span>
-                                  )
-                                )}
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    )}
-                  </tbody>
-                </table>
-
-                <div className="lg:hidden mt-4 space-y-4">
-                  {filteredCompetitors.map(
-                    (comp, i) => (
-                      <div
-                        key={i}
-                        className="p-3 rounded-xl bg-slate-50"
-                      >
-                        <p className="font-bold text-slate-800 mb-2">
-                          {comp.name}
-                          {' — امتیاز '}
-                          {Number(
-                            comp.avgRating ||
-                              0
-                          ).toFixed(1)}
-                        </p>
-
-                        <div className="flex flex-wrap gap-1">
-                          {(comp.ratingReasons ||
-                            [])
-                            .slice(0, 2)
-                            .map(
-                              (
-                                reason,
-                                j
-                              ) => (
-                                <span
-                                  key={j}
-                                  className="px-2 py-0.5 rounded-full bg-[#1E3A8A10] text-[#1E3A8A] text-xs font-medium"
-                                >
-                                  {reason}
-                                </span>
-                              )
-                            )}
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-right">
+                  <th className="py-3 px-3 text-slate-500 font-medium">شرکت</th>
+                  <th className="py-3 px-3 text-slate-500 font-medium text-center">محصولات</th>
+                  <th className="py-3 px-3 text-slate-500 font-medium text-center">سهم بازار</th>
+                  <th className="py-3 px-3 text-slate-500 font-medium text-center">امتیاز</th>
+                  <th className="py-3 px-3 text-slate-500 font-medium hidden lg:table-cell">دلایل امتیاز</th>
+                  <th className="py-3 px-3 text-slate-500 font-medium">نقاط قوت</th>
+                  <th className="py-3 px-3 text-slate-500 font-medium">نقاط ضعف</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredCompetitors.map((comp, i) => (
+                  <tr key={i} className="border-b border-slate-100 hover:bg-slate-50 transition">
+                    <td className="py-3 px-3 font-bold text-slate-800">{comp.name}</td>
+                    <td className="py-3 px-3 text-center text-slate-600">{comp.products}</td>
+                    <td className="py-3 px-3 text-center">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-2 bg-slate-200 rounded-full">
+                          <div className="h-full bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] rounded-full" style={{ width: `${comp.marketShare}%` }} />
                         </div>
+                        <span className="text-xs font-bold text-slate-600">{comp.marketShare}٪</span>
                       </div>
-                    )
-                  )}
+                    </td>
+                    <td className="py-3 px-3 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <Star size={14} className="text-[#D4A547] fill-[#D4A547]" />
+                        <span className="font-bold text-slate-700">{comp.avgRating}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-3 hidden lg:table-cell">
+                      <div className="flex flex-wrap gap-1">
+                        {comp.ratingReasons.map((reason, j) => (
+                          <span key={j} className="px-2 py-0.5 rounded-full bg-[#1E3A8A10] text-[#1E3A8A] text-xs font-medium">
+                            {reason}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="flex flex-wrap gap-1">
+                        {comp.strengths.map((s, j) => (<span key={j} className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs">{s}</span>))}
+                      </div>
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="flex flex-wrap gap-1">
+                        {comp.weaknesses.map((w, j) => (<span key={j} className="px-2 py-0.5 rounded-full bg-red-50 text-red-600 text-xs">{w}</span>))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {/* نمایش دلایل امتیاز در موبایل به صورت جداگانه */}
+            <div className="lg:hidden mt-4 space-y-4">
+              {filteredCompetitors.map((comp, i) => (
+                <div key={i} className="p-3 rounded-xl bg-slate-50">
+                  <p className="font-bold text-slate-800 mb-2">{comp.name} — امتیاز {comp.avgRating}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {comp.ratingReasons.map((reason, j) => (
+                      <span key={j} className="px-2 py-0.5 rounded-full bg-[#1E3A8A10] text-[#1E3A8A] text-xs font-medium">
+                        {reason}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </>
-            ) : (
-              <EmptyState
-                message="هیچ رقیبی برای نمایش وجود ندارد"
-                subMessage="فیلترهای خود را تغییر دهید"
-              />
-            )}
+              ))}
+            </div>
           </div>
         )}
 
-        {/* ======================================================
-            Opportunities
-        ====================================================== */}
-
-        {activeTab ===
-          'opportunities' && (
+        {activeTab === 'opportunities' && (
           <div className="space-y-6">
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {data?.recommendations &&
-              data.recommendations.length >
-                0 ? (
-                data.recommendations.map(
-                  (rec) => {
-                    const IconComponent =
-                      getIconComponent(
-                        rec.icon
-                      );
-
-                    return (
-                      <div
-                        key={rec.id}
-                        className="rounded-2xl border border-slate-200 bg-white p-6 hover:shadow-lg transition group"
-                      >
-                        <div className="flex items-start gap-4">
-                          <div
-                            className={`p-3 rounded-xl ${
-                              rec.priority ===
-                              'high'
-                                ? 'bg-red-50'
-                                : rec.priority ===
-                                  'medium'
-                                ? 'bg-amber-50'
-                                : 'bg-blue-50'
-                            }`}
-                          >
-                            <IconComponent
-                              size={24}
-                              className={
-                                rec.priority ===
-                                'high'
-                                  ? 'text-red-600'
-                                  : rec.priority ===
-                                    'medium'
-                                  ? 'text-amber-600'
-                                  : 'text-blue-600'
-                              }
-                            />
-                          </div>
-
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <h3 className="text-sm font-extrabold text-slate-900">
-                                {
-                                  rec.title
-                                }
-                              </h3>
-
-                              <span
-                                className={`px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(
-                                  rec.priority
-                                )}`}
-                              >
-                                {getPriorityLabel(
-                                  rec.priority
-                                )}
-                              </span>
-                            </div>
-
-                            <p className="text-xs text-slate-600 leading-relaxed mb-3">
-                              {
-                                rec.description
-                              }
-                            </p>
-
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs text-slate-500">
-                                تأثیر:
-                                {' '}
-                                <strong>
-                                  {
-                                    rec.impact
-                                  }
-                                </strong>
-                              </span>
-
-                              <button className="inline-flex items-center gap-1 text-xs font-bold text-[#1E3A8A] hover:text-[#14B8A6] transition">
-                                {
-                                  rec.action
-                                }
-
-                                <ArrowLeft
-                                  size={12}
-                                />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
+              {smartRecommendations.map((rec) => (
+                <div key={rec.id} className="rounded-2xl border border-slate-200 bg-white p-6 hover:shadow-lg transition group">
+                  <div className="flex items-start gap-4">
+                    <div className={`p-3 rounded-xl ${rec.priority === 'high' ? 'bg-red-50' : rec.priority === 'medium' ? 'bg-amber-50' : 'bg-blue-50'}`}>
+                      <rec.icon size={24} className={rec.priority === 'high' ? 'text-red-600' : rec.priority === 'medium' ? 'text-amber-600' : 'text-blue-600'} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="text-sm font-extrabold text-slate-900">{rec.title}</h3>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(rec.priority)}`}>
+                          {rec.priority === 'high' ? 'اولویت بالا' : rec.priority === 'medium' ? 'اولویت متوسط' : 'اولویت پایین'}
+                        </span>
                       </div>
-                    );
-                  }
-                )
-              ) : (
-                <div className="col-span-2">
-                  <EmptyState
-                    message="هیچ پیشنهادی وجود ندارد"
-                    subMessage="بر اساس داده‌های موجود، پیشنهادی یافت نشد"
-                  />
+                      <p className="text-xs text-slate-600 leading-relaxed mb-3">{rec.description}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-500">تأثیر: <strong>{rec.impact}</strong></span>
+                        <button className="inline-flex items-center gap-1 text-xs font-bold text-[#1E3A8A] hover:text-[#14B8A6] transition">
+                          {rec.action}
+                          <ArrowLeft size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
 
             {/* Gap Analysis */}
-
             <div className="rounded-2xl border border-slate-200 bg-white p-6">
               <h2 className="text-base font-extrabold text-slate-900 mb-4 flex items-center gap-2">
-                <Activity
-                  size={20}
-                  className="text-[#14B8A6]"
-                />
-
+                <Activity size={20} className="text-[#14B8A6]" />
                 تحلیل شکاف عرضه و تقاضا
               </h2>
-
-              {filteredGapData.length >
-              0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {filteredGapData.map(
-                    (item, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center gap-4 p-3 rounded-xl bg-slate-50"
-                      >
-                        <div className="flex-1">
-                          <p className="text-sm font-bold text-slate-800 mb-2">
-                            {
-                              item.industry
-                            }
-                          </p>
-
-                          <div className="space-y-1.5">
-
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-slate-500 w-16">
-                                تقاضا:
-                              </span>
-
-                              <div className="flex-1 h-1.5 bg-slate-200 rounded-full">
-                                <div
-                                  className="h-full bg-[#1E3A8A] rounded-full"
-                                  style={{
-                                    width: `${Math.min(
-                                      100,
-                                      Math.max(
-                                        0,
-                                        item.demandGrowth *
-                                          2.5
-                                      )
-                                    )}%`,
-                                  }}
-                                />
-                              </div>
-
-                              <span className="text-xs font-bold text-[#1E3A8A]">
-                                +
-                                {
-                                  item.demandGrowth
-                                }
-                                ٪
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-slate-500 w-16">
-                                عرضه:
-                              </span>
-
-                              <div className="flex-1 h-1.5 bg-slate-200 rounded-full">
-                                <div
-                                  className="h-full bg-[#14B8A6] rounded-full"
-                                  style={{
-                                    width: `${Math.min(
-                                      100,
-                                      Math.max(
-                                        0,
-                                        item.supplyCount *
-                                          1.5
-                                      )
-                                    )}%`,
-                                  }}
-                                />
-                              </div>
-
-                              <span className="text-xs font-bold text-[#14B8A6]">
-                                {
-                                  item.supplyCount
-                                }
-                                {' '}
-                                محصول
-                              </span>
-                            </div>
-
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {gapData.map((item, i) => (
+                  <div key={i} className="flex items-center gap-4 p-3 rounded-xl bg-slate-50">
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-slate-800 mb-2">{item.industry}</p>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500 w-16">تقاضا:</span>
+                          <div className="flex-1 h-1.5 bg-slate-200 rounded-full">
+                            <div className="h-full bg-[#1E3A8A] rounded-full" style={{ width: `${item.demandGrowth * 2.5}%` }} />
                           </div>
+                          <span className="text-xs font-bold text-[#1E3A8A]">+{item.demandGrowth}٪</span>
                         </div>
-
-                        {item.gap ===
-                          'شکاف عرضه' && (
-                          <span className="px-2 py-1 rounded-full bg-red-50 text-red-600 text-xs font-medium whitespace-nowrap">
-                            شکاف عرضه
-                          </span>
-                        )}
-
-                        {item.gap ===
-                          'شکاف تقاضا' && (
-                          <span className="px-2 py-1 rounded-full bg-amber-50 text-amber-600 text-xs font-medium whitespace-nowrap">
-                            شکاف تقاضا
-                          </span>
-                        )}
-
-                        {item.gap ===
-                          'متوازن' && (
-                          <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-600 text-xs font-medium whitespace-nowrap">
-                            متوازن
-                          </span>
-                        )}
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500 w-16">عرضه:</span>
+                          <div className="flex-1 h-1.5 bg-slate-200 rounded-full">
+                            <div className="h-full bg-[#14B8A6] rounded-full" style={{ width: `${(item.supplyCount / 65) * 100}%` }} />
+                          </div>
+                          <span className="text-xs font-bold text-[#14B8A6]">{item.supplyCount} محصول</span>
+                        </div>
                       </div>
-                    )
-                  )}
-                </div>
-              ) : (
-                <EmptyState message="داده‌ای برای تحلیل شکاف وجود ندارد" />
-              )}
+                    </div>
+                    {item.demandGrowth > 20 && item.supplyCount < 40 && (
+                      <span className="px-2 py-1 rounded-full bg-red-50 text-red-600 text-xs font-medium">شکاف عرضه</span>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
 
-        {/* ======================================================
-            Smart Recommendation
-        ====================================================== */}
-
+        {/* ===== Smart Recommendation Box ===== */}
         <div className="rounded-2xl border-2 border-[#D4A547] bg-gradient-to-r from-[#D4A54705] to-[#D4A54710] p-6">
           <div className="flex items-start gap-4">
-
-            <div className="p-3 rounded-xl bg-[#D4A547] text-white">
-              <Zap size={24} />
-            </div>
-
+            <div className="p-3 rounded-xl bg-[#D4A547] text-white"><Zap size={24} /></div>
             <div className="flex-1">
-
               <h2 className="text-base font-extrabold text-slate-900 mb-2 flex items-center gap-2">
                 پیشنهاد هوشمند اقدام
-
-                <span className="text-xs font-medium text-[#D4A547] bg-[#D4A54715] px-2 py-0.5 rounded-full">
-                  AI-Powered
-                </span>
+                <span className="text-xs font-medium text-[#D4A547] bg-[#D4A54715] px-2 py-0.5 rounded-full">AI-Powered</span>
               </h2>
-
-              {data?.recommendations &&
-              data.recommendations.length >
-                0 ? (
-                <>
-                  <p className="text-sm text-slate-600 leading-relaxed mb-4">
-                    بر اساس تحلیل داده‌های بازار، بهترین فرصت‌های سرمایه‌گذاری در صنایع زیر شناسایی شده است:
-                  </p>
-
-                  <div className="flex flex-wrap gap-2">
-                    {data.recommendations
-                      .slice(0, 2)
-                      .map((rec, i) => (
-                        <Link
-                          key={i}
-                          href="/needs/register"
-                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] hover:shadow-md transition"
-                        >
-                          <Lightbulb
-                            size={14}
-                          />
-
-                          {rec.action}
-                        </Link>
-                      ))}
-
-                    <button className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-slate-600 border border-slate-200 hover:bg-slate-50 transition">
-                      <Bookmark
-                        size={14}
-                      />
-
-                      ذخیره این تحلیل
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <p className="text-sm text-slate-600 leading-relaxed">
-                  برای دریافت پیشنهادات هوشمند، ابتدا نیازها یا محصولات خود را در پلتفرم ثبت کنید.
-                </p>
-              )}
+              <p className="text-sm text-slate-600 leading-relaxed mb-4">
+                بر اساس تحلیل داده‌های بازار، <strong>صنعت انرژی</strong> با رشد ۳۲٪ تقاضا و شکاف عرضه قابل توجه، بهترین فرصت سرمایه‌گذاری در ۳ ماه آینده است. همچنین فناوری <strong>دوقلوی دیجیتال</strong> با رشد ۴۵٪ جستجوها، حوزه‌ای با رقابت کم و پتانسیل بالا محسوب می‌شود.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Link href="/needs/register" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] hover:shadow-md transition">
+                  <Lightbulb size={14} /> ثبت نیاز در حوزه انرژی
+                </Link>
+                <Link href="/supply/register" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-[#1E3A8A] border border-[#1E3A8A] hover:bg-[#1E3A8A05] transition">
+                  <Package size={14} /> عرضه محصول دوقلوی دیجیتال
+                </Link>
+                <button className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-slate-600 border border-slate-200 hover:bg-slate-50 transition">
+                  <Bookmark size={14} /> ذخیره این تحلیل
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </main>
 
-      {/* ========================================================
-          Footer
-      ======================================================== */}
+      </main>
 
       <footer className="border-t border-slate-200 bg-white py-6 mt-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-xs text-slate-400">
-            مرکز هوشمند تحلیل بازار تحول — داده‌ها بر اساس آخرین فعالیت‌های پلتفرم به‌روزرسانی می‌شوند
-          </p>
+          <p className="text-xs text-slate-400">مرکز هوشمند تحلیل بازار تحول — داده‌ها بر اساس آخرین فعالیت‌های پلتفرم به‌روزرسانی می‌شوند</p>
         </div>
       </footer>
     </div>
