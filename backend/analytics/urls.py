@@ -9,7 +9,8 @@ from .views import (
 
 urlpatterns = [
     path('market-intelligence/', MarketIntelligenceAPIView.as_view(), name='market-intelligence'),
-    path('competitor-analysis/', CompetitorAnalysisAPIView.as_view(), name='competitor-analysis'),
+    
+    path('competitors/', CompetitorAnalysisAPIView.as_view(), name='competitor-analysis'),
     path('dashboard/', DashboardAPIView.as_view(), name='dashboard'),
     path('services/', MarketIntelligenceAPIView.as_view(), name='services'),
 ]
