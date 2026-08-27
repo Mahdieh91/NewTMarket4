@@ -1,23 +1,18 @@
-# users/urls.py
-from django.urls import path
-from rest_framework.routers import DefaultRouter
-from .views import UserViewSet, MeView, RegisterView
+# ============================================================
+# users/views.py (قسمت CaptchaChallengeView)
+# ============================================================
 
-# ============================================================
-# ثبت ViewSetها با DefaultRouter
-# ============================================================
-router = DefaultRouter()
-router.register(r'users', UserViewSet)   # مسیر: /api/users/users/
+class CaptchaChallengeView(APIView):
+    """
+    GET /api/users/captcha/challenge/
+    ایجاد چالش جدید و ذخیره در session
+    """
+    permission_classes = [permissions.AllowAny]
 
-# ============================================================
-# مسیرهای اضافی (غیر از ViewSetها)
-# ============================================================
-urlpatterns = [
-    path('me/', MeView.as_view(), name='me'),              # /api/users/me/
-    path('register/', RegisterView.as_view(), name='register'),  # /api/users/register/
-]
-
-# ============================================================
-# ترکیب مسیرها
-# ============================================================
-urlpatterns += router.urls
+    def get(self, request):
+        # اطمینان از وجود session
+        if not request.session.session_key:
+            request.session.create()
+        session_key = request.session.session_key
+        question = MathCaptcha.create_challenge(session_key)
+        return Response({'question': question})
