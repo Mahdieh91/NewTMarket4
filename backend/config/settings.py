@@ -1,3 +1,6 @@
+# ============================================================
+# settings.py (فایل کامل)
+# ============================================================
 import os
 from pathlib import Path
 from datetime import timedelta
@@ -51,7 +54,7 @@ INSTALLED_APPS = [
 ]
 
 # ============================================================
-# میان‌افزارها (بدون تغییر)
+# میان‌افزارها
 # ============================================================
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -87,18 +90,18 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 
 # ============================================================
-# 🔴 تنظیمات WebSocket (اضافه شد)
+# WebSocket
 # ============================================================
-ASGI_APPLICATION = 'config.asgi.application'  # مسیر فایل asgi.py
+ASGI_APPLICATION = 'config.asgi.application'
 
 CHANNEL_LAYERS = {
     'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer',  # برای توسعه
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
     },
 }
 
 # ============================================================
-# پایگاه داده (بدون تغییر)
+# پایگاه داده
 # ============================================================
 DATABASES = {
     'default': {
@@ -112,12 +115,12 @@ DATABASES = {
 }
 
 # ============================================================
-# مدل کاربر سفارشی (بدون تغییر)
+# مدل کاربر سفارشی
 # ============================================================
 AUTH_USER_MODEL = 'users.User'
 
 # ============================================================
-# REST Framework (بدون تغییر)
+# REST Framework
 # ============================================================
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -143,7 +146,7 @@ SIMPLE_JWT = {
 }
 
 # ============================================================
-# تنظیمات CORS (بدون تغییر)
+# تنظیمات CORS
 # ============================================================
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
@@ -170,7 +173,7 @@ CORS_ALLOW_HEADERS = [
 ]
 
 # ============================================================
-# تنظیمات CSRF (بدون تغییر)
+# تنظیمات CSRF
 # ============================================================
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
@@ -178,7 +181,7 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 # ============================================================
-# 🔴 تنظیمات کوکی برای WebSocket (اضافه شد)
+# تنظیمات کوکی
 # ============================================================
 SESSION_COOKIE_HTTPONLY = False   # اجازه دسترسی به کوکی از جاوااسکریپت
 SESSION_COOKIE_SAMESITE = 'Lax'
@@ -186,7 +189,7 @@ CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SAMESITE = 'Lax'
 
 # ============================================================
-# زبان و زمان (بدون تغییر)
+# زبان و زمان
 # ============================================================
 LANGUAGE_CODE = 'fa-ir'
 TIME_ZONE = 'Asia/Tehran'
@@ -195,7 +198,7 @@ USE_L10N = True
 USE_TZ = True
 
 # ============================================================
-# فایل‌های ایستا و رسانه (بدون تغییر)
+# فایل‌های ایستا و رسانه
 # ============================================================
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
@@ -206,7 +209,7 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # ============================================================
-# CKEditor (بدون تغییر)
+# CKEditor
 # ============================================================
 CKEDITOR_UPLOAD_PATH = 'uploads/'
 CKEDITOR_IMAGE_BACKEND = "pillow"
@@ -220,7 +223,7 @@ CKEDITOR_CONFIGS = {
 }
 
 # ============================================================
-# Crispy Forms (بدون تغییر)
+# Crispy Forms
 # ============================================================
 CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
 CRISPY_TEMPLATE_PACK = "bootstrap5"
@@ -229,7 +232,6 @@ CRISPY_TEMPLATE_PACK = "bootstrap5"
 # ============================================================
 # تنظیمات Celery
 # ============================================================
-
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/1')
 CELERY_ACCEPT_CONTENT = ['application/json']
@@ -237,31 +239,53 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+CELERY_TASK_ALWAYS_EAGER = os.getenv('CELERY_ALWAYS_EAGER', 'False') == 'True'
 
-# اضافه کردن برای نمایش status در API
-CELERY_TASK_ALWAYS_EAGER = os.getenv('CELERY_ALWAYS_EAGER', 'False') == 'True'  # برای تست
 # ============================================================
-# Cache (بدون تغییر)
+# Cache (برای کپچا و سایر موارد)
 # ============================================================
 CACHES = {
     'default': {
-        'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': CELERY_BROKER_URL,
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-        }
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',  # برای توسعه
+        'LOCATION': 'captcha-cache',
     }
 }
 
+# اگر Redis در دسترس است، می‌توانید از تنظیمات زیر استفاده کنید:
+# CACHES = {
+#     'default': {
+#         'BACKEND': 'django_redis.cache.RedisCache',
+#         'LOCATION': CELERY_BROKER_URL,
+#         'OPTIONS': {
+#             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+#         }
+#     }
+# }
+
+
 # ============================================================
-# ابزارهای جانبی (بدون تغییر)
+# تنظیمات Session (برای کپچا)
+# ============================================================
+SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+SESSION_CACHE_ALIAS = 'default'
+SESSION_COOKIE_HTTPONLY = False
+SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SECURE = False  # در تولید True کنید
+
+# مدت زمان اعتبار کپچا (ثانیه)
+CAPTCHA_TIMEOUT = 120
+
+
+# ============================================================
+# ابزارهای جانبی
 # ============================================================
 INTERNAL_IPS = ['127.0.0.1', 'localhost']
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
 
+
 # ============================================================
-# لاگ‌گیری (بدون تغییر)
+# لاگ‌گیری
 # ============================================================
 LOGGING = {
     'version': 1,
@@ -289,8 +313,9 @@ LOGGING = {
     },
 }
 
+
 # ============================================================
-# تنظیمات امنیتی تولید (بدون تغییر)
+# تنظیمات امنیتی تولید
 # ============================================================
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -301,25 +326,17 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = True
 
 
-
-
+# ============================================================
+# تنظیمات OpenRouter (برای LLM)
+# ============================================================
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-
 OPENROUTER_BASE_URL = os.getenv(
     "OPENROUTER_BASE_URL",
     "https://openrouter.ai/api/v1"
 )
-
-# مدل مشخص، نه openrouter/free
 OPENROUTER_MODEL = os.getenv(
     "OPENROUTER_MODEL",
     "openai/gpt-oss-20b:free"
 )
-
-OPENROUTER_MAX_TOKENS = int(
-    os.getenv("OPENROUTER_MAX_TOKENS", "30")
-)
-
-OPENROUTER_TEMPERATURE = float(
-    os.getenv("OPENROUTER_TEMPERATURE", "0.1")
-)
+OPENROUTER_MAX_TOKENS = int(os.getenv("OPENROUTER_MAX_TOKENS", "30"))
+OPENROUTER_TEMPERATURE = float(os.getenv("OPENROUTER_TEMPERATURE", "0.1"))

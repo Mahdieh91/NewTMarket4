@@ -1,4 +1,7 @@
+// ============================================================
 // src/store/auth-store.ts
+// نسخه نهایی - بدون throw و console.error برای خطاهای اعتبارسنجی
+// ============================================================
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
@@ -8,7 +11,6 @@ export interface User {
   email: string;
   first_name: string;
   last_name: string;
-
   role:
     | 'admin'
     | 'buyer'
@@ -17,15 +19,12 @@ export interface User {
     | 'investor'
     | 'broker'
     | 'partner';
-
   phone?: string;
   company_name?: string;
   national_id?: string;
   registration_number?: string;
   economic_code?: string;
-
   documentsStatus?: 'red' | 'yellow' | 'green';
-
   username?: string;
   is_legal?: boolean;
   address?: string;
@@ -39,51 +38,31 @@ export interface User {
 
 interface AuthState {
   user: User | null;
-
   accessToken: string | null;
   refreshToken: string | null;
-
   isLoading: boolean;
   error: string | null;
   isAuthenticated: boolean;
-
-  login: (username: string, password: string) => Promise<void>;
+  login: (
+    username: string,
+    password: string,
+    captcha_answer: string
+  ) => Promise<boolean>; // تغییر: به جای void، boolean برمی‌گرداند
   logout: () => void;
-
   fetchUser: () => Promise<void>;
-
   setUser: (user: User) => void;
-
-  setAuth: (
-    user: User,
-    accessToken: string,
-    refreshToken: string
-  ) => void;
-
+  setAuth: (user: User, accessToken: string, refreshToken: string) => void;
   clearError: () => void;
-
   updateUser: (data: Partial<User>) => void;
 }
 
-/* ============================================================
-   API URL
-============================================================ */
-
 export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  'http://127.0.0.1:8000/api';
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
-/* ============================================================
-   LocalStorage helpers
-============================================================ */
-
-const isBrowser = (): boolean => {
-  return typeof window !== 'undefined';
-};
+const isBrowser = (): boolean => typeof window !== 'undefined';
 
 export const getAccessToken = (): string | null => {
   if (!isBrowser()) return null;
-
   return (
     localStorage.getItem('access_token') ||
     localStorage.getItem('accessToken') ||
@@ -94,7 +73,6 @@ export const getAccessToken = (): string | null => {
 
 export const getRefreshToken = (): string | null => {
   if (!isBrowser()) return null;
-
   return (
     localStorage.getItem('refresh_token') ||
     localStorage.getItem('refreshToken') ||
@@ -102,18 +80,11 @@ export const getRefreshToken = (): string | null => {
   );
 };
 
-const saveTokens = (
-  accessToken: string,
-  refreshToken?: string | null
-): void => {
+const saveTokens = (accessToken: string, refreshToken?: string | null): void => {
   if (!isBrowser()) return;
-
   localStorage.setItem('access_token', accessToken);
-
-  // پاک کردن کلیدهای قدیمی برای جلوگیری از استفاده از توکن اشتباه
   localStorage.removeItem('accessToken');
   localStorage.removeItem('token');
-
   if (refreshToken) {
     localStorage.setItem('refresh_token', refreshToken);
     localStorage.removeItem('refreshToken');
@@ -122,266 +93,123 @@ const saveTokens = (
 
 export const clearStoredAuth = (): void => {
   if (!isBrowser()) return;
-
   localStorage.removeItem('access_token');
   localStorage.removeItem('accessToken');
   localStorage.removeItem('token');
-
   localStorage.removeItem('refresh_token');
   localStorage.removeItem('refreshToken');
-
   localStorage.removeItem('user');
   localStorage.removeItem('user_role');
-
   localStorage.removeItem('rememberedUsername');
 };
-
-/* ============================================================
-   User normalization
-============================================================ */
 
 const normalizeUser = (userData: any): User => {
   const user: User = {
     id: userData?.id ?? 0,
-
     email: userData?.email || '',
-
     first_name: userData?.first_name || '',
-
     last_name: userData?.last_name || '',
-
     role: userData?.role || 'buyer',
-
     phone: userData?.phone || '',
-
     company_name: userData?.company_name || '',
-
     national_id: userData?.national_id || '',
-
     registration_number: userData?.registration_number || '',
-
     economic_code: userData?.economic_code || '',
-
     username: userData?.username || '',
-
     is_legal: Boolean(userData?.is_legal),
-
     address: userData?.address || '',
-
     website: userData?.website || '',
-
     bio: userData?.bio || '',
-
     expertise: userData?.expertise || '',
-
     activity_domain: userData?.activity_domain || '',
-
     experience_summary: userData?.experience_summary || '',
-
     kyc_status: userData?.kyc_status || 'draft',
   };
-
-  if (user.kyc_status === 'approved') {
-    user.documentsStatus = 'green';
-  } else if (user.kyc_status === 'pending') {
-    user.documentsStatus = 'yellow';
-  } else {
-    user.documentsStatus = 'red';
-  }
-
+  if (user.kyc_status === 'approved') user.documentsStatus = 'green';
+  else if (user.kyc_status === 'pending') user.documentsStatus = 'yellow';
+  else user.documentsStatus = 'red';
   return user;
 };
 
-/* ============================================================
-   Refresh access token
-============================================================ */
-
 export const refreshAccessToken = async (): Promise<string | null> => {
   if (!isBrowser()) return null;
-
   const refreshToken = getRefreshToken();
-
-  if (!refreshToken) {
-    return null;
-  }
-
+  if (!refreshToken) return null;
   try {
     const response = await fetch(`${API_URL}/token/refresh/`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        refresh: refreshToken,
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh: refreshToken }),
     });
-
     if (!response.ok) {
-      console.warn(
-        '⚠️ Refresh token failed:',
-        response.status
-      );
-
+      console.warn('⚠️ Refresh token failed:', response.status);
       return null;
     }
-
     const data = await response.json();
-
     const newAccessToken = data?.access;
-
     if (!newAccessToken) {
-      console.warn(
-        '⚠️ Refresh response did not contain access token'
-      );
-
+      console.warn('⚠️ Refresh response did not contain access token');
       return null;
     }
-
-    saveTokens(
-      newAccessToken,
-      data?.refresh || refreshToken
-    );
-
+    saveTokens(newAccessToken, data?.refresh || refreshToken);
     useAuthStore.setState({
       accessToken: newAccessToken,
       refreshToken: data?.refresh || refreshToken,
       isAuthenticated: true,
     });
-
     return newAccessToken;
   } catch (error) {
-    console.error(
-      '❌ Error refreshing access token:',
-      error
-    );
-
+    console.error('❌ Error refreshing access token:', error);
     return null;
   }
 };
-
-/* ============================================================
-   Authenticated fetch
-   ------------------------------------------------------------
-   اگر access token منقضی شده باشد:
-   1. یک بار refresh می‌کند
-   2. درخواست را با token جدید تکرار می‌کند
-
-   توجه:
-   این تابع خودش logout نمی‌کند.
-   تصمیم Logout فقط باید در جایی گرفته شود که واقعاً
-   authentication از بین رفته باشد.
-============================================================ */
 
 export const authenticatedFetch = async (
   input: RequestInfo | URL,
   init: RequestInit = {}
 ): Promise<Response> => {
   let token = getAccessToken();
-
   if (!token) {
     return new Response(
-      JSON.stringify({
-        detail: 'No access token',
-      }),
-      {
-        status: 401,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
+      JSON.stringify({ detail: 'No access token' }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } }
     );
   }
-
-  const makeRequest = async (
-    accessToken: string
-  ): Promise<Response> => {
+  const makeRequest = async (accessToken: string): Promise<Response> => {
     const headers = new Headers(init.headers || {});
-
-    headers.set(
-      'Authorization',
-      `Bearer ${accessToken}`
-    );
-
-    if (
-      !headers.has('Content-Type') &&
-      !(init.body instanceof FormData)
-    ) {
-      headers.set(
-        'Content-Type',
-        'application/json'
-      );
+    headers.set('Authorization', `Bearer ${accessToken}`);
+    if (!headers.has('Content-Type') && !(init.body instanceof FormData)) {
+      headers.set('Content-Type', 'application/json');
     }
-
-    return fetch(input, {
-      ...init,
-      headers,
-    });
+    return fetch(input, { ...init, headers });
   };
-
   let response = await makeRequest(token);
-
-  /*
-   * فقط یک بار تلاش برای Refresh.
-   * این قسمت جلوی Logout اشتباه را می‌گیرد.
-   */
   if (response.status === 401) {
     const newToken = await refreshAccessToken();
-
     if (newToken) {
       token = newToken;
-
       response = await makeRequest(token);
     }
   }
-
   return response;
 };
-
-/* ============================================================
-   Zustand Store
-============================================================ */
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       user: null,
-
       accessToken: null,
-
       refreshToken: null,
-
       isLoading: false,
-
       error: null,
-
       isAuthenticated: false,
 
-      /* ======================================================
-         setAuth
-      ====================================================== */
-
-      setAuth: (
-        user,
-        accessToken,
-        refreshToken
-      ) => {
-        saveTokens(
-          accessToken,
-          refreshToken
-        );
-
+      setAuth: (user, accessToken, refreshToken) => {
+        saveTokens(accessToken, refreshToken);
         if (isBrowser()) {
-          localStorage.setItem(
-            'user',
-            JSON.stringify(user)
-          );
-
-          localStorage.setItem(
-            'user_role',
-            user.role
-          );
+          localStorage.setItem('user', JSON.stringify(user));
+          localStorage.setItem('user_role', user.role);
         }
-
         set({
           user,
           accessToken,
@@ -392,97 +220,98 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
-      /* ======================================================
-         Login
-      ====================================================== */
-
-      login: async (
-        username: string,
-        password: string
-      ) => {
-        set({
-          isLoading: true,
-          error: null,
-        });
+      // ============================================================
+      // login - بدون throw برای خطاهای اعتبارسنجی
+      // ============================================================
+      login: async (username, password, captcha_answer) => {
+        set({ isLoading: true, error: null });
 
         try {
-          const tokenRes = await fetch(
-            `${API_URL}/token/`,
-            {
-              method: 'POST',
+          const tokenRes = await fetch(`${API_URL}/users/token/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ username, password, captcha_answer }),
+          });
 
-              headers: {
-                'Content-Type':
-                  'application/json',
-              },
+          const tokenData = await tokenRes.json().catch(() => ({}));
 
-              body: JSON.stringify({
-                username,
-                password,
-              }),
-            }
-          );
-
-          const tokenData =
-            await tokenRes.json().catch(
-              () => ({})
-            );
-
+          // ============================================================
+          // خطای اعتبارسنجی (400, 401, ...)
+          // ============================================================
           if (!tokenRes.ok) {
-            throw new Error(
-              tokenData?.detail ||
-                tokenData?.message ||
-                'نام کاربری یا رمز عبور اشتباه است.'
-            );
+            let message = 'خطا در ورود به حساب کاربری';
+
+            if (tokenData?.captcha_answer) {
+              message = Array.isArray(tokenData.captcha_answer)
+                ? String(tokenData.captcha_answer[0])
+                : String(tokenData.captcha_answer);
+            } else if (tokenData?.errors?.captcha_answer) {
+              message = Array.isArray(tokenData.errors.captcha_answer)
+                ? String(tokenData.errors.captcha_answer[0])
+                : String(tokenData.errors.captcha_answer);
+            } else if (tokenData?.detail) {
+              message = Array.isArray(tokenData.detail)
+                ? String(tokenData.detail[0])
+                : String(tokenData.detail);
+            } else if (tokenData?.message) {
+              message = Array.isArray(tokenData.message)
+                ? String(tokenData.message[0])
+                : String(tokenData.message);
+            } else if (tokenData?.non_field_errors) {
+              message = Array.isArray(tokenData.non_field_errors)
+                ? String(tokenData.non_field_errors[0])
+                : String(tokenData.non_field_errors);
+            }
+
+            clearStoredAuth();
+
+            set({
+              user: null,
+              accessToken: null,
+              refreshToken: null,
+              isLoading: false,
+              error: message,
+              isAuthenticated: false,
+            });
+
+            return false; // ورود ناموفق
           }
 
-          const access =
-            tokenData?.access;
-
-          const refresh =
-            tokenData?.refresh;
+          // ============================================================
+          // بررسی توکن
+          // ============================================================
+          const access = tokenData?.access;
+          const refresh = tokenData?.refresh;
 
           if (!access || !refresh) {
-            throw new Error(
-              'توکن احراز هویت از سرور دریافت نشد.'
-            );
+            const message = 'توکن احراز هویت از سرور دریافت نشد.';
+            set({
+              user: null,
+              accessToken: null,
+              refreshToken: null,
+              isLoading: false,
+              error: message,
+              isAuthenticated: false,
+            });
+            return false;
           }
 
-          /*
-           * دریافت کاربر
-           */
-
+          // ============================================================
+          // دریافت کاربر
+          // ============================================================
           let user: User;
-
-          const userRes = await fetch(
-            `${API_URL}/users/me/`,
-            {
-              headers: {
-                Authorization:
-                  `Bearer ${access}`,
-
-                'Content-Type':
-                  'application/json',
-              },
-            }
-          );
+          const userRes = await fetch(`${API_URL}/users/me/`, {
+            headers: {
+              Authorization: `Bearer ${access}`,
+              'Content-Type': 'application/json',
+            },
+          });
 
           if (userRes.ok) {
-            const userData =
-              await userRes.json();
-
-            user =
-              normalizeUser(userData);
+            const userData = await userRes.json();
+            user = normalizeUser(userData);
           } else {
-            /*
-             * اگر /me مشکل داشت، login را
-             * به صورت خودکار fail نکن.
-             *
-             * کاربر با اطلاعات پایه ذخیره می‌شود
-             * و بعداً fetchUser می‌تواند آن را
-             * تکمیل کند.
-             */
-
             user = normalizeUser({
               id: 0,
               email: username,
@@ -491,290 +320,137 @@ export const useAuthStore = create<AuthState>()(
             });
           }
 
-          saveTokens(
-            access,
-            refresh
-          );
-
+          // ============================================================
+          // ذخیره احراز هویت
+          // ============================================================
+          saveTokens(access, refresh);
           if (isBrowser()) {
-            localStorage.setItem(
-              'user',
-              JSON.stringify(user)
-            );
-
-            localStorage.setItem(
-              'user_role',
-              user.role
-            );
+            localStorage.setItem('user', JSON.stringify(user));
+            localStorage.setItem('user_role', user.role);
           }
 
           set({
             user,
-
             accessToken: access,
-
             refreshToken: refresh,
-
             isAuthenticated: true,
-
             isLoading: false,
-
             error: null,
           });
+
+          return true; // ورود موفق
+
         } catch (error: any) {
-          console.error(
-            '❌ خطای لاگین:',
-            error
-          );
+          // ============================================================
+          // خطای شبکه یا غیرمنتظره
+          // ============================================================
+          const message =
+            error?.message ||
+            'ارتباط با سرور برقرار نشد. لطفاً دوباره تلاش کنید.';
 
           clearStoredAuth();
 
           set({
             user: null,
-
             accessToken: null,
-
             refreshToken: null,
-
             isLoading: false,
-
-            error:
-              error?.message ||
-              'خطا در ورود به حساب کاربری',
-
+            error: message,
             isAuthenticated: false,
           });
 
-          throw error;
+          return false;
         }
       },
 
-      /* ======================================================
-         Logout
-      ====================================================== */
-
       logout: () => {
         clearStoredAuth();
-
         set({
           user: null,
-
           accessToken: null,
-
           refreshToken: null,
-
           isAuthenticated: false,
-
           isLoading: false,
-
           error: null,
         });
       },
 
-      /* ======================================================
-         fetchUser
-      ====================================================== */
-
       fetchUser: async () => {
         let token = getAccessToken();
-
         if (!token) {
-          set({
-            user: null,
-            isAuthenticated: false,
-            accessToken: null,
-          });
-
+          set({ user: null, isAuthenticated: false, accessToken: null });
           return;
         }
-
         try {
-          let response =
-            await fetch(
-              `${API_URL}/users/me/`,
-              {
-                headers: {
-                  Authorization:
-                    `Bearer ${token}`,
-
-                  'Content-Type':
-                    'application/json',
-                },
-              }
-            );
-
-          /*
-           * اگر access token منقضی شده،
-           * refresh کن و دوباره درخواست بده.
-           */
-
+          let response = await fetch(`${API_URL}/users/me/`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          });
           if (response.status === 401) {
-            const newToken =
-              await refreshAccessToken();
-
+            const newToken = await refreshAccessToken();
             if (!newToken) {
               get().logout();
               return;
             }
-
             token = newToken;
-
-            response =
-              await fetch(
-                `${API_URL}/users/me/`,
-                {
-                  headers: {
-                    Authorization:
-                      `Bearer ${token}`,
-
-                    'Content-Type':
-                      'application/json',
-                  },
-                }
-              );
+            response = await fetch(`${API_URL}/users/me/`, {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            });
           }
-
           if (!response.ok) {
-            /*
-             * فقط اگر بعد از refresh هم 401 بود
-             * session واقعاً معتبر نیست.
-             */
-
-            if (
-              response.status === 401
-            ) {
-              get().logout();
-            }
-
+            if (response.status === 401) get().logout();
             return;
           }
-
-          const userData =
-            await response.json();
-
-          const user =
-            normalizeUser(userData);
-
+          const userData = await response.json();
+          const user = normalizeUser(userData);
           if (isBrowser()) {
-            localStorage.setItem(
-              'user',
-              JSON.stringify(user)
-            );
-
-            localStorage.setItem(
-              'user_role',
-              user.role
-            );
+            localStorage.setItem('user', JSON.stringify(user));
+            localStorage.setItem('user_role', user.role);
           }
-
           set({
             user,
-
             isAuthenticated: true,
-
             accessToken: token,
-
-            refreshToken:
-              getRefreshToken(),
+            refreshToken: getRefreshToken(),
           });
         } catch (error) {
-          console.error(
-            '❌ خطا در دریافت کاربر:',
-            error
-          );
-
-          /*
-           * خطای شبکه نباید باعث Logout شود.
-           */
+          console.error('❌ خطا در دریافت کاربر:', error);
         }
       },
-
-      /* ======================================================
-         setUser
-      ====================================================== */
 
       setUser: (user: User) => {
         if (isBrowser()) {
-          localStorage.setItem(
-            'user',
-            JSON.stringify(user)
-          );
-
-          localStorage.setItem(
-            'user_role',
-            user.role
-          );
+          localStorage.setItem('user', JSON.stringify(user));
+          localStorage.setItem('user_role', user.role);
         }
-
-        set({
-          user,
-
-          isAuthenticated: true,
-        });
+        set({ user, isAuthenticated: true });
       },
 
-      /* ======================================================
-         updateUser
-      ====================================================== */
-
-      updateUser: (
-        data: Partial<User>
-      ) => {
-        const currentUser =
-          get().user;
-
-        if (!currentUser) {
-          return;
-        }
-
-        const updatedUser = {
-          ...currentUser,
-          ...data,
-        };
-
+      updateUser: (data: Partial<User>) => {
+        const currentUser = get().user;
+        if (!currentUser) return;
+        const updatedUser = { ...currentUser, ...data };
         if (isBrowser()) {
-          localStorage.setItem(
-            'user',
-            JSON.stringify(updatedUser)
-          );
-
-          if (updatedUser.role) {
-            localStorage.setItem(
-              'user_role',
-              updatedUser.role
-            );
-          }
+          localStorage.setItem('user', JSON.stringify(updatedUser));
+          if (updatedUser.role) localStorage.setItem('user_role', updatedUser.role);
         }
-
-        set({
-          user: updatedUser,
-        });
+        set({ user: updatedUser });
       },
 
-      /* ======================================================
-         clearError
-      ====================================================== */
-
-      clearError: () =>
-        set({
-          error: null,
-        }),
+      clearError: () => set({ error: null }),
     }),
-
     {
       name: 'auth-storage',
-
       partialize: (state) => ({
         user: state.user,
-
-        accessToken:
-          state.accessToken,
-
-        refreshToken:
-          state.refreshToken,
-
-        isAuthenticated:
-          state.isAuthenticated,
+        accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
+        isAuthenticated: state.isAuthenticated,
       }),
     }
   )
