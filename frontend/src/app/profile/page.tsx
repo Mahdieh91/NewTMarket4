@@ -3,7 +3,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation'; // <-- useSearchParams اضافه شد
 import Image from 'next/image';
 import {
   useAuthStore,
@@ -32,7 +32,7 @@ import {
   Send as SendIcon,
   Maximize2,
   Archive as ArchiveIcon,
-  Zap, // <-- جدید
+  Zap,
 } from 'lucide-react';
 
 // ============================================================
@@ -254,12 +254,19 @@ const FAKE_SUPPLIES: Supply[] = [
 // ============================================================
 export default function ProfilePage() {
   const router = useRouter();
+  const searchParams = useSearchParams(); // <-- جدید
   const { logout, updateUser } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
   const [mounted, setMounted] = useState(false);
+  
+  // ===== خواندن tab از URL و تنظیم اولیه =====
+  const initialTab = searchParams?.get('tab') || 'profile';
+  const validTabs = ['profile', 'messages', 'wallet', 'myNeeds', 'myProducts'];
+  const defaultTab = validTabs.includes(initialTab) ? initialTab : 'profile';
   const [activeTab, setActiveTab] = useState<
     'profile' | 'messages' | 'wallet' | 'myNeeds' | 'myProducts'
-  >('profile');
+  >(defaultTab as any);
+
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -359,7 +366,6 @@ export default function ProfilePage() {
         profileData = await profileRes.json();
       }
 
-      // ---- ادغام داده‌های واقعی با فیک ----
       const mergedProfile = { ...FAKE_PROFILE, ...profileData };
       setProfile(mergedProfile);
       setFormData(mergedProfile);
@@ -751,7 +757,6 @@ function ProfileTab({
     { key: 'expertise', label: 'تخصص', type: 'text' },
   ];
 
-  // اگر فیلد خالی بود، از FAKE_PROFILE استفاده کن
   const getValue = (key: string) => {
     const val = profile?.[key];
     return val || FAKE_PROFILE[key as keyof UserProfile] || '-';
@@ -845,7 +850,7 @@ function ProfileTab({
 }
 
 // ============================================================
-// Messages Tab
+// Messages Tab (بدون تغییر)
 // ============================================================
 function MessagesTab({
   messages,
@@ -1067,6 +1072,7 @@ function MessagesTab({
       const success = await onMarkAsRead(msg.id);
       if (success) {
         setSelectedMessage({ ...msg, is_read: true });
+        // @ts-ignore
         setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, is_read: true } : m)));
       }
     }
@@ -1637,7 +1643,7 @@ function MessagesTab({
 }
 
 // ============================================================
-// Wallet Tab
+// Wallet Tab (بدون تغییر)
 // ============================================================
 function WalletTab({ wallet, loading }: { wallet: WalletData | null; loading: boolean }) {
   const [showBalance, setShowBalance] = useState(true);
@@ -1760,7 +1766,7 @@ function WalletTab({ wallet, loading }: { wallet: WalletData | null; loading: bo
 }
 
 // ============================================================
-// My Needs Tab - با دکمه تطبیق هوشمند
+// My Needs Tab (بدون تغییر در منطق انتخاب نیاز، فقط نمایش)
 // ============================================================
 function MyNeedsTab({ needs, loading }: { needs: Need[]; loading: boolean }) {
   const router = useRouter();
@@ -1870,7 +1876,7 @@ function MyNeedsTab({ needs, loading }: { needs: Need[]; loading: boolean }) {
                   </span>
                 </div>
 
-                {/* ✅ دکمه تطبیق هوشمند */}
+                {/* دکمه تطبیق هوشمند - مستقیماً به صفحه تطبیق با همان نیاز می‌رود */}
                 <button
                   onClick={() => router.push(`/matching/${need.id}`)}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] hover:shadow-lg text-white text-xs font-bold rounded-xl transition-all duration-200"
@@ -1888,7 +1894,7 @@ function MyNeedsTab({ needs, loading }: { needs: Need[]; loading: boolean }) {
 }
 
 // ============================================================
-// My Products Tab
+// My Products Tab (بدون تغییر)
 // ============================================================
 function MyProductsTab({ supplies, loading }: { supplies: Supply[]; loading: boolean }) {
   const statusMap: Record<string, { label: string; color: string }> = {

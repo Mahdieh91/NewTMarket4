@@ -11,6 +11,7 @@ import {
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation'; // <-- اضافه شده
 
 import {
   Activity,
@@ -28,6 +29,7 @@ import {
   Target,
   TrendingUp,
   Zap,
+  X, // <-- برای دکمه بستن مودال
 } from 'lucide-react';
 
 import {
@@ -225,6 +227,8 @@ function normalizeDashboardData(
 
 export default function DashboardPage() {
 
+  const router = useRouter(); // <-- برای هدایت به پروفایل
+
   const user =
     useAuthStore((state) => state.user);
 
@@ -278,6 +282,13 @@ export default function DashboardPage() {
   ] = useState('');
 
 
+  // ===== جدید: وضعیت مودال تطبیق هوشمند =====
+  const [
+    showMatchModal,
+    setShowMatchModal,
+  ] = useState(false);
+
+
   // ==========================================================
   // Mount
   // ==========================================================
@@ -329,10 +340,6 @@ export default function DashboardPage() {
           const apiBaseUrl =
             getApiBaseUrl();
 
-
-          // ======================================================
-          // ✅ اصلاح: مسیر صحیح داشبورد
-          // ======================================================
 
           const endpoint =
             `${apiBaseUrl}/analytics/dashboard/`;
@@ -500,10 +507,6 @@ export default function DashboardPage() {
   // ==========================================================
   // Smart Intelligence
   // ==========================================================
-  //
-  // این قسمت فقط از داده واقعی موجود در Dashboard استفاده
-  // می‌کند و عدد یا امتیاز جعلی تولید نمی‌کند.
-  //
 
   const intelligence =
     useMemo(() => {
@@ -1202,10 +1205,12 @@ export default function DashboardPage() {
               icon: Lightbulb,
             },
 
+            // ===== دکمه تطبیق هوشمند (تغییر داده شده) =====
             {
               label: 'تطبیق هوشمند',
-              href: '/matching',
               icon: Target,
+              isButton: true, // مشخص می‌کند که دکمه است نه لینک
+              onClick: () => setShowMatchModal(true),
             },
 
             {
@@ -1222,25 +1227,37 @@ export default function DashboardPage() {
               const Icon =
                 item.icon;
 
-              return (
+              // اگر دکمه باشد
+              if (item.isButton) {
+                return (
+                  <button
+                    key={index}
+                    onClick={item.onClick}
+                    className="p-4 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 transition group text-right"
+                  >
+                    <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center shadow-sm mb-3">
+                      <Icon className="w-5 h-5 text-[#1E3A8A]" />
+                    </div>
+                    <span className="text-sm font-bold text-slate-700 group-hover:text-[#1E3A8A]">
+                      {item.label}
+                    </span>
+                  </button>
+                );
+              }
 
+              // در غیر این صورت لینک معمولی
+              return (
                 <Link
                   key={index}
-                  href={item.href}
+                  href={item.href!}
                   className="p-4 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 transition group"
                 >
-
                   <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center shadow-sm mb-3">
-
                     <Icon className="w-5 h-5 text-[#1E3A8A]" />
-
                   </div>
-
-
                   <span className="text-sm font-bold text-slate-700 group-hover:text-[#1E3A8A]">
                     {item.label}
                   </span>
-
                 </Link>
               );
             },
@@ -1712,6 +1729,64 @@ export default function DashboardPage() {
         </div>
 
       </div>
+
+
+      {/* ======================================================
+          مودال تطبیق هوشمند
+          ====================================================== */}
+
+      {showMatchModal && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setShowMatchModal(false)}
+        >
+          <div
+            className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowMatchModal(false)}
+              className="absolute top-4 left-4 p-2 rounded-full hover:bg-slate-100 transition text-slate-500"
+            >
+              <X size={24} />
+            </button>
+
+            <div className="text-center mt-4">
+              <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-[#1E3A8A] to-[#14B8A6] flex items-center justify-center mb-4">
+                <Target className="w-8 h-8 text-white" />
+              </div>
+
+              <h3 className="text-xl font-black text-slate-800 mb-2">
+                انتخاب نیاز برای تطبیق هوشمند
+              </h3>
+
+              <p className="text-sm text-slate-500 leading-7">
+                برای استفاده از تطبیق هوشمند، ابتدا یکی از نیازهای ثبت‌شده خود را انتخاب کنید.
+                <br />
+                سپس می‌توانید بهترین شرکا و محصولات مرتبط را پیدا کنید.
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowMatchModal(false);
+                    router.push('/profile?tab=myNeeds');
+                  }}
+                  className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] text-white font-bold hover:shadow-lg transition"
+                >
+                  رفتن به لیست نیازها
+                </button>
+                <button
+                  onClick={() => setShowMatchModal(false)}
+                  className="flex-1 py-3 px-4 rounded-xl bg-slate-100 text-slate-600 font-bold hover:bg-slate-200 transition"
+                >
+                  لغو
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
