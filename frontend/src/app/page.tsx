@@ -1,18 +1,40 @@
 // src/app/page.tsx
 'use client';
 
-import { useEffect, useState, useRef, Suspense } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
-  ShoppingBag, Wrench, Package, Settings, Lightbulb, TrendingUp,
-  Users, Scale, Building2, Sparkles, Zap, Star, Shield,
-  BarChart3, Target, Rocket, ArrowLeft, Play, ChevronLeft, X,
+  ShoppingBag,
+  Wrench,
+  Package,
+  Settings,
+  Lightbulb,
+  TrendingUp,
+  Sparkles,
+  Zap,
+  Star,
+  Shield,
+  BarChart3,
+  Target,
+  Rocket,
+  ArrowLeft,
+  Play,
+  ChevronLeft,
+  X,
+  Briefcase,
+  FileText,
+  Lock,
+  HeartHandshake,
+  TrendingUp as TrendingUpIcon,
+  GraduationCap,
 } from 'lucide-react';
 
 const BRAND = { primary: '#1E3A8A', secondary: '#14B8A6' };
 
-// ==================== کامپوننت پس‌زمینه ذرات (با Error Boundary داخلی) ====================
+// ============================================================
+// ParticleCanvas
+// ============================================================
 const ParticleCanvas = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState(false);
@@ -101,7 +123,9 @@ const ParticleCanvas = () => {
   return <canvas ref={canvasRef} className="fixed inset-0 z-0 pointer-events-none" />;
 };
 
-// ==================== مکعب چرخان (با Error Boundary) ====================
+// ============================================================
+// RotatingCube
+// ============================================================
 const RotatingCube = () => {
   const cubeRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -148,7 +172,6 @@ const RotatingCube = () => {
   }, [error]);
 
   if (error) {
-    // Fallback: نمایش یک لوگوی ساده
     return (
       <div className="w-52 h-52 mx-auto flex items-center justify-center rounded-2xl bg-white/90 backdrop-blur-sm border-2 border-[#1E3A8A] shadow-2xl">
         {!logoError ? (
@@ -202,7 +225,9 @@ const RotatingCube = () => {
               style={{
                 transform: rotations[i],
                 borderColor: isLogo ? '#1E3A8A' : (face as any).color,
-                boxShadow: isLogo ? '0 0 30px rgba(30,58,138,0.5)' : `0 0 30px ${(face as any).color}50`,
+                boxShadow: isLogo
+                  ? '0 0 30px rgba(30,58,138,0.5)'
+                  : `0 0 30px ${(face as any).color}50`,
               }}
             >
               {isLogo ? (
@@ -229,7 +254,9 @@ const RotatingCube = () => {
   );
 };
 
-// ==================== تایپ هدلاین ====================
+// ============================================================
+// TypingHeadline
+// ============================================================
 const rotatingWords = ['محصولات', 'خدمات', 'راهکارها', 'نوآوری‌ها'];
 const TypingHeadline = () => {
   const [wordIndex, setWordIndex] = useState(0);
@@ -264,7 +291,9 @@ const TypingHeadline = () => {
   );
 };
 
-// ==================== کانتر متحرک ====================
+// ============================================================
+// AnimatedCounter
+// ============================================================
 const AnimatedCounter = ({ target, suffix }: { target: number; suffix: string }) => {
   const [count, setCount] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
@@ -300,12 +329,15 @@ const AnimatedCounter = ({ target, suffix }: { target: number; suffix: string })
 
   return (
     <div ref={ref} className="text-3xl sm:text-4xl font-black bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] bg-clip-text text-transparent">
-      {count.toLocaleString()}{suffix}
+      {count.toLocaleString()}
+      {suffix}
     </div>
   );
 };
 
-// ==================== کارت‌های نقش ====================
+// ============================================================
+// TiltCard
+// ============================================================
 const TiltCard = ({ role, index }: { role: any; index: number }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -386,7 +418,116 @@ const TiltCard = ({ role, index }: { role: any; index: number }) => {
   );
 };
 
-// ==================== صفحه اصلی ====================
+// ============================================================
+// ServicesSection
+// ============================================================
+const ServicesSection = () => {
+  const services = [
+    {
+      title: 'دارایی نامشهود',
+      icon: Briefcase,
+      items: [
+        'تشخیص هوشمند',
+        'ارزیابی کمی و ارزش‌گذاری کیفی', // ترکیب شده
+        'صدور گواهی دیجیتال ', // مشاوره در آخر
+      'مشاوره تخصصی',
+      ],
+    },
+    {
+      title: 'خدمات حقوقی',
+      icon: FileText,
+      items: [
+        'ثبت مالکیت فکری',
+        'مدیریت ادعا',
+        'داوری اختلافات',
+        'مشاوره حقوقی', // مشاوره در آخر
+      ],
+    },
+    {
+      title: 'امنیت فنی',
+      icon: Lock,
+      items: [
+        'مشاوره امنیت فنی',
+        'مشاوره فنی مجوزها', // هر دو مشاوره هستند
+      ],
+    },
+    {
+      title: 'بیمه',
+      icon: HeartHandshake,
+      items: [
+        'صدور بیمه‌نامه',
+        'تدوین گزارش ریسک',
+        'مشاوره تخصصی', // مشاوره در آخر
+      ],
+    },
+    {
+      title: 'تجاری‌سازی',
+      icon: TrendingUpIcon,
+      items: [
+        'تحلیل بازار و رقبا',
+        'قیمت‌گذاری', // جدا
+        'برندسازی و صادرات', // ترکیب برندسازی و صادرات
+      'مشاوره تخصصی',
+      ],
+    },
+    {
+      title: 'توانمندسازی',
+      icon: GraduationCap,
+      items: [
+        'پرورش مدیر IA',
+        'پرورش ممیز IA',
+        'پرورش منتور IA',
+        'پرورش پارادیپلمات فناوری',
+      ],
+    },
+  ];
+
+  return (
+    <section className="relative z-20 bg-gradient-to-br from-[#1E3A8A08] to-[#14B8A608] py-20">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl sm:text-4xl font-black text-slate-900 mb-4">
+            خدمات بازار تحول
+          </h2>
+          <p className="text-lg text-slate-500 max-w-2xl mx-auto">
+            مجموعه‌ای از خدمات تخصصی برای پشتیبانی از مسیر فناوری، نوآوری و
+            دارایی‌های نامشهود
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {services.map((service, index) => (
+            <div
+              key={index}
+              className="group rounded-2xl bg-white/80 backdrop-blur-sm border border-slate-200/60 p-6 hover:shadow-2xl hover:-translate-y-1 transition-all duration-500"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#1E3A8A15] to-[#14B8A615] flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                  <service.icon className="w-6 h-6 text-[#1E3A8A] group-hover:text-[#14B8A6] transition-colors" />
+                </div>
+                <h3 className="text-lg font-extrabold text-slate-900">
+                  {service.title}
+                </h3>
+              </div>
+              <ul className="space-y-2 pr-2">
+                {service.items.map((item, idx) => (
+                  <li key={idx} className="text-sm text-slate-600 flex items-start gap-2">
+                    <span className="text-[#14B8A6] text-lg leading-none">•</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+// ============================================================
+// صفحه اصلی
+// ============================================================
 export default function HomePage() {
   const [mounted, setMounted] = useState(false);
   const [logoError, setLogoError] = useState(false);
@@ -402,7 +543,6 @@ export default function HomePage() {
     }
   }, []);
 
-  // اگر خطای mount رخ داده باشد
   if (renderError) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-white p-4">
@@ -433,16 +573,46 @@ export default function HomePage() {
     );
   }
 
+  // ===== نقش‌ها (۶ نقش) =====
   const roles = [
-    { id: 'buyer_product', label: 'خریدار محصول فناورانه', desc: 'جستجو و خرید محصولات فناورانه', icon: ShoppingBag, popular: true },
-    { id: 'buyer_service', label: 'خریدار خدمت نوآورانه', desc: 'جستجو و خرید خدمات تخصصی', icon: Wrench },
-    { id: 'supplier_product', label: 'عرضه‌کننده محصول', desc: 'ثبت و عرضه محصولات فناورانه', icon: Package, popular: true },
-    { id: 'supplier_service', label: 'عرضه‌کننده خدمت', desc: 'ارائه خدمات تخصصی و مشاوره‌ای', icon: Settings },
-    { id: 'need_registerer', label: 'ثبت‌کننده نیاز فناورانه', desc: 'اعلام نیازها و چالش‌های فناورانه', icon: Lightbulb },
-    { id: 'investor', label: 'سرمایه‌گذار', desc: 'سرمایه‌گذاری در طرح‌های نوآورانه', icon: TrendingUp },
-    { id: 'consultant', label: 'مشاور / ارزیاب', desc: 'ارائه خدمات مشاوره و ارزیابی', icon: Users },
-    { id: 'broker', label: 'کارگزار / کارشناس رسمی', desc: 'تسهیل‌گری و ارزش‌گذاری', icon: Scale },
-    { id: 'partner', label: 'سازمان همکار', desc: 'همکاری نهادی و سازمانی', icon: Building2 },
+    {
+      id: 'buyer_product',
+      label: 'خریدار محصول فناورانه',
+      desc: 'جستجو و خرید محصولات فناورانه',
+      icon: ShoppingBag,
+      popular: true,
+    },
+    {
+      id: 'buyer_service',
+      label: 'خریدار خدمت نوآورانه',
+      desc: 'جستجو و خرید خدمات تخصصی',
+      icon: Wrench,
+    },
+    {
+      id: 'supplier_product',
+      label: 'عرضه‌کننده محصول',
+      desc: 'ثبت و عرضه محصولات فناورانه',
+      icon: Package,
+      popular: true,
+    },
+    {
+      id: 'supplier_service',
+      label: 'عرضه‌کننده خدمت',
+      desc: 'ارائه خدمات تخصصی و مشاوره‌ای',
+      icon: Settings,
+    },
+    {
+      id: 'need_registerer',
+      label: 'ثبت‌کننده نیاز فناورانه',
+      desc: 'اعلام نیازها و چالش‌های فناورانه',
+      icon: Lightbulb,
+    },
+    {
+      id: 'investor',
+      label: 'تامین مالی',
+      desc: 'تامین مالی و سرمایه‌گذاری در طرح‌های نوآورانه',
+      icon: TrendingUp,
+    },
   ];
 
   const stats = [
@@ -453,19 +623,39 @@ export default function HomePage() {
   ];
 
   const features = [
-    { icon: Target, title: 'تطبیق هوشمند', desc: 'اتصال دقیق نیازها به راهکارهای فناورانه با هوش مصنوعی' },
-    { icon: Shield, title: 'اعتبارسنجی حرفه‌ای', desc: 'احراز هویت و ارزیابی تخصصی تمام طرفین معامله' },
-    { icon: BarChart3, title: 'تحلیل بازار', desc: 'داده‌کاوی روندها، فرصت‌ها و شکاف‌های بازار فناوری' },
-    { icon: Rocket, title: 'اجرای پروژه', desc: 'مدیریت کامل از مذاکره تا تحویل و پشتیبانی' },
+    {
+      icon: Target,
+      title: 'تطبیق هوشمند',
+      desc: 'اتصال دقیق نیازها به راهکارهای فناورانه با هوش مصنوعی',
+    },
+    {
+      icon: Shield,
+      title: 'اعتبارسنجی حرفه‌ای',
+      desc: 'احراز هویت و ارزیابی تخصصی تمام طرفین معامله',
+    },
+    {
+      icon: BarChart3,
+      title: 'تحلیل بازار',
+      desc: 'داده‌کاوی روندها، فرصت‌ها و شکاف‌های بازار فناوری',
+    },
+    {
+      icon: Rocket,
+      title: 'اجرای پروژه',
+      desc: 'مدیریت کامل از مذاکره تا تحویل و پشتیبانی',
+    },
   ];
 
+  const videoSrc = '/videos/intro.mp4';
 
-  const videoSrc = "/videos/intro.mp4"; // ویدئوی نمونه – 
   return (
-    <div className="min-h-screen relative" style={{ fontFamily: "'Vazir', 'Vazirmatn', Tahoma, sans-serif" }} dir="rtl">
+    <div
+      className="min-h-screen relative"
+      style={{ fontFamily: "'Vazir', 'Vazirmatn', Tahoma, sans-serif" }}
+      dir="rtl"
+    >
       <ParticleCanvas />
 
-      {/* بخش Hero */}
+      {/* ===== HERO ===== */}
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-[#1E3A8A15] via-transparent to-[#14B8A615] z-10" />
         <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
@@ -485,28 +675,28 @@ export default function HomePage() {
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#1E3A8A20] to-[#14B8A620] border border-[#14B8A650] text-sm font-medium text-[#1E3A8A] mb-8 backdrop-blur-sm">
             <Zap className="w-4 h-4 text-[#14B8A6]" />
             بازار هوشمند فناوری، نوآوری و دارایی‌های نامشهود
-
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-900 leading-tight mb-6">
-            بازار هوشمند{' '}
-            <TypingHeadline />
+            بازار هوشمند <TypingHeadline />
             <br />
-            <span className="text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-700">فناوری، نوآوری و دارایی‌های نامشهود
-
-</span>
+            <span className="text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-700">
+              فناوری، نوآوری و دارایی‌های نامشهود
+            </span>
           </h1>
 
           <p className="mt-6 text-lg sm:text-xl text-slate-600 leading-relaxed max-w-2xl mx-auto">
-            پلتفرم جامع اتصال خریداران، عرضه‌کنندگان، سرمایه‌گذاران و مشاوران فناوری.
-            از ثبت نیاز تا اجرای پروژه، همه در یک اکوسیستم هوشمند.
+            پلتفرم جامع اتصال خریداران، عرضه‌کنندگان، سرمایه‌گذاران و مشاوران
+            فناوری. از ثبت نیاز تا اجرای پروژه، همه در یک اکوسیستم هوشمند.
           </p>
 
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
               href="/register"
               className="group relative w-full sm:w-auto px-8 py-4 rounded-2xl text-base font-bold text-white shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden"
-              style={{ background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})` }}
+              style={{
+                background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})`,
+              }}
             >
               <span className="relative z-10">شروع کنید — رایگان ثبت‌نام کنید</span>
               <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity duration-300" />
@@ -522,7 +712,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Modal ویدئو */}
         {showVideo && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
@@ -539,12 +728,11 @@ export default function HomePage() {
                 <X size={24} />
               </button>
               <div className="aspect-video bg-slate-900 flex items-center justify-center">
-                {/* ویدئوی واقعی */}
                 <video
                   controls
                   autoPlay
                   className="w-full h-full object-cover"
-                  poster="/video-poster.png" // می‌توانید یک تصویر شاخص برای ویدئو قرار دهید
+                  poster="/video-poster.png"
                 >
                   <source src={videoSrc} type="video/mp4" />
                   مرورگر شما از پخش ویدئو پشتیبانی نمی‌کند.
@@ -555,7 +743,7 @@ export default function HomePage() {
         )}
       </section>
 
-      {/* بخش آمار */}
+      {/* ===== آمار ===== */}
       <section className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-16 pb-20">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {stats.map((stat, i) => (
@@ -570,11 +758,15 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* بخش نقش‌ها */}
+      {/* ===== نقش‌ها ===== */}
       <section className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
         <div className="text-center mb-12">
-          <h2 className="text-3xl sm:text-4xl font-black text-slate-900 mb-4">با چه نقشی وارد می‌شوید؟</h2>
-          <p className="text-lg text-slate-500 max-w-xl mx-auto">نقش خود را انتخاب کنید و وارد اکوسیستم هوشمند بازار شوید</p>
+          <h2 className="text-3xl sm:text-4xl font-black text-slate-900 mb-4">
+            با چه نقشی وارد می‌شوید؟
+          </h2>
+          <p className="text-lg text-slate-500 max-w-xl mx-auto">
+            نقش خود را انتخاب کنید و وارد اکوسیستم هوشمند بازار شوید
+          </p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {roles.map((role, i) => (
@@ -583,12 +775,20 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* بخش ویژگی‌ها */}
+      {/* ===== خدمات بازار تحول ===== */}
+      <ServicesSection />
+
+      {/* ===== ویژگی‌ها ===== */}
       <section className="relative z-20 bg-gradient-to-br from-[#1E3A8A08] to-[#14B8A608] py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <h2 className="text-3xl sm:text-4xl font-black text-slate-900 mb-4">چرا بازار هوشمند فناوری و نوآوری؟</h2>
-            <p className="text-lg text-slate-500 max-w-2xl mx-auto">پلتفرمی فراتر از یک بازار ساده؛ اکوسیستم کامل مدیریت فناوری و نوآوری</p>
+            <h2 className="text-3xl sm:text-4xl font-black text-slate-900 mb-4">
+              چرا بازار هوشمند فناوری و نوآوری؟
+            </h2>
+            <p className="text-lg text-slate-500 max-w-2xl mx-auto">
+              پلتفرمی فراتر از یک بازار ساده؛ اکوسیستم کامل مدیریت فناوری و
+              نوآوری
+            </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {features.map((feature, i) => (
@@ -599,7 +799,9 @@ export default function HomePage() {
                 <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-[#1E3A8A15] to-[#14B8A615] flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
                   <feature.icon className="w-8 h-8 text-[#1E3A8A] group-hover:text-[#14B8A6] transition-colors" />
                 </div>
-                <h3 className="text-lg font-extrabold text-slate-900 mb-2">{feature.title}</h3>
+                <h3 className="text-lg font-extrabold text-slate-900 mb-2">
+                  {feature.title}
+                </h3>
                 <p className="text-sm text-slate-500 leading-6">{feature.desc}</p>
               </div>
             ))}
@@ -607,7 +809,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* CTA */}
+      {/* ===== CTA ===== */}
       <section className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#1E3A8A] via-[#1E3A8A] to-[#14B8A6] p-8 sm:p-12 text-center text-white shadow-2xl">
           <div className="absolute inset-0 opacity-20">
@@ -619,9 +821,12 @@ export default function HomePage() {
               <Star className="w-4 h-4 text-[#F59E0B]" fill="#F59E0B" />
               فرصت محدود: ثبت‌نام رایگان تا پایان ماه
             </div>
-            <h2 className="text-3xl sm:text-4xl font-black mb-4">آماده ورود به بازار فناوری و نوآوری هستید؟</h2>
+            <h2 className="text-3xl sm:text-4xl font-black mb-4">
+              آماده ورود به بازار فناوری و نوآوری هستید؟
+            </h2>
             <p className="text-white/80 text-lg mb-8 max-w-2xl mx-auto">
-              همین حالا ثبت‌نام کنید و محصولات، نیازها و فرصت‌های همکاری خود را در بزرگترین بازار هوشمند فناوری ایران مدیریت کنید.
+              همین حالا ثبت‌نام کنید و محصولات، نیازها و فرصت‌های همکاری خود را
+              در بزرگترین بازار هوشمند فناوری ایران مدیریت کنید.
             </p>
             <Link
               href="/register"
@@ -634,7 +839,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* فوتر */}
+      {/* ===== فوتر ===== */}
       <footer className="relative z-20 border-t border-slate-200 bg-white py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <div className="flex items-center justify-center gap-2 mb-4">
@@ -657,20 +862,35 @@ export default function HomePage() {
                 </div>
               </div>
             )}
-            <span className="text-lg font-black text-slate-900">بازار هوشمند فناوری و نوآوری</span>
+            <span className="text-lg font-black text-slate-900">
+              بازار هوشمند فناوری و نوآوری
+            </span>
           </div>
-          <p className="text-sm text-slate-500">پلتفرم هوشمند مدیریت تعاملات فناورانه — نسخه ۱.۰</p>
+          <p className="text-sm text-slate-500">
+            پلتفرم هوشمند مدیریت تعاملات فناورانه — نسخه ۱.۰
+          </p>
         </div>
       </footer>
 
       <style jsx global>{`
-        .perspective-1000 { perspective: 1000px; }
-        .transform-style-3d { transform-style: preserve-3d; }
-        @keyframes pulse-slow {
-          0%, 100% { opacity: 0.5; }
-          50% { opacity: 0.8; }
+        .perspective-1000 {
+          perspective: 1000px;
         }
-        .animate-pulse-slow { animation: pulse-slow 3s ease-in-out infinite; }
+        .transform-style-3d {
+          transform-style: preserve-3d;
+        }
+        @keyframes pulse-slow {
+          0%,
+          100% {
+            opacity: 0.5;
+          }
+          50% {
+            opacity: 0.8;
+          }
+        }
+        .animate-pulse-slow {
+          animation: pulse-slow 3s ease-in-out infinite;
+        }
       `}</style>
     </div>
   );
