@@ -272,6 +272,8 @@ function supplyToProduct(
 // ==================== Main Component ====================
 
 export default function MarketplacePage() {
+  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+
   const [mounted, setMounted] =
     useState(false);
 
@@ -381,7 +383,7 @@ export default function MarketplacePage() {
   // ==================== Load Supplies ====================
 
   useEffect(() => {
-    if (!mounted || !accessToken) {
+    if (!mounted || !accessToken || !isAuthenticated) {
       return;
     }
 
@@ -475,6 +477,7 @@ export default function MarketplacePage() {
   }, [
     mounted,
     accessToken,
+    isAuthenticated,
   ]);
 
   // ==================== Toast ====================
@@ -1029,9 +1032,33 @@ export default function MarketplacePage() {
     selectedRisk !== 'all',
   ].filter(Boolean).length;
 
+  // ==================== نمایش پیام ورود ====================
+
+  if (!authLoading && !isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-white p-4" dir="rtl">
+        <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center">
+          <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] flex items-center justify-center shadow-lg">
+            <ShoppingCart className="w-10 h-10 text-white" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">لطفاً وارد شوید</h2>
+          <p className="text-slate-500 text-sm mb-6">
+            برای مشاهده و خرید محصولات و خدمات، باید وارد حساب کاربری خود شوید.
+          </p>
+          <Link
+            href="/login?next=/market"
+            className="inline-flex items-center justify-center w-full py-3 px-6 rounded-xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] text-white font-bold shadow-lg hover:shadow-xl transition"
+          >
+            ورود به حساب کاربری
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   // ==================== Loading ====================
 
-  if (!mounted) {
+  if (!mounted || authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-white">
         <div className="text-center">
@@ -1046,6 +1073,8 @@ export default function MarketplacePage() {
       </div>
     );
   }
+
+  // ==================== Render ====================
 
   return (
     <div
@@ -1618,150 +1647,70 @@ export default function MarketplacePage() {
               </div>
             </div>
 
-            {/* Mobile Filters */}
-
+            {/* Mobile Filters - اصلاح شده */}
             {showFilters && (
               <div className="lg:hidden mb-4 rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-
                 <div className="flex items-center justify-between">
-
-                  <h3 className="text-sm font-extrabold text-slate-900">
-                    فیلترها
-                  </h3>
-
-                  {activeFilterCount >
-                    0 && (
-                    <button
-                      onClick={
-                        clearAllFilters
-                      }
-                      className="text-xs text-red-500 font-medium"
-                    >
+                  <h3 className="text-sm font-extrabold text-slate-900">فیلترها</h3>
+                  {activeFilterCount > 0 && (
+                    <button onClick={clearAllFilters} className="text-xs text-red-500 font-medium">
                       حذف همه
                     </button>
                   )}
-
                 </div>
-
                 <div className="grid grid-cols-2 gap-2">
-
                   <input
                     type="text"
                     value={searchQuery}
-                    onChange={(e) =>
-                      setSearchQuery(
-                        e.target.value
-                      )
-                    }
+                    onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="جستجو..."
                     className="col-span-2 px-3 py-2 rounded-xl border border-slate-200 text-xs outline-none"
                   />
-
                   <select
-                    value={
-                      selectedCategory
-                    }
-                    onChange={(e) =>
-                      setSelectedCategory(
-                        e.target.value as any
-                      )
-                    }
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value as any)}
                     className="px-2 py-2 rounded-xl border border-slate-200 text-xs outline-none"
                   >
-                    <option value="all">
-                      نوع: همه
-                    </option>
-
-                    <option value="product">
-                      محصول
-                    </option>
-
-                    <option value="service">
-                      خدمت
-                    </option>
+                    <option value="all">نوع: همه</option>
+                    <option value="product">محصول</option>
+                    <option value="service">خدمت</option>
                   </select>
-
                   <select
-                    value={
-                      selectedIndustry
-                    }
-                    onChange={(e) =>
-                      setSelectedIndustry(
-                        e.target.value
-                      )
-                    }
+                    value={selectedIndustry}
+                    onChange={(e) => setSelectedIndustry(e.target.value)}
                     className="px-2 py-2 rounded-xl border border-slate-200 text-xs outline-none"
                   >
-                    <option value="all">
-                      صنعت: همه
-                    </option>
-
-                    {industries.map(
-                      (ind) => (
-                        <option
-                          key={ind}
-                          value={ind}
-                        >
-                          {ind}
-                        </option>
-                      )
-                    )}
+                    <option value="all">صنعت: همه</option>
+                    {industries.map((ind) => (
+                      <option key={ind} value={ind}>
+                        {ind}
+                      </option>
+                    ))}
                   </select>
-
                   <select
-                    value={
-                      selectedTechnology
-                    }
-                    onChange={(e) =>
-                      setSelectedTechnology(
-                        e.target.value
-                      )
-                    }
+                    value={selectedTechnology}
+                    onChange={(e) => setSelectedTechnology(e.target.value)}
                     className="px-2 py-2 rounded-xl border border-slate-200 text-xs outline-none"
                   >
-                    <option value="all">
-                      فناوری: همه
-                    </option>
-
-                    {technologies.map(
-                      (tech) => (
-                        <option
-                          key={tech}
-                          value={tech}
-                        >
-                          {tech}
-                        </option>
-                      )
-                    )}
+                    <option value="all">فناوری: همه</option>
+                    {technologies.map((tech) => (
+                      <option key={tech} value={tech}>
+                        {tech}
+                      </option>
+                    ))}
                   </select>
-
                   <select
-                    value={
-                      selectedProvince
-                    }
-                    onChange={(e) =>
-                      setSelectedProvince(
-                        e.target.value
-                      )
-                    }
+                    value={selectedProvince}
+                    onChange={(e) => setSelectedProvince(e.target.value)}
                     className="px-2 py-2 rounded-xl border border-slate-200 text-xs outline-none"
                   >
-                    <option value="all">
-                      استان: همه
-                    </option>
-
-                    {provinces.map(
-                      (prov) => (
-                        <option
-                          key={prov}
-                          value={prov}
-                        >
-                          {prov}
-                        </option>
-                      )
-                    )}
+                    <option value="all">استان: همه</option>
+                    {provinces.map((prov) => (
+                      <option key={prov} value={prov}>
+                        {prov}
+                      </option>
+                    ))}
                   </select>
-
                 </div>
               </div>
             )}

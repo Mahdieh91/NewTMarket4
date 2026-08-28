@@ -1,5 +1,5 @@
 // src/app/execution/page.tsx
-// نسخه اصلاح شده - استفاده از داده‌های یکپارچه Execution
+// نسخه اصلاح شده - با بررسی صحیح احراز هویت قبل از بارگذاری داده‌ها
 
 'use client';
 
@@ -22,6 +22,7 @@ import {
 import {
   API_URL,
   authenticatedFetch,
+  useAuthStore,
 } from '@/store/auth-store';
 
 // ============================================================
@@ -165,6 +166,8 @@ function formatDate(value: string | null | undefined): string {
 // ============================================================
 
 export default function ExecutionListPage() {
+  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+
   const [items, setItems] = useState<Execution[]>([]);
   const [filter, setFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
@@ -172,6 +175,12 @@ export default function ExecutionListPage() {
   const [error, setError] = useState<string | null>(null);
 
   const loadExecutions = useCallback(async (isRefresh = false) => {
+    // اگر احراز هویت نشده، بارگذاری نکن
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
+
     try {
       if (isRefresh) {
         setRefreshing(true);
@@ -180,7 +189,6 @@ export default function ExecutionListPage() {
       }
       setError(null);
 
-      // فقط یک درخواست به /api/execution/
       const response = await authenticatedFetch(`${API_URL}/execution/`);
 
       if (!response.ok) {
@@ -203,17 +211,75 @@ export default function ExecutionListPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [isAuthenticated]);
 
+  // بارگذاری داده‌ها فقط زمانی که احراز هویت کامل شده و کاربر وارد شده باشد
   useEffect(() => {
-    loadExecutions();
-  }, [loadExecutions]);
+    if (!authLoading && isAuthenticated) {
+      loadExecutions();
+    } else if (!authLoading && !isAuthenticated) {
+      setLoading(false);
+    }
+  }, [authLoading, isAuthenticated, loadExecutions]);
 
   const filteredExecutions = useMemo(() => {
     if (filter === 'all') return items;
     return items.filter((execution) => execution.status === filter);
   }, [items, filter]);
 
+  // ============================================================
+  // نمایش پیام ورود در صورت عدم احراز هویت
+  // ============================================================
+  if (!authLoading && !isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-white p-4" dir="rtl">
+        <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center">
+          <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] flex items-center justify-center shadow-lg">
+            <Package className="w-10 h-10 text-white" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">لطفاً وارد شوید</h2>
+          <p className="text-slate-500 text-sm mb-6">
+            برای مشاهده پروژه‌های در حال اجرا، باید وارد حساب کاربری خود شوید.
+          </p>
+          <Link
+            href="/login?next=/execution"
+            className="inline-flex items-center justify-center w-full py-3 px-6 rounded-xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] text-white font-bold shadow-lg hover:shadow-xl transition"
+          >
+            ورود به حساب کاربری
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // ============================================================
+  // نمایش لودینگ
+  // ============================================================
+  if (authLoading || loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white p-4 md:p-6" dir="rtl">
+        <div className="max-w-5xl mx-auto space-y-4">
+          {[1, 2, 3].map((item) => (
+            <div key={item} className="bg-white rounded-2xl border border-slate-200 p-6 animate-pulse">
+              <div className="flex gap-4">
+                <div className="w-12 h-12 rounded-xl bg-slate-200" />
+                <div className="flex-1">
+                  <div className="h-4 bg-slate-200 rounded w-2/3" />
+                  <div className="h-3 bg-slate-100 rounded w-1/3 mt-3" />
+                  <div className="h-3 bg-slate-100 rounded w-1/2 mt-3" />
+                </div>
+              </div>
+              <div className="h-2 bg-slate-100 rounded-full mt-5" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ============================================================
+  // نمایش خطا یا محتوای اصلی
+  // ============================================================
   return (
     <div
       className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#f0fdfa]"
@@ -222,9 +288,6 @@ export default function ExecutionListPage() {
       }}
       dir="rtl"
     >
-      {/* Navbar */}
-
-
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Filters */}
         <div className="flex flex-wrap gap-2 mb-6">
@@ -242,25 +305,7 @@ export default function ExecutionListPage() {
           ))}
         </div>
 
-        {/* Loading */}
-        {loading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map((item) => (
-              <div key={item} className="bg-white rounded-2xl border border-slate-200 p-6 animate-pulse">
-                <div className="flex gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-slate-200" />
-                  <div className="flex-1">
-                    <div className="h-4 bg-slate-200 rounded w-2/3" />
-                    <div className="h-3 bg-slate-100 rounded w-1/3 mt-3" />
-                    <div className="h-3 bg-slate-100 rounded w-1/2 mt-3" />
-                  </div>
-                </div>
-                <div className="h-2 bg-slate-100 rounded-full mt-5" />
-              </div>
-            ))}
-          </div>
-        ) : error ? (
-          // Error
+        {error ? (
           <div className="bg-white border border-red-200 rounded-2xl p-8 text-center">
             <AlertTriangle size={42} className="mx-auto text-red-400 mb-4" />
             <h2 className="text-base font-extrabold text-slate-800 mb-2">دریافت اطلاعات ناموفق بود</h2>
@@ -274,7 +319,6 @@ export default function ExecutionListPage() {
             </button>
           </div>
         ) : filteredExecutions.length === 0 ? (
-          // Empty
           <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center">
             <Package size={48} className="mx-auto text-slate-300 mb-4" />
             <p className="text-slate-500">
@@ -282,7 +326,6 @@ export default function ExecutionListPage() {
             </p>
           </div>
         ) : (
-          // List
           <div className="space-y-4">
             {filteredExecutions.map((execution) => {
               const progress = Math.min(100, Math.max(0, normalizeNumber(execution.progress_percent)));
@@ -352,7 +395,6 @@ export default function ExecutionListPage() {
                     </div>
                   </div>
 
-                  {/* Progress Bar */}
                   <div className="mt-4 w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all ${

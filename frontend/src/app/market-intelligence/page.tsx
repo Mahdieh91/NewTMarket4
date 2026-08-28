@@ -1,5 +1,5 @@
 // analytics/page.tsx
-// نسخه نهایی با قابلیت انتخاب محصول توسط کاربر
+// نسخه نهایی با قابلیت انتخاب محصول توسط کاربر + بررسی احراز هویت
 
 'use client';
 
@@ -52,7 +52,7 @@ import {
   Bar,
 } from 'recharts';
 
-import { authenticatedFetch } from '@/store/auth-store';
+import { authenticatedFetch, useAuthStore } from '@/store/auth-store';
 
 // ============================================================
 // Constants
@@ -70,7 +70,7 @@ const COLORS = [
 ];
 
 // ============================================================
-// Types
+// Types (بدون تغییر)
 // ============================================================
 
 interface TrendPoint {
@@ -315,7 +315,7 @@ interface MarketIntelligenceData {
 }
 
 // ============================================================
-// API Helpers
+// API Helpers (بدون تغییر)
 // ============================================================
 
 function getApiBaseUrl(): string {
@@ -379,7 +379,7 @@ async function extractApiError(response: Response): Promise<string> {
 }
 
 // ============================================================
-// Normalize Market Intelligence
+// Normalize Market Intelligence (بدون تغییر)
 // ============================================================
 
 function normalizeMarketIntelligence(raw: any): MarketIntelligenceData {
@@ -574,7 +574,7 @@ function normalizeMarketIntelligence(raw: any): MarketIntelligenceData {
 }
 
 // ============================================================
-// Competitor Card Component
+// Competitor Card Component (بدون تغییر)
 // ============================================================
 
 const CompetitorCard = ({ competitor, isTop }: { competitor: CompetitorFromAPI; isTop: boolean }) => {
@@ -690,7 +690,7 @@ const CompetitorCard = ({ competitor, isTop }: { competitor: CompetitorFromAPI; 
 };
 
 // ============================================================
-// Empty State
+// Empty State (بدون تغییر)
 // ============================================================
 
 const EmptyState = ({ message, subMessage }: { message: string; subMessage?: string }) => (
@@ -708,6 +708,8 @@ const EmptyState = ({ message, subMessage }: { message: string; subMessage?: str
 // ============================================================
 
 export default function MarketIntelligencePage() {
+  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -735,6 +737,12 @@ export default function MarketIntelligencePage() {
   // ==========================================================
 
   const fetchCompetitorData = useCallback(async (productId: number | null = null) => {
+    // اگر احراز هویت نشده، بارگذاری نکن
+    if (!isAuthenticated) {
+      setCompetitorLoading(false);
+      return;
+    }
+
     setCompetitorLoading(true);
     setCompetitorError(null);
 
@@ -797,7 +805,7 @@ export default function MarketIntelligencePage() {
     } finally {
       setCompetitorLoading(false);
     }
-  }, [selectedIndustry, selectedTech]);
+  }, [selectedIndustry, selectedTech, isAuthenticated]);
 
   // ==========================================================
   // Fetch Market Data
@@ -805,6 +813,13 @@ export default function MarketIntelligencePage() {
 
   const fetchMarketData = useCallback(
     async (showLoading = true) => {
+      // اگر احراز هویت نشده، بارگذاری نکن
+      if (!isAuthenticated) {
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+
       if (showLoading) {
         setLoading(true);
       } else {
@@ -930,7 +945,7 @@ export default function MarketIntelligencePage() {
         setRefreshing(false);
       }
     },
-    [selectedIndustry, selectedRegion, selectedTech, selectedTimeRange, selectedProductId, fetchCompetitorData]
+    [selectedIndustry, selectedRegion, selectedTech, selectedTimeRange, selectedProductId, fetchCompetitorData, isAuthenticated]
   );
 
   // ==========================================================
@@ -943,15 +958,19 @@ export default function MarketIntelligencePage() {
 
   useEffect(() => {
     if (!mounted) return;
-    fetchMarketData(true);
-  }, [mounted]);
+    if (!authLoading && isAuthenticated) {
+      fetchMarketData(true);
+    } else if (!authLoading && !isAuthenticated) {
+      setLoading(false);
+    }
+  }, [mounted, authLoading, isAuthenticated, fetchMarketData]);
 
   // ==========================================================
   // Refetch when filters change
   // ==========================================================
 
   useEffect(() => {
-    if (!mounted || loading) return;
+    if (!mounted || loading || authLoading || !isAuthenticated) return;
     fetchMarketData(false);
   }, [selectedIndustry, selectedRegion, selectedTech, selectedTimeRange]);
 
@@ -1058,10 +1077,35 @@ export default function MarketIntelligencePage() {
   };
 
   // ==========================================================
+  // نمایش پیام ورود در صورت عدم احراز هویت
+  // ==========================================================
+  if (!authLoading && !isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-white p-4" dir="rtl">
+        <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center">
+          <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] flex items-center justify-center shadow-lg">
+            <BarChart3 className="w-10 h-10 text-white" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">لطفاً وارد شوید</h2>
+          <p className="text-slate-500 text-sm mb-6">
+            برای مشاهده تحلیل بازار، باید وارد حساب کاربری خود شوید.
+          </p>
+          <Link
+            href="/login?next=/analytics"
+            className="inline-flex items-center justify-center w-full py-3 px-6 rounded-xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] text-white font-bold shadow-lg hover:shadow-xl transition"
+          >
+            ورود به حساب کاربری
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================================
   // Loading / Error
   // ==========================================================
 
-  if (!mounted || loading) {
+  if (!mounted || authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-white">
         <div className="text-center">
@@ -1101,7 +1145,7 @@ export default function MarketIntelligencePage() {
   }
 
   // ==========================================================
-  // Render
+  // Render (بدون تغییر)
   // ==========================================================
 
   return (

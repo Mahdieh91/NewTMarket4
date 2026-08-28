@@ -1,6 +1,6 @@
 # ============================================================
 # users/views.py
-# کلیه Viewهای مربوط به کاربران + CAPTCHA
+# کلیه Viewهای مربوط به کاربران + CAPTCHA + بررسی approval_status
 # ============================================================
 
 import logging
@@ -60,7 +60,6 @@ class CaptchaChallengeView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
-        # اطمینان از وجود session
         if not request.session.session_key:
             request.session.create()
         session_key = request.session.session_key
@@ -70,10 +69,14 @@ class CaptchaChallengeView(APIView):
         })
 
 
+# ============================================================
+# سریالایزر توکن با کپچا و بررسی تأیید ادمین
+# ============================================================
 class CaptchaTokenObtainPairSerializer(TokenObtainPairSerializer):
     """
-    سریالایزر توکن با اعتبارسنجی کپچا
+    سریالایزر توکن با اعتبارسنجی کپچا و تأیید ادمین
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['captcha_answer'] = serializers.CharField(
@@ -84,27 +87,53 @@ class CaptchaTokenObtainPairSerializer(TokenObtainPairSerializer):
 
     def validate(self, attrs):
         request = self.context.get('request')
+
+        # ۱. بررسی Session کپچا
         if not request or not request.session.session_key:
             raise serializers.ValidationError(
                 {"captcha_answer": "نشست معتبر برای کپچا وجود ندارد."}
             )
 
         session_key = request.session.session_key
-        captcha_answer = attrs.get('captcha_answer')
+        captcha_answer = attrs.pop('captcha_answer', '')
 
+        # ۲. بررسی CAPTCHA
         if not MathCaptcha.verify(session_key, captcha_answer):
             raise serializers.ValidationError(
                 {"captcha_answer": "پاسخ کپچا اشتباه است. لطفاً دوباره تلاش کنید."}
             )
 
-        # حذف captcha_answer از attrs قبل از ارسال به والد
-        attrs.pop('captcha_answer')
-        return super().validate(attrs)
+        # ۳. احراز هویت معمولی (بررسی username/password)
+        data = super().validate(attrs)
+        user = self.user
+
+        # ۴. بررسی تأیید ادمین (جدید)
+        if user.approval_status == 'pending':
+            raise serializers.ValidationError({
+                "code": "pending_approval",
+                "detail": (
+                    "ثبت‌نام شما با موفقیت انجام شده است، "
+                    "اما هنوز توسط مدیر سامانه تأیید نشده است. "
+                    "پس از تأیید مدیر، می‌توانید وارد سامانه شوید."
+                )
+            })
+
+        if user.approval_status == 'rejected':
+            raise serializers.ValidationError({
+                "code": "rejected_approval",
+                "detail": (
+                    "ثبت‌نام شما توسط مدیر سامانه تأیید نشده است. "
+                    "لطفاً با پشتیبانی تماس بگیرید."
+                )
+            })
+
+        # ۵. فقط کاربران با approval_status='approved' اجازه دریافت JWT دارند
+        return data
 
 
 class CaptchaTokenObtainPairView(TokenObtainPairView):
     """
     POST /api/users/token/
-    دریافت توکن با اعتبارسنجی کپچا
+    دریافت توکن با اعتبارسنجی کپچا و تأیید ادمین
     """
     serializer_class = CaptchaTokenObtainPairSerializer

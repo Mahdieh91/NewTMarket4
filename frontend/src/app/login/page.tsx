@@ -412,7 +412,7 @@ export default function LoginPage() {
             <div className="h-px flex-1 bg-slate-200" />
           </div>
           <Link
-            href="/register"
+            href="/signup"   // ← تغییر: به جای /register
             className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-[#1E3A8A] py-3 text-sm font-black text-[#1E3A8A] transition hover:bg-blue-50"
           >
             <UserPlus size={18} />

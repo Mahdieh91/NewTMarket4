@@ -692,7 +692,7 @@ export default function HomePage() {
 
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
-              href="/register"
+              href="/signup"
               className="group relative w-full sm:w-auto px-8 py-4 rounded-2xl text-base font-bold text-white shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden"
               style={{
                 background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.secondary})`,
@@ -829,7 +829,7 @@ export default function HomePage() {
               در بزرگترین بازار هوشمند فناوری ایران مدیریت کنید.
             </p>
             <Link
-              href="/register"
+              href="/signup"
               className="group inline-flex items-center gap-2 px-8 py-4 rounded-2xl bg-white text-[#1E3A8A] font-bold text-base shadow-2xl hover:scale-105 transition-all duration-300"
             >
               شروع ثبت‌نام رایگان

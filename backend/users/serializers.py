@@ -1,26 +1,25 @@
-# users/serializers.py
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from .models import User
 
 # ============================================================
-# سریالایزر کاربر (برای نمایش/ویرایش)
+# UserSerializer (با فیلد approval_status)
 # ============================================================
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = (
             'id', 'username', 'email', 'role', 'phone', 'kyc_status',
+            'approval_status',   # <--- اضافه شد
             'company_name', 'expertise', 'address', 'website',
             'first_name', 'last_name', 'national_id', 'is_legal',
-            # bio در مدل وجود ندارد – به جای آن experience_summary و سایر فیلدهای واقعی
             'experience_summary', 'activity_domain', 'registration_number',
             'economic_code', 'representative_name'
         )
         extra_kwargs = {'password': {'write_only': True}}
 
 # ============================================================
-# سریالایزر ثبت‌نام (با تأیید رمز عبور)
+# RegisterSerializer (با مقداردهی approval_status='pending')
 # ============================================================
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
@@ -65,11 +64,12 @@ class RegisterSerializer(serializers.ModelSerializer):
             expertise=validated_data.get('expertise', ''),
             activity_domain=validated_data.get('activity_domain', ''),
             experience_summary=validated_data.get('experience_summary', ''),
+            approval_status='pending',   # <--- اضافه شد
         )
         return user
 
 # ============================================================
-# کلاس UserBasicSerializer (برای نمایش خلاصه کاربر)
+# UserBasicSerializer (بدون تغییر)
 # ============================================================
 class UserBasicSerializer(serializers.ModelSerializer):
     class Meta:
