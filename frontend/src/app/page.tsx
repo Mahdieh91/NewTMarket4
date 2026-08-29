@@ -496,29 +496,50 @@ const ServicesSection = () => {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {services.map((service, index) => (
-            <div
-              key={index}
-              className="group rounded-2xl bg-white/80 backdrop-blur-sm border border-slate-200/60 p-6 hover:shadow-2xl hover:-translate-y-1 transition-all duration-500"
-            >
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#1E3A8A15] to-[#14B8A615] flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                  <service.icon className="w-6 h-6 text-[#1E3A8A] group-hover:text-[#14B8A6] transition-colors" />
+          {services.map((service, index) => {
+            // اگر عنوان "دارایی نامشهود" باشد، کل کارت را لینک‌دار می‌کنیم
+            const isIntangible = service.title === 'دارایی نامشهود';
+            const cardContent = (
+              <div
+                className="group rounded-2xl bg-white/80 backdrop-blur-sm border border-slate-200/60 p-6 hover:shadow-2xl hover:-translate-y-1 transition-all duration-500 h-full"
+              >
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#1E3A8A15] to-[#14B8A615] flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                    <service.icon className="w-6 h-6 text-[#1E3A8A] group-hover:text-[#14B8A6] transition-colors" />
+                  </div>
+                  <h3 className="text-lg font-extrabold text-slate-900">
+                    {service.title}
+                  </h3>
                 </div>
-                <h3 className="text-lg font-extrabold text-slate-900">
-                  {service.title}
-                </h3>
+                <ul className="space-y-2 pr-2">
+                  {service.items.map((item, idx) => (
+                    <li key={idx} className="text-sm text-slate-600 flex items-start gap-2">
+                      <span className="text-[#14B8A6] text-lg leading-none">•</span>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <ul className="space-y-2 pr-2">
-                {service.items.map((item, idx) => (
-                  <li key={idx} className="text-sm text-slate-600 flex items-start gap-2">
-                    <span className="text-[#14B8A6] text-lg leading-none">•</span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+            );
+
+            if (isIntangible) {
+              return (
+                <Link
+                  key={index}
+                  href="/discoverywizard"
+                  className="block"
+                >
+                  {cardContent}
+                </Link>
+              );
+            }
+
+            return (
+              <div key={index}>
+                {cardContent}
+              </div>
+            );
+          })}
         </div>
       </div>
     </section>

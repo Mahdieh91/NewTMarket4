@@ -285,6 +285,15 @@ export default function MatchingPage() {
   useEffect(() => {
     setMounted(true);
 
+    // ===== تغییر جدید: ریست کردن لیست مقایسه هنگام ورود به صفحه =====
+    try {
+      localStorage.removeItem('compareList');
+      setCompareList([]); // ← خالی کردن state نیز
+    } catch (storageError) {
+      console.error('❌ خطا در ریست compareList:', storageError);
+    }
+    // ================================================================
+
     try {
       const savedFavorites =
         localStorage.getItem(
@@ -305,24 +314,7 @@ export default function MatchingPage() {
         }
       }
 
-      const savedCompare =
-        localStorage.getItem(
-          'compareList'
-        );
-
-      if (savedCompare) {
-        const parsed =
-          JSON.parse(savedCompare);
-
-        if (Array.isArray(parsed)) {
-          setCompareList(
-            parsed.filter(
-              (item): item is number =>
-                Number.isInteger(item)
-            )
-          );
-        }
-      }
+      // دیگر نیازی به خواندن savedCompare نیست چون آن را پاک کرده‌ایم
     } catch (storageError) {
       console.error(
         '❌ خطا در خواندن اطلاعات ذخیره‌شده Matching:',

@@ -1,3 +1,4 @@
+// src/app/negotiation/[id]/page.tsx
 'use client';
 
 import React, {
@@ -285,7 +286,7 @@ export default function NegotiationPage() {
 
   /*
    * ---------------------------------------------------------
-   * Real WebSocket
+   * Real WebSocket با مدیریت lifecycle و جلوگیری از خطاهای ناخواسته
    * ---------------------------------------------------------
    */
 
@@ -330,9 +331,18 @@ export default function NegotiationPage() {
       wsUrl
     );
 
+    // پرچم برای جلوگیری از پردازش رویدادهای بعد از unmount
+    let cancelled = false;
 
-    const socket =
-      new WebSocket(
+    // مرجع Socket را درون useEffect نگه می‌داریم
+    let socket: WebSocket | null = null;
+
+
+    const connectWebSocket = () => {
+
+      if (cancelled) return;
+
+      socket = new WebSocket(
         wsUrl,
         [
           'jwt',
@@ -341,216 +351,241 @@ export default function NegotiationPage() {
       );
 
 
-    wsRef.current = socket;
+      socket.onopen = () => {
+
+        if (cancelled) return;
+
+        console.log(
+          '✅ WebSocket connected'
+        );
+
+        setWsConnected(true);
+      };
 
 
-    socket.onopen = () => {
+      socket.onmessage = (
+        event
+      ) => {
 
-      console.log(
-        '✅ WebSocket connected'
-      );
+        if (cancelled) return;
 
-      setWsConnected(true);
-    };
+        try {
 
-
-    socket.onmessage = (
-      event
-    ) => {
-
-      try {
-
-        const data =
-          JSON.parse(
-            event.data
-          );
+          const data =
+            JSON.parse(
+              event.data
+            );
 
 
-        /*
-         * پیام واقعی که از DB آمده
-         */
+          /*
+           * پیام واقعی که از DB آمده
+           */
 
-        if (
-          data.type === 'message'
-        ) {
+          if (
+            data.type === 'message'
+          ) {
 
-          const incoming:
-            NegotiationMessage = {
-            id: data.id,
-            negotiation:
-              data.negotiation_id,
-            sender:
-              data.sender_id,
-            sender_name:
-              data.sender_name || '',
-            text:
-              data.text || '',
-            file:
-              data.file || null,
-            file_name:
-              data.file_name || null,
-            read_at:
-              data.read_at || null,
-            parent:
-              data.parent || null,
-            timestamp:
-              data.timestamp,
-          };
+            const incoming:
+              NegotiationMessage = {
+              id: data.id,
+              negotiation:
+                data.negotiation_id,
+              sender:
+                data.sender_id,
+              sender_name:
+                data.sender_name || '',
+              text:
+                data.text || '',
+              file:
+                data.file || null,
+              file_name:
+                data.file_name || null,
+              read_at:
+                data.read_at || null,
+              parent:
+                data.parent || null,
+              timestamp:
+                data.timestamp,
+            };
 
 
-          setMessages(
-            previous => {
+            setMessages(
+              previous => {
 
-              /*
-               * جلوگیری از duplicate
-               * مخصوصاً در reconnect
-               */
+                /*
+                 * جلوگیری از duplicate
+                 * مخصوصاً در reconnect
+                 */
 
-              if (
-                previous.some(
-                  message =>
-                    message.id ===
-                    incoming.id
-                )
-              ) {
+                if (
+                  previous.some(
+                    message =>
+                      message.id ===
+                      incoming.id
+                  )
+                ) {
 
-                return previous;
+                  return previous;
+                }
+
+
+                return [
+                  ...previous,
+                  incoming,
+                ].sort(
+                  (a, b) =>
+                    new Date(
+                      a.timestamp
+                    ).getTime()
+                    -
+                    new Date(
+                      b.timestamp
+                    ).getTime()
+                );
               }
+            );
 
 
-              return [
-                ...previous,
-                incoming,
-              ].sort(
-                (a, b) =>
-                  new Date(
-                    a.timestamp
-                  ).getTime()
-                  -
-                  new Date(
-                    b.timestamp
-                  ).getTime()
-              );
-            }
-          );
+            setNegotiation(
+              previous => {
 
+                if (!previous) {
+                  return previous;
+                }
 
-          setNegotiation(
-            previous => {
-
-              if (!previous) {
-                return previous;
+                return {
+                  ...previous,
+                  status:
+                    previous.status ===
+                    'created'
+                      ? 'in_progress'
+                      : previous.status,
+                  updated_at:
+                    incoming.timestamp,
+                };
               }
+            );
 
-              return {
-                ...previous,
-                status:
-                  previous.status ===
-                  'created'
-                    ? 'in_progress'
-                    : previous.status,
-                updated_at:
-                  incoming.timestamp,
-              };
-            }
-          );
-
-          return;
-        }
+            return;
+          }
 
 
-        /*
-         * تغییر وضعیت واقعی مذاکره
-         */
+          /*
+           * تغییر وضعیت واقعی مذاکره
+           */
 
-        if (
-          data.type ===
-          'status_updated'
-        ) {
+          if (
+            data.type ===
+            'status_updated'
+          ) {
 
-          setNegotiation(
-            previous => {
+            setNegotiation(
+              previous => {
 
-              if (!previous) {
-                return previous;
+                if (!previous) {
+                  return previous;
+                }
+
+                return {
+                  ...previous,
+                  status:
+                    data.status,
+                  is_active:
+                    ![
+                      'rejected',
+                      'contracted',
+                    ].includes(
+                      data.status
+                    ),
+                  updated_at:
+                    new Date().toISOString(),
+                };
               }
+            );
 
-              return {
-                ...previous,
-                status:
-                  data.status,
-                is_active:
-                  ![
-                    'rejected',
-                    'contracted',
-                  ].includes(
-                    data.status
-                  ),
-                updated_at:
-                  new Date().toISOString(),
-              };
-            }
-          );
-
-          return;
-        }
+            return;
+          }
 
 
-        if (
-          data.type === 'error'
-        ) {
+          if (
+            data.type === 'error'
+          ) {
+
+            console.error(
+              '❌ WebSocket error from server:',
+              data.error
+            );
+
+            setError(
+              data.error ||
+              'خطا در ارتباط WebSocket'
+            );
+          }
+
+        } catch (error) {
 
           console.error(
-            '❌ WebSocket error:',
-            data.error
-          );
-
-          setError(
-            data.error ||
-            'خطا در ارتباط WebSocket'
+            '❌ Invalid WebSocket message:',
+            error
           );
         }
+      };
 
-      } catch (error) {
+
+      socket.onerror = (
+        error
+      ) => {
+
+        // اگر component unmount شده یا cancelled=true باشد، این خطا را نادیده می‌گیریم
+        if (cancelled) return;
 
         console.error(
-          '❌ Invalid WebSocket message:',
+          '❌ WebSocket error:',
           error
         );
-      }
+
+        setWsConnected(false);
+      };
+
+
+      socket.onclose = (
+        event
+      ) => {
+
+        if (cancelled) return;
+
+        console.log(
+          '🔌 WebSocket closed:',
+          event.code,
+          event.reason || '<empty string>'
+        );
+
+        setWsConnected(false);
+      };
     };
 
 
-    socket.onerror = (
-      error
-    ) => {
-
-      console.error(
-        '❌ WebSocket error:',
-        error
-      );
-
-      setWsConnected(false);
-    };
+    connectWebSocket();
 
 
-    socket.onclose = (
-      event
-    ) => {
-
-      console.log(
-        '🔌 WebSocket closed:',
-        event.code,
-        event.reason
-      );
-
-      setWsConnected(false);
-    };
+    // ذخیره socket در ref برای استفاده در ارسال پیام
+    wsRef.current = socket;
 
 
     return () => {
 
-      socket.close();
+      cancelled = true;
+
+      if (
+        socket &&
+        (
+          socket.readyState === WebSocket.OPEN ||
+          socket.readyState === WebSocket.CONNECTING
+        )
+      ) {
+
+        socket.close();
+      }
 
       wsRef.current = null;
     };

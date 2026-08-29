@@ -3,7 +3,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation'; // <-- useSearchParams اضافه شد
+import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import {
   useAuthStore,
@@ -33,6 +33,11 @@ import {
   Maximize2,
   Archive as ArchiveIcon,
   Zap,
+  MessageCircle,
+  LayoutDashboard,
+  LogOut,
+  Settings,
+  ChevronLeft,
 } from 'lucide-react';
 
 // ============================================================
@@ -100,8 +105,24 @@ type Supply = {
   price: string;
 };
 
+type Negotiation = {
+  id: number;
+  supply: number;
+  supply_title: string;
+  buyer: number;
+  buyer_name: string;
+  supplier: number;
+  supplier_name: string;
+  status: string;
+  context_title: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  messages?: any[];
+};
+
 // ============================================================
-// داده‌های فیک کامل
+// Fake Data
 // ============================================================
 const FAKE_PROFILE: UserProfile = {
   id: 1,
@@ -249,22 +270,66 @@ const FAKE_SUPPLIES: Supply[] = [
   },
 ];
 
+const FAKE_NEGOTIATIONS: Negotiation[] = [
+  {
+    id: 1,
+    supply: 1,
+    supply_title: 'سیستم مدیریت محتوای پیشرفته',
+    buyer: 2,
+    buyer_name: 'رضا احمدی',
+    supplier: 1,
+    supplier_name: 'علی محمدی',
+    status: 'in_progress',
+    context_title: 'مذاکره برای CMS',
+    is_active: true,
+    created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+    updated_at: new Date(Date.now() - 86400000 * 1).toISOString(),
+  },
+  {
+    id: 2,
+    supply: 2,
+    supply_title: 'خدمات طراحی UI/UX حرفه‌ای',
+    buyer: 1,
+    buyer_name: 'علی محمدی',
+    supplier: 3,
+    supplier_name: 'سارا کریمی',
+    status: 'accepted',
+    context_title: 'طراحی اپلیکیشن موبایل',
+    is_active: false,
+    created_at: new Date(Date.now() - 86400000 * 15).toISOString(),
+    updated_at: new Date(Date.now() - 86400000 * 10).toISOString(),
+  },
+  {
+    id: 3,
+    supply: 3,
+    supply_title: 'سامانه هوشمند مدیریت انبار',
+    buyer: 4,
+    buyer_name: 'محسن قاسمی',
+    supplier: 1,
+    supplier_name: 'علی محمدی',
+    status: 'contracted',
+    context_title: 'قرارداد انبارداری',
+    is_active: false,
+    created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
+    updated_at: new Date(Date.now() - 86400000 * 25).toISOString(),
+  },
+];
+
 // ============================================================
-// Main Component
+// Main Component (با سایدبار حرفه‌ای در سمت راست)
 // ============================================================
 export default function ProfilePage() {
   const router = useRouter();
-  const searchParams = useSearchParams(); // <-- جدید
+  const searchParams = useSearchParams();
   const { logout, updateUser } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
   const [mounted, setMounted] = useState(false);
-  
-  // ===== خواندن tab از URL و تنظیم اولیه =====
+
   const initialTab = searchParams?.get('tab') || 'profile';
-  const validTabs = ['profile', 'messages', 'wallet', 'myNeeds', 'myProducts'];
+  const validTabs = ['profile', 'messages', 'wallet', 'myNeeds', 'myProducts', 'myNegotiations'];
   const defaultTab = validTabs.includes(initialTab) ? initialTab : 'profile';
   const [activeTab, setActiveTab] = useState<
-    'profile' | 'messages' | 'wallet' | 'myNeeds' | 'myProducts'
+    'profile' | 'messages' | 'wallet' | 'myNeeds' | 'myProducts' | 'myNegotiations'
   >(defaultTab as any);
 
   const [loading, setLoading] = useState(true);
@@ -273,21 +338,19 @@ export default function ProfilePage() {
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [myNeeds, setMyNeeds] = useState<Need[]>([]);
   const [mySupplies, setMySupplies] = useState<Supply[]>([]);
+  const [myNegotiations, setMyNegotiations] = useState<Negotiation[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [formData, setFormData] = useState<Partial<UserProfile>>({});
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [useFakeData, setUseFakeData] = useState(false);
 
-  // ===== 1. Mount =====
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // ===== 2. Check token and load data =====
   useEffect(() => {
     if (!mounted) return;
-
     const token = getAccessToken();
     if (!token) {
       console.warn('🔒 No token found, loading fake data for preview');
@@ -298,10 +361,10 @@ export default function ProfilePage() {
       setWallet(FAKE_WALLET);
       setMyNeeds(FAKE_NEEDS);
       setMySupplies(FAKE_SUPPLIES);
+      setMyNegotiations(FAKE_NEGOTIATIONS);
       setLoading(false);
       return;
     }
-
     console.log('✅ Token found, loading profile');
     fetchAllData(token);
   }, [mounted]);
@@ -313,7 +376,6 @@ export default function ProfilePage() {
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
-
       const currentToken = token || getAccessToken();
       if (!currentToken) {
         setUseFakeData(true);
@@ -323,11 +385,12 @@ export default function ProfilePage() {
         setWallet(FAKE_WALLET);
         setMyNeeds(FAKE_NEEDS);
         setMySupplies(FAKE_SUPPLIES);
+        setMyNegotiations(FAKE_NEGOTIATIONS);
         setLoading(false);
         return;
       }
 
-      // ---- 1. Profile ----
+      // 1. Profile
       let profileRes = await authenticatedFetch(`${apiUrl}/users/profile/`, {
         method: 'GET',
       });
@@ -350,6 +413,7 @@ export default function ProfilePage() {
         setWallet(FAKE_WALLET);
         setMyNeeds(FAKE_NEEDS);
         setMySupplies(FAKE_SUPPLIES);
+        setMyNegotiations(FAKE_NEGOTIATIONS);
         setLoading(false);
         return;
       }
@@ -371,7 +435,7 @@ export default function ProfilePage() {
       setFormData(mergedProfile);
       updateUser(mergedProfile);
 
-      // ---- 2. Messages ----
+      // 2. Messages
       try {
         const msgRes = await authenticatedFetch(`${apiUrl}/messages/`, {
           method: 'GET',
@@ -391,7 +455,7 @@ export default function ProfilePage() {
         setMessages(FAKE_MESSAGES);
       }
 
-      // ---- 3. Wallet ----
+      // 3. Wallet
       try {
         const walletRes = await authenticatedFetch(`${apiUrl}/wallet/`, {
           method: 'GET',
@@ -409,7 +473,7 @@ export default function ProfilePage() {
         setWallet(FAKE_WALLET);
       }
 
-      // ---- 4. Needs ----
+      // 4. Needs
       try {
         const needsRes = await authenticatedFetch(
           `${apiUrl}/needs/?buyer=${encodeURIComponent(mergedProfile.id)}`,
@@ -429,7 +493,7 @@ export default function ProfilePage() {
         setMyNeeds(FAKE_NEEDS);
       }
 
-      // ---- 5. Supplies ----
+      // 5. Supplies
       try {
         const suppliesRes = await authenticatedFetch(
           `${apiUrl}/products/supplies/?seller=${encodeURIComponent(mergedProfile.id)}`,
@@ -450,6 +514,26 @@ export default function ProfilePage() {
         console.warn('⚠️ Error loading supplies, using fake data:', err);
         setMySupplies(FAKE_SUPPLIES);
       }
+
+      // 6. Negotiations
+      try {
+        const negRes = await authenticatedFetch(`${apiUrl}/negotiations/`, {
+          method: 'GET',
+        });
+
+        if (negRes.ok) {
+          const negData = await negRes.json();
+          let negArray = negData?.results ?? negData;
+          if (!Array.isArray(negArray)) negArray = [];
+          setMyNegotiations(negArray.length > 0 ? negArray : FAKE_NEGOTIATIONS);
+        } else {
+          console.warn('⚠️ Negotiations API failed, using fake data');
+          setMyNegotiations(FAKE_NEGOTIATIONS);
+        }
+      } catch (err) {
+        console.warn('⚠️ Error loading negotiations, using fake data:', err);
+        setMyNegotiations(FAKE_NEGOTIATIONS);
+      }
     } catch (err: any) {
       console.error('❌ Error fetching data, using fake data:', err);
       setError(err?.message || 'خطا در دریافت اطلاعات');
@@ -459,6 +543,7 @@ export default function ProfilePage() {
       setWallet(FAKE_WALLET);
       setMyNeeds(FAKE_NEEDS);
       setMySupplies(FAKE_SUPPLIES);
+      setMyNegotiations(FAKE_NEGOTIATIONS);
     } finally {
       setLoading(false);
     }
@@ -624,7 +709,11 @@ export default function ProfilePage() {
     }
   };
 
-  // ===== Loading state =====
+  const handleLogout = () => {
+    logout();
+    router.push('/login');
+  };
+
   if (!mounted || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50">
@@ -641,6 +730,7 @@ export default function ProfilePage() {
   const currentWallet = wallet || FAKE_WALLET;
   const currentNeeds = myNeeds.length > 0 ? myNeeds : FAKE_NEEDS;
   const currentSupplies = mySupplies.length > 0 ? mySupplies : FAKE_SUPPLIES;
+  const currentNegotiations = myNegotiations.length > 0 ? myNegotiations : FAKE_NEGOTIATIONS;
 
   const unreadCount = Array.isArray(currentMessages)
     ? currentMessages.filter(
@@ -652,78 +742,165 @@ export default function ProfilePage() {
       ).length
     : 0;
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 sm:p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Tabs - بدون هدر */}
-        <div className="flex flex-wrap gap-2 mb-6">
-          {[
-            { id: 'profile', label: 'اطلاعات کاربری', icon: User },
-            { id: 'messages', label: 'صندوق پیام', icon: MessageSquare, badge: unreadCount },
-            { id: 'wallet', label: 'کیف پول', icon: Wallet },
-            { id: 'myNeeds', label: 'نیازهای من', icon: Target },
-            { id: 'myProducts', label: 'محصولات من', icon: Package },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition ${
-                activeTab === tab.id
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-white text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              <tab.icon size={18} />
-              {tab.label}
-              {tab.badge !== undefined && tab.badge > 0 && (
-                <span className="ml-1 bg-red-500 text-white text-xs rounded-full px-2 py-0.5">
-                  {tab.badge}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
+  const sidebarItems = [
+    { id: 'profile', label: 'اطلاعات کاربری', icon: User },
+    { id: 'messages', label: 'صندوق پیام', icon: MessageSquare, badge: unreadCount },
+    { id: 'wallet', label: 'کیف پول', icon: Wallet },
+    { id: 'myNeeds', label: 'نیازهای من', icon: Target },
+    { id: 'myProducts', label: 'محصولات من', icon: Package },
+    { id: 'myNegotiations', label: 'مذاکرات من', icon: MessageCircle },
+  ];
 
-        {/* Content */}
-        <div className="bg-white rounded-2xl shadow-sm p-6">
-          {activeTab === 'profile' && (
-            <ProfileTab
-              profile={currentProfile}
-              editMode={editMode}
-              setEditMode={setEditMode}
-              formData={formData}
-              setFormData={setFormData}
-              handleUpdateProfile={handleUpdateProfile}
-              loading={loading}
-              error={error}
-              successMessage={successMessage}
-            />
-          )}
-          {activeTab === 'messages' && (
-            <MessagesTab
-              messages={currentMessages}
-              loading={loading}
-              profileId={currentProfile.id}
-              onMarkAsRead={handleMarkAsRead}
-              onArchive={handleArchiveMessage}
-              onRefresh={() => {
-                const token = getAccessToken();
-                if (token) fetchAllData(token);
-                else {
-                  setUseFakeData(true);
-                  setProfile(FAKE_PROFILE);
-                  setFormData(FAKE_PROFILE);
-                  setMessages(FAKE_MESSAGES);
-                  setWallet(FAKE_WALLET);
-                  setMyNeeds(FAKE_NEEDS);
-                  setMySupplies(FAKE_SUPPLIES);
-                }
-              }}
-            />
-          )}
-          {activeTab === 'wallet' && <WalletTab wallet={currentWallet} loading={loading} />}
-          {activeTab === 'myNeeds' && <MyNeedsTab needs={currentNeeds} loading={loading} />}
-          {activeTab === 'myProducts' && <MyProductsTab supplies={currentSupplies} loading={loading} />}
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50/80 via-white to-blue-50/80 p-4 sm:p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* استفاده از flex-row-reverse برای قرارگیری سایدبار در سمت راست */}
+        <div className="flex flex-col lg:flex-row-reverse gap-6">
+          {/* سایدبار حرفه‌ای (سمت راست) */}
+          <aside className="lg:w-72 flex-shrink-0">
+            <div className="sticky top-6 space-y-4">
+              {/* کارت پروفایل با طراحی مینیمال و شیک */}
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 transition-all hover:shadow-md">
+                <div className="flex items-center gap-4">
+                  <div className="relative">
+                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-2xl font-bold text-white shadow-lg ring-2 ring-white">
+                      {currentProfile.first_name?.charAt(0) || currentProfile.username?.charAt(0) || 'U'}
+                    </div>
+                    <span className="absolute bottom-0 right-0 w-4 h-4 bg-emerald-400 border-2 border-white rounded-full"></span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-slate-800 text-lg truncate">
+                      {currentProfile.first_name} {currentProfile.last_name}
+                    </p>
+                    <p className="text-sm text-slate-500 truncate">@{currentProfile.username}</p>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                        {currentProfile.role === 'seller' ? 'تأمین‌کننده' : 'خریدار'}
+                      </span>
+                      {currentProfile.kyc_status === 'approved' && (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
+                          تأیید شده
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* منوی سایدبار با طراحی مدرن */}
+              <nav className="bg-white rounded-2xl shadow-sm border border-slate-100 p-3 transition-all hover:shadow-md">
+                <div className="flex items-center gap-2 px-3 py-2 mb-2 border-b border-slate-100">
+                  <LayoutDashboard className="w-5 h-5 text-indigo-500" />
+                  <span className="font-bold text-slate-700 text-sm">داشبورد</span>
+                </div>
+
+                <div className="space-y-1">
+                  {sidebarItems.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => setActiveTab(item.id as any)}
+                      className={`relative flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
+                        activeTab === item.id
+                          ? 'bg-gradient-to-r from-indigo-50 to-blue-50 text-indigo-700 shadow-sm'
+                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                      }`}
+                    >
+                      {/* نشانگر عمودی برای آیتم فعال */}
+                      {activeTab === item.id && (
+                        <span className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gradient-to-b from-indigo-500 to-blue-500 rounded-l-full" />
+                      )}
+                      <item.icon className={`w-5 h-5 flex-shrink-0 ${activeTab === item.id ? 'text-indigo-600' : 'text-slate-400'}`} />
+                      <span className="flex-1 text-right">{item.label}</span>
+                      {item.badge !== undefined && item.badge > 0 && (
+                        <span className="bg-rose-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5">
+                          {item.badge}
+                        </span>
+                      )}
+                      {activeTab === item.id && (
+                        <ChevronLeft className="w-4 h-4 text-indigo-400" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {/* دکمه خروج با طراحی جدا */}
+                <div className="border-t border-slate-100 mt-3 pt-3">
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-rose-600 hover:bg-rose-50 transition-all duration-200"
+                  >
+                    <LogOut className="w-5 h-5 flex-shrink-0" />
+                    <span className="flex-1 text-right">خروج از حساب</span>
+                  </button>
+                </div>
+              </nav>
+
+              {/* بخش تنظیمات سریع */}
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 transition-all hover:shadow-md">
+                <button className="flex items-center gap-3 w-full px-2 py-2 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition">
+                  <Settings className="w-5 h-5 text-slate-400" />
+                  <span>تنظیمات حساب</span>
+                </button>
+              </div>
+            </div>
+          </aside>
+
+          {/* محتوای اصلی (سمت چپ) */}
+          <main className="flex-1 min-w-0 bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+            {activeTab === 'profile' && (
+              <ProfileTab
+                profile={currentProfile}
+                editMode={editMode}
+                setEditMode={setEditMode}
+                formData={formData}
+                setFormData={setFormData}
+                handleUpdateProfile={handleUpdateProfile}
+                loading={loading}
+                error={error}
+                successMessage={successMessage}
+              />
+            )}
+            {activeTab === 'messages' && (
+              <MessagesTab
+                messages={currentMessages}
+                loading={loading}
+                profileId={currentProfile.id}
+                onMarkAsRead={handleMarkAsRead}
+                onArchive={handleArchiveMessage}
+                onRefresh={() => {
+                  const token = getAccessToken();
+                  if (token) fetchAllData(token);
+                  else {
+                    setUseFakeData(true);
+                    setProfile(FAKE_PROFILE);
+                    setFormData(FAKE_PROFILE);
+                    setMessages(FAKE_MESSAGES);
+                    setWallet(FAKE_WALLET);
+                    setMyNeeds(FAKE_NEEDS);
+                    setMySupplies(FAKE_SUPPLIES);
+                    setMyNegotiations(FAKE_NEGOTIATIONS);
+                  }
+                }}
+              />
+            )}
+            {activeTab === 'wallet' && <WalletTab wallet={currentWallet} loading={loading} />}
+            {activeTab === 'myNeeds' && <MyNeedsTab needs={currentNeeds} loading={loading} />}
+            {activeTab === 'myProducts' && <MyProductsTab supplies={currentSupplies} loading={loading} />}
+            {activeTab === 'myNegotiations' && (
+              <MyNegotiationsTab
+                negotiations={currentNegotiations}
+                loading={loading}
+                profileId={currentProfile.id}
+                onRefresh={() => {
+                  const token = getAccessToken();
+                  if (token) fetchAllData(token);
+                  else {
+                    setMyNegotiations(FAKE_NEGOTIATIONS);
+                  }
+                }}
+              />
+            )}
+          </main>
         </div>
       </div>
     </div>
@@ -850,7 +1027,7 @@ function ProfileTab({
 }
 
 // ============================================================
-// Messages Tab (بدون تغییر)
+// Messages Tab
 // ============================================================
 function MessagesTab({
   messages,
@@ -1153,7 +1330,6 @@ function MessagesTab({
         </div>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-slate-50 rounded-xl">
         <div className="flex items-center gap-1 bg-white rounded-lg p-1 shadow-sm">
           <button
@@ -1242,7 +1418,6 @@ function MessagesTab({
         </div>
       </div>
 
-      {/* New Message Form */}
       {showNewMessage && (
         <div className="mb-6 p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
           <div className="flex justify-between items-center mb-3">
@@ -1344,7 +1519,6 @@ function MessagesTab({
         </div>
       )}
 
-      {/* Messages list */}
       {loading ? (
         <div className="text-center py-8 text-slate-500">در حال بارگذاری پیام‌ها...</div>
       ) : finalFiltered.length === 0 ? (
@@ -1523,7 +1697,6 @@ function MessagesTab({
         </div>
       )}
 
-      {/* Modal */}
       {isModalOpen && selectedMessage && (
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
@@ -1643,7 +1816,7 @@ function MessagesTab({
 }
 
 // ============================================================
-// Wallet Tab (بدون تغییر)
+// Wallet Tab
 // ============================================================
 function WalletTab({ wallet, loading }: { wallet: WalletData | null; loading: boolean }) {
   const [showBalance, setShowBalance] = useState(true);
@@ -1766,7 +1939,7 @@ function WalletTab({ wallet, loading }: { wallet: WalletData | null; loading: bo
 }
 
 // ============================================================
-// My Needs Tab (بدون تغییر در منطق انتخاب نیاز، فقط نمایش)
+// My Needs Tab
 // ============================================================
 function MyNeedsTab({ needs, loading }: { needs: Need[]; loading: boolean }) {
   const router = useRouter();
@@ -1875,8 +2048,6 @@ function MyNeedsTab({ needs, loading }: { needs: Need[]; loading: boolean }) {
                     {formatDate(need.created_at)}
                   </span>
                 </div>
-
-                {/* دکمه تطبیق هوشمند - مستقیماً به صفحه تطبیق با همان نیاز می‌رود */}
                 <button
                   onClick={() => router.push(`/matching/${need.id}`)}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] hover:shadow-lg text-white text-xs font-bold rounded-xl transition-all duration-200"
@@ -1894,7 +2065,7 @@ function MyNeedsTab({ needs, loading }: { needs: Need[]; loading: boolean }) {
 }
 
 // ============================================================
-// My Products Tab (بدون تغییر)
+// My Products Tab
 // ============================================================
 function MyProductsTab({ supplies, loading }: { supplies: Supply[]; loading: boolean }) {
   const statusMap: Record<string, { label: string; color: string }> = {
@@ -1961,6 +2132,178 @@ function MyProductsTab({ supplies, loading }: { supplies: Supply[]; loading: boo
                 <span>قیمت: {supply.price ? `${supply.price} تومان` : '-'}</span>
                 <span>تاریخ: {new Date(supply.created_at).toLocaleDateString('fa-IR')}</span>
               </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// My Negotiations Tab
+// ============================================================
+function MyNegotiationsTab({
+  negotiations,
+  loading,
+  profileId,
+  onRefresh,
+}: {
+  negotiations: Negotiation[];
+  loading: boolean;
+  profileId: number;
+  onRefresh: () => void;
+}) {
+  const router = useRouter();
+
+  const statusMap: Record<string, { label: string; color: string }> = {
+    created: { label: 'ایجاد شده', color: 'bg-slate-100 text-slate-600' },
+    in_progress: { label: 'در حال مذاکره', color: 'bg-blue-100 text-blue-700' },
+    awaiting_proposal: { label: 'در انتظار پیشنهاد', color: 'bg-yellow-100 text-yellow-700' },
+    proposal_sent: { label: 'پیشنهاد ارسال شده', color: 'bg-purple-100 text-purple-700' },
+    under_review: { label: 'در حال بررسی', color: 'bg-indigo-100 text-indigo-700' },
+    accepted: { label: 'پذیرفته شده', color: 'bg-green-100 text-green-700' },
+    rejected: { label: 'رد شده', color: 'bg-red-100 text-red-700' },
+    contracted: { label: 'قرارداد شده', color: 'bg-teal-100 text-teal-700' },
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <span className="mr-3 text-slate-500">در حال بارگذاری مذاکرات...</span>
+      </div>
+    );
+  }
+
+  if (!negotiations || negotiations.length === 0) {
+    return (
+      <div className="text-center py-12 text-slate-400">
+        <MessageCircle className="h-16 w-16 mx-auto mb-4 stroke-1" />
+        <p className="text-lg font-medium text-slate-600">هیچ مذاکره‌ای ثبت نشده است</p>
+        <p className="text-sm mt-1 text-slate-400">
+          برای شروع یک مذاکره، به بازار رفته و روی دکمه مذاکره کلیک کنید.
+        </p>
+        <button
+          onClick={() => router.push('/market')}
+          className="mt-5 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition shadow-sm text-sm font-medium"
+        >
+          رفتن به بازار
+        </button>
+      </div>
+    );
+  }
+
+  const formatDate = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('fa-IR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const getOtherParty = (neg: Negotiation) => {
+    if (neg.buyer === profileId) {
+      return { name: neg.supplier_name, role: 'تأمین‌کننده' };
+    }
+    return { name: neg.buyer_name, role: 'خریدار' };
+  };
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-6 flex-wrap gap-2">
+        <h2 className="text-xl font-bold text-slate-800">مذاکرات من</h2>
+        <div className="flex gap-2">
+          <button
+            onClick={onRefresh}
+            className="px-3 py-1.5 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition"
+          >
+            🔄 بازخوانی
+          </button>
+          <button
+            onClick={() => router.push('/market')}
+            className="px-3 py-1.5 text-sm bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition"
+          >
+            <Plus size={16} className="inline ml-1" />
+            مذاکره جدید
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {negotiations.map((neg) => {
+          const statusInfo = statusMap[neg.status] || {
+            label: neg.status || 'نامشخص',
+            color: 'bg-slate-100 text-slate-600',
+          };
+          const otherParty = getOtherParty(neg);
+          const isActive = neg.is_active;
+
+          return (
+            <div
+              key={neg.id}
+              onClick={() => router.push(`/negotiation/${neg.id}`)}
+              className={`group bg-white border rounded-2xl p-5 transition-all duration-200 cursor-pointer ${
+                isActive
+                  ? 'border-blue-200 hover:shadow-md hover:border-blue-400'
+                  : 'border-slate-200 hover:shadow-sm opacity-75'
+              }`}
+            >
+              <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-semibold text-slate-800 text-base leading-6">
+                      {neg.context_title || neg.supply_title || `مذاکره #${neg.id}`}
+                    </h3>
+                    {!isActive && (
+                      <span className="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">
+                        پایان‌یافته
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-slate-500">
+                    <span>
+                      طرف مقابل: <span className="font-medium text-slate-700">{otherParty.name}</span>
+                      <span className="text-xs text-slate-400 mr-1">({otherParty.role})</span>
+                    </span>
+                    <span>•</span>
+                    <span>{formatDate(neg.created_at)}</span>
+                    {neg.updated_at !== neg.created_at && (
+                      <>
+                        <span>•</span>
+                        <span className="text-xs text-slate-400">
+                          آخرین فعالیت: {formatDate(neg.updated_at)}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span
+                    className={`inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full whitespace-nowrap ${statusInfo.color}`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-green-400' : 'bg-slate-400'}`} />
+                    {statusInfo.label}
+                  </span>
+                  <div className="text-blue-600 group-hover:translate-x-1 transition-transform">
+                    <ArrowUpRight size={18} />
+                  </div>
+                </div>
+              </div>
+              {neg.messages && neg.messages.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-slate-100">
+                  <p className="text-sm text-slate-500 line-clamp-1">
+                    آخرین پیام: {neg.messages[neg.messages.length - 1]?.text || '...'}
+                  </p>
+                </div>
+              )}
             </div>
           );
         })}

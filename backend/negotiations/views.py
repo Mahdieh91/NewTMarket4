@@ -1,3 +1,4 @@
+# negotiations/views.py
 from django.db.models import Q
 from django.db import transaction
 
@@ -8,6 +9,9 @@ from rest_framework.exceptions import (
     PermissionDenied,
     ValidationError,
 )
+
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 from .models import Negotiation, Message
 from .serializers import (
@@ -138,6 +142,20 @@ class NegotiationViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    # ----------------------------------------------
+    # اضافه شدن این متد برای Broadcast وضعیت
+    # ----------------------------------------------
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f'negotiation_{instance.id}',
+            {
+                'type': 'status_updated',
+                'status': instance.status,
+            }
+        )
+
 
 class MessageViewSet(viewsets.ModelViewSet):
 
@@ -231,3 +249,13 @@ class MessageViewSet(viewsets.ModelViewSet):
                     'updated_at',
                 ]
             )
+
+        # Broadcast تغییر وضعیت به WebSocket
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f'negotiation_{negotiation.id}',
+            {
+                'type': 'status_updated',
+                'status': negotiation.status,
+            }
+        )

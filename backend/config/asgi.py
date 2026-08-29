@@ -1,3 +1,4 @@
+# config/asgi.py
 import os
 
 os.environ.setdefault(
@@ -18,12 +19,7 @@ from channels.security.websocket import (
     AllowedHostsOriginValidator,
 )
 
-from django.urls import path
-
-from negotiations.consumers import (
-    NegotiationConsumer,
-)
-
+from negotiations.routing import websocket_urlpatterns  # <-- تغییر: استفاده از routing
 from negotiations.jwt_middleware import (
     JWTAuthMiddleware,
 )
@@ -39,14 +35,9 @@ application = ProtocolTypeRouter({
 
             JWTAuthMiddleware(
 
-                URLRouter([
-
-                    path(
-                        'ws/negotiation/<int:nego_id>/',
-                        NegotiationConsumer.as_asgi(),
-                    ),
-
-                ])
+                URLRouter(
+                    websocket_urlpatterns  # <-- تغییر: ارجاع به لیست مسیرها
+                )
 
             )
 
