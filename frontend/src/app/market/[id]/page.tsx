@@ -1,3 +1,7 @@
+// ============================================================
+// FILE: C:\Users\Fardad\tmarket4\frontend\src\app\market\[id]\page.tsx
+// ============================================================
+
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -26,11 +30,6 @@ import {
   Tag,
   Sparkles,
 } from 'lucide-react';
-
-import {
-  mockProducts,
-  formatPrice,
-} from '@/app/data/products';
 
 /* ============================================================
    API
@@ -77,37 +76,6 @@ interface Supply {
   updated_at: string;
 
   images: SupplyImage[];
-}
-
-interface MockProduct {
-  id: string;
-  title: string;
-  category: string;
-  image?: string;
-  images?: string[];
-  shortDescription?: string;
-  fullDescription?: string;
-  trl?: number;
-  mrl?: number;
-  riskLevel?: string;
-  tags?: string[];
-  certifications?: string[];
-  afterSalesService?: boolean;
-  ipStatus?: string;
-  complianceScore?: number;
-  price?: number;
-
-  seller?: {
-    name: string;
-    verified: boolean;
-    rating: number;
-    totalSales: number;
-    location: string;
-  };
-
-  deliveryTime?: string;
-  viewCount?: number;
-  createdAt?: string;
 }
 
 /* ============================================================
@@ -335,9 +303,6 @@ export default function ProductDetailPage() {
   const [supply, setSupply] =
     useState<Supply | null>(null);
 
-  const [mockProduct, setMockProduct] =
-    useState<MockProduct | null>(null);
-
   const [loading, setLoading] =
     useState(true);
 
@@ -375,31 +340,6 @@ export default function ProductDetailPage() {
 
     return null;
   }, [routeId]);
-
-  /* ============================================================
-     تشخیص Mock Product
-  ============================================================ */
-
-  useEffect(() => {
-    if (!routeId || supplyId !== null) {
-      return;
-    }
-
-    const found =
-      mockProducts.find(
-        (item) =>
-          String(item.id) ===
-          String(routeId),
-      );
-
-    if (found) {
-      setMockProduct(
-        found as MockProduct,
-      );
-    }
-
-    setLoading(false);
-  }, [routeId, supplyId]);
 
   /* ============================================================
      دریافت Supply واقعی از Django
@@ -560,13 +500,10 @@ export default function ProductDetailPage() {
   }
 
   /* ============================================================
-     Supply Error
+     Supply Error / Not Found
   ============================================================ */
 
-  if (
-    supplyId !== null &&
-    !supply
-  ) {
+  if (!supply) {
     return (
       <div
         dir="rtl"
@@ -595,342 +532,6 @@ export default function ProductDetailPage() {
             className="inline-flex items-center gap-2 mt-6 px-5 py-3 rounded-xl bg-[#1E3A8A] text-white font-bold hover:bg-[#172f72] transition"
           >
             <ArrowRight size={18} />
-            بازگشت به بازار
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  /* ============================================================
-     MOCK PRODUCT
-  ============================================================ */
-
-  if (
-    !supply &&
-    mockProduct
-  ) {
-    const galleryImages =
-      mockProduct.images &&
-      mockProduct.images.length > 0
-        ? mockProduct.images
-        : mockProduct.image
-        ? [mockProduct.image]
-        : [];
-
-    const activeImage =
-      selectedImage ||
-      galleryImages[0];
-
-    return (
-      <div
-        dir="rtl"
-        className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#f0fdfa]"
-        style={{
-          fontFamily:
-            "'Vazir', 'Vazirmatn', 'Iran Sans', Tahoma, sans-serif",
-        }}
-      >
-        <header className="bg-white/95 backdrop-blur border-b border-slate-200 sticky top-0 z-30">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <Link
-              href="/market"
-              className="inline-flex items-center gap-2 text-sm font-bold text-[#1E3A8A] hover:text-[#14B8A6] transition"
-            >
-              <ArrowRight size={18} />
-              بازگشت به بازار
-            </Link>
-          </div>
-        </header>
-
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden">
-
-            {/* Hero */}
-
-            <div className="relative h-40 md:h-48 bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] overflow-hidden">
-
-              <div className="absolute inset-0 opacity-10">
-                <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-
-                <div className="absolute bottom-0 left-0 w-80 h-80 bg-white rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
-              </div>
-
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-24 h-24 rounded-3xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/30 shadow-xl">
-                  {mockProduct.category ===
-                  'service' ? (
-                    <Wrench
-                      size={44}
-                      className="text-white"
-                    />
-                  ) : (
-                    <Package
-                      size={44}
-                      className="text-white"
-                    />
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="p-5 md:p-8">
-
-              {/* Gallery */}
-
-              {galleryImages.length >
-                0 &&
-                activeImage && (
-                  <section className="mb-10">
-                    <SectionTitle
-                      icon={
-                        <ImageIcon
-                          size={18}
-                          className="text-[#1E3A8A]"
-                        />
-                      }
-                      title="تصاویر محصول"
-                    />
-
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <div className="md:col-span-3">
-                        <div className="relative w-full h-[280px] sm:h-[380px] md:h-[460px] rounded-2xl overflow-hidden border border-slate-200 bg-slate-50">
-                          <Image
-                            src={
-                              activeImage
-                            }
-                            alt={
-                              mockProduct.title
-                            }
-                            fill
-                            priority
-                            unoptimized
-                            className="object-contain"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="grid grid-cols-3 md:grid-cols-1 gap-3">
-                          {galleryImages.map(
-                            (
-                              image,
-                              index,
-                            ) => (
-                              <button
-                                key={`${image}-${index}`}
-                                type="button"
-                                onClick={() =>
-                                  setSelectedImage(
-                                    image,
-                                  )
-                                }
-                                className={`relative h-24 md:h-28 rounded-xl overflow-hidden bg-slate-100 border-2 transition ${
-                                  activeImage ===
-                                  image
-                                    ? 'border-[#14B8A6] ring-2 ring-[#14B8A6]/30'
-                                    : 'border-slate-200 hover:border-[#14B8A6]/60'
-                                }`}
-                              >
-                                <Image
-                                  src={
-                                    image
-                                  }
-                                  alt={`${mockProduct.title} - تصویر ${
-                                    index +
-                                    1
-                                  }`}
-                                  fill
-                                  unoptimized
-                                  className="object-cover"
-                                />
-                              </button>
-                            ),
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </section>
-                )}
-
-              {/* Main */}
-
-              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_350px] gap-8">
-
-                {/* Content */}
-
-                <div className="min-w-0">
-
-                  <div className="flex flex-wrap items-center gap-2 mb-4">
-                    <span className="px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
-                      محصول
-                    </span>
-
-                    {mockProduct.category && (
-                      <span className="px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 text-xs font-bold">
-                        {
-                          mockProduct.category
-                        }
-                      </span>
-                    )}
-                  </div>
-
-                  <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 leading-tight">
-                    {
-                      mockProduct.title
-                    }
-                  </h1>
-
-                  {mockProduct.shortDescription && (
-                    <p className="text-sm text-slate-500 mt-4 leading-8">
-                      {
-                        mockProduct.shortDescription
-                      }
-                    </p>
-                  )}
-
-                  {mockProduct.fullDescription && (
-                    <section className="mt-10">
-                      <SectionTitle
-                        icon={
-                          <FileText
-                            size={18}
-                            className="text-[#1E3A8A]"
-                          />
-                        }
-                        title="توضیحات کامل"
-                      />
-
-                      <div className="rounded-2xl bg-slate-50 border border-slate-200 p-5 md:p-6">
-                        <p className="text-sm text-slate-700 leading-8 whitespace-pre-line">
-                          {
-                            mockProduct.fullDescription
-                          }
-                        </p>
-                      </div>
-                    </section>
-                  )}
-                </div>
-
-                {/* Sticky Summary */}
-
-                <aside className="lg:sticky lg:top-24 self-start">
-                  <div className="rounded-3xl border border-slate-200 bg-white shadow-lg shadow-slate-200/50 overflow-hidden">
-
-                    <div className="p-5 bg-gradient-to-br from-[#1E3A8A] to-[#2563EB] text-white">
-                      <div className="flex items-center gap-2">
-                        <Sparkles size={17} />
-
-                        <span className="text-xs font-bold text-white/80">
-                          خلاصه محصول
-                        </span>
-                      </div>
-
-                      <h2 className="text-lg font-extrabold mt-3 leading-7">
-                        {
-                          mockProduct.title
-                        }
-                      </h2>
-                    </div>
-
-                    <div className="p-5 space-y-4">
-
-                      {mockProduct.price !==
-                        undefined && (
-                        <div className="rounded-2xl bg-blue-50 border border-blue-100 p-4">
-                          <span className="text-xs font-bold text-blue-500">
-                            قیمت
-                          </span>
-
-                          <p className="text-xl font-extrabold text-[#1E3A8A] mt-2">
-                            {formatPrice(
-                              mockProduct as any,
-                            )}
-                          </p>
-                        </div>
-                      )}
-
-                      {mockProduct.seller && (
-                        <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4">
-                          <div className="flex items-center gap-2">
-                            <Shield
-                              size={17}
-                              className="text-emerald-500"
-                            />
-
-                            <span className="text-sm font-extrabold text-slate-800">
-                              {
-                                mockProduct
-                                  .seller
-                                  .name
-                              }
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-2 mt-3">
-                            <MapPin
-                              size={15}
-                              className="text-slate-400"
-                            />
-
-                            <span className="text-xs text-slate-500">
-                              {
-                                mockProduct
-                                  .seller
-                                  .location
-                              }
-                            </span>
-                          </div>
-                        </div>
-                      )}
-
-                      <Link
-                        href={`/negotiation/${mockProduct.id}`}
-                        className="w-full inline-flex items-center justify-center gap-2 px-5 py-3.5 bg-[#14B8A6] text-white rounded-xl text-sm font-extrabold hover:bg-[#0d9488] transition shadow-md shadow-teal-500/20"
-                      >
-                        <MessageCircle
-                          size={18}
-                        />
-                        درخواست مذاکره
-                      </Link>
-                    </div>
-                  </div>
-                </aside>
-              </div>
-            </div>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  /* ============================================================
-     Nothing Found
-  ============================================================ */
-
-  if (
-    !supply &&
-    !mockProduct
-  ) {
-    return (
-      <div
-        dir="rtl"
-        className="min-h-screen bg-slate-50 flex items-center justify-center"
-      >
-        <div className="text-center">
-          <Package
-            size={40}
-            className="mx-auto text-slate-300"
-          />
-
-          <h1 className="text-xl font-extrabold text-slate-800 mt-4">
-            محصول یافت نشد
-          </h1>
-
-          <Link
-            href="/market"
-            className="text-[#1E3A8A] underline mt-3 inline-block"
-          >
             بازگشت به بازار
           </Link>
         </div>

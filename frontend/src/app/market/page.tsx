@@ -1,3 +1,7 @@
+// ============================================================
+// FILE: C:\Users\Fardad\tmarket4\frontend\src\app\market\page.tsx
+// ============================================================
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -23,15 +27,6 @@ import {
   Clock,
   CheckCircle,
 } from 'lucide-react';
-
-import {
-  mockProducts,
-  formatPrice,
-  getTRLColor,
-  getRiskColor,
-  getRiskLabel,
-  Product,
-} from '@/app/data/products';
 
 import { useAuthStore } from '@/store/auth-store';
 
@@ -159,11 +154,42 @@ function supplyCategoryToMarketplaceCategory(
     : 'product';
 }
 
-// ==================== Supply -> Product ====================
+// ==================== Type ====================
 
-type MarketplaceProduct = Product & {
+interface MarketplaceProduct {
+  id: string;
   supplyId?: number;
-};
+
+  title: string;
+  category: 'product' | 'service';
+  industry: string;
+  technology: string;
+  shortDescription: string;
+  trl: number;
+  mrl: number;
+  price: number; // قیمت به میلیون تومان
+  priceType: 'fixed' | 'range';
+  priceRange?: { min: number; max: number };
+  images: string[];
+  tags: string[];
+  seller: {
+    name: string;
+    location: string;
+    rating: number;
+    verified: boolean;
+    totalSales?: number;
+  };
+  viewCount: number;
+  deliveryTime: string;
+  riskLevel: 'low' | 'medium' | 'high';
+  certifications: string[];
+  afterSalesService?: boolean;
+  ipStatus?: string;
+  complianceScore?: number;
+  createdAt: string;
+}
+
+// ==================== Supply -> Product ====================
 
 function supplyToProduct(
   supply: SupplyApi
@@ -266,7 +292,53 @@ function supplyToProduct(
     createdAt:
       supply.created_at ||
       new Date().toISOString(),
-  } as Product;
+  };
+}
+
+// ==================== Helper Functions for UI ====================
+
+function formatPrice(product: MarketplaceProduct): string {
+  if (product.priceType === 'range' && product.priceRange) {
+    return `${product.priceRange.min.toLocaleString('fa-IR')} - ${product.priceRange.max.toLocaleString('fa-IR')} میلیون تومان`;
+  }
+
+  if (product.price === 0) {
+    return 'قابل مذاکره';
+  }
+
+  return `${product.price.toLocaleString('fa-IR')} میلیون تومان`;
+}
+
+function getTRLColor(trl: number): string {
+  if (trl <= 3) return 'bg-red-50 text-red-700 border border-red-200';
+  if (trl <= 6) return 'bg-amber-50 text-amber-700 border border-amber-200';
+  return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+}
+
+function getRiskColor(risk: 'low' | 'medium' | 'high'): string {
+  switch (risk) {
+    case 'low':
+      return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+    case 'medium':
+      return 'bg-amber-50 text-amber-700 border border-amber-200';
+    case 'high':
+      return 'bg-red-50 text-red-700 border border-red-200';
+    default:
+      return 'bg-slate-100 text-slate-600 border border-slate-200';
+  }
+}
+
+function getRiskLabel(risk: 'low' | 'medium' | 'high'): string {
+  switch (risk) {
+    case 'low':
+      return 'ریسک کم';
+    case 'medium':
+      return 'ریسک متوسط';
+    case 'high':
+      return 'ریسک زیاد';
+    default:
+      return 'نامشخص';
+  }
 }
 
 // ==================== Main Component ====================
@@ -299,7 +371,7 @@ export default function MarketplacePage() {
     useState(false);
 
   const [realProducts, setRealProducts] =
-    useState<Product[]>([]);
+    useState<MarketplaceProduct[]>([]);
 
   const [suppliesLoading, setSuppliesLoading] =
     useState(false);
@@ -496,205 +568,163 @@ export default function MarketplacePage() {
   // =========================================================
   // Start / Open Negotiation
   // =========================================================
-  //
-  // این بخش اصلاح اصلی است.
-  //
-  // product.id = supply-102
-  // اما این مقدار negotiation_id نیست.
-  //
-  // ما فقط supplyId را به Backend می‌فرستیم.
-  //
-  // Backend بر اساس:
-  // current user + supply + supplier
-  // مذاکره موجود را پیدا می‌کند یا مذاکره جدید می‌سازد.
-  //
-  // سپس negotiation.id واقعی را برمی‌گرداند.
-  // =========================================================
 
   const handleStartNegotiation = async (product: MarketplaceProduct) => {
-  if (!accessToken) {
-    window.location.href =
-      '/login?next=' + encodeURIComponent(`/market/${product.id}`);
-    return;
-  }
+    if (!accessToken) {
+      window.location.href =
+        '/login?next=' + encodeURIComponent(`/market/${product.id}`);
+      return;
+    }
 
-  // شناسه واقعی Supply در داده‌های API در supplyId نگهداری می‌شود.
-  // product.id شناسه نمایشی بازار مانند supply-120 است و نباید به‌عنوان
-  // شناسه عددی Supply با حدس یا تبدیل رشته‌ای استفاده شود.
-  let supplyId: number | null = null;
+    let supplyId: number | null = null;
 
-  if (
-    product.supplyId !== undefined &&
-    product.supplyId !== null &&
-    Number.isInteger(product.supplyId) &&
-    product.supplyId > 0
-  ) {
-    supplyId = product.supplyId;
-  } else {
-    const match = String(product.id).match(/^supply-(\d+)$/);
+    if (
+      product.supplyId !== undefined &&
+      product.supplyId !== null &&
+      Number.isInteger(product.supplyId) &&
+      product.supplyId > 0
+    ) {
+      supplyId = product.supplyId;
+    } else {
+      const match = String(product.id).match(/^supply-(\d+)$/);
 
-    if (match) {
-      const parsedId = Number(match[1]);
+      if (match) {
+        const parsedId = Number(match[1]);
 
-      if (Number.isSafeInteger(parsedId) && parsedId > 0) {
-        supplyId = parsedId;
+        if (Number.isSafeInteger(parsedId) && parsedId > 0) {
+          supplyId = parsedId;
+        }
       }
     }
-  }
 
-  if (supplyId === null) {
-    console.error('❌ شناسه واقعی عرضه پیدا نشد:', {
-      productId: product.id,
-      supplyId: product.supplyId,
-      product,
-    });
-
-    showToast('شناسه عرضه معتبر نیست.');
-    return;
-  }
-
-  setIsNegotiating(true);
-
-  try {
-    /*
-     * ایجاد یا بازیابی مذاکره مخصوص همین:
-     *
-     * Supply
-     * +
-     * کاربر فعلی
-     * +
-     * فروشنده Supply
-     *
-     * بنابراین اگر Supply شماره 102 با سه خریدار مختلف
-     * مذاکره داشته باشد، هر خریدار مذاکره خودش را خواهد داشت.
-     */
-
-    const response = await fetch(`${API_URL}/negotiations/`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        supply: supplyId,
-      }),
-    });
-
-    const responseText = await response.text();
-
-    let data: any = {};
-
-    try {
-      data = responseText ? JSON.parse(responseText) : {};
-    } catch {
-      data = {
-        detail: responseText || 'پاسخ نامعتبر از سرور دریافت شد.',
-      };
-    }
-
-    if (!response.ok) {
-      console.error('❌ Start negotiation failed:', {
-        status: response.status,
-        data,
+    if (supplyId === null) {
+      console.error('❌ شناسه واقعی عرضه پیدا نشد:', {
+        productId: product.id,
+        supplyId: product.supplyId,
+        product,
       });
 
-      if (response.status === 401) {
-        showToast('نشست کاربری شما منقضی شده است.');
-        return;
+      showToast('شناسه عرضه معتبر نیست.');
+      return;
+    }
+
+    setIsNegotiating(true);
+
+    try {
+      const response = await fetch(`${API_URL}/negotiations/`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          supply: supplyId,
+        }),
+      });
+
+      const responseText = await response.text();
+
+      let data: any = {};
+
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch {
+        data = {
+          detail: responseText || 'پاسخ نامعتبر از سرور دریافت شد.',
+        };
       }
 
-      if (response.status === 403) {
-        showToast(
-          data?.detail ||
-            'شما اجازه شروع این مذاکره را ندارید.'
-        );
-        return;
-      }
+      if (!response.ok) {
+        console.error('❌ Start negotiation failed:', {
+          status: response.status,
+          data,
+        });
 
-      if (response.status === 400) {
+        if (response.status === 401) {
+          showToast('نشست کاربری شما منقضی شده است.');
+          return;
+        }
+
+        if (response.status === 403) {
+          showToast(
+            data?.detail ||
+              'شما اجازه شروع این مذاکره را ندارید.'
+          );
+          return;
+        }
+
+        if (response.status === 400) {
+          showToast(
+            data?.detail ||
+              data?.message ||
+              'امکان شروع مذاکره برای این عرضه وجود ندارد.'
+          );
+          return;
+        }
+
+        if (response.status === 405) {
+          console.error(
+            '❌ Backend route does not allow POST /negotiations/.'
+          );
+
+          showToast(
+            'مسیر ایجاد مذاکره در Backend تنظیم نشده است.'
+          );
+          return;
+        }
+
         showToast(
           data?.detail ||
             data?.message ||
-            'امکان شروع مذاکره برای این عرضه وجود ندارد.'
+            `خطا در شروع مذاکره (${response.status})`
         );
+
         return;
       }
 
-      if (response.status === 405) {
+      const negotiationId =
+        data?.id ??
+        data?.negotiation_id ??
+        data?.data?.id ??
+        data?.data?.negotiation_id;
+
+      if (!negotiationId) {
         console.error(
-          '❌ Backend route does not allow POST /negotiations/.'
+          '❌ Negotiation created but no negotiation ID returned:',
+          data
         );
 
         showToast(
-          'مسیر ایجاد مذاکره در Backend تنظیم نشده است.'
+          'مذاکره ایجاد شد اما شناسه مذاکره از سرور دریافت نشد.'
         );
+
         return;
       }
 
-      showToast(
-        data?.detail ||
-          data?.message ||
-          `خطا در شروع مذاکره (${response.status})`
-      );
+      console.log('✅ Negotiation ready:', {
+        negotiationId,
+        supplyId,
+        data,
+      });
 
-      return;
-    }
-
-    /*
-     * Backend باید Negotiation واقعی را برگرداند.
-     * شناسه مذاکره را از پاسخ می‌گیریم، نه از Supply.
-     */
-    const negotiationId =
-      data?.id ??
-      data?.negotiation_id ??
-      data?.data?.id ??
-      data?.data?.negotiation_id;
-
-    if (!negotiationId) {
-      console.error(
-        '❌ Negotiation created but no negotiation ID returned:',
-        data
-      );
+      window.location.href = `/negotiation/${negotiationId}`;
+    } catch (error: any) {
+      console.error('❌ Start negotiation error:', error);
 
       showToast(
-        'مذاکره ایجاد شد اما شناسه مذاکره از سرور دریافت نشد.'
+        error?.message ||
+          'در برقراری ارتباط با سرور برای شروع مذاکره خطایی رخ داد.'
       );
-
-      return;
+    } finally {
+      setIsNegotiating(false);
     }
-
-    console.log('✅ Negotiation ready:', {
-      negotiationId,
-      supplyId,
-      data,
-    });
-
-    /*
-     * از اینجا به بعد دیگر با Supply کار نداریم.
-     *
-     * صفحه مذاکره باید با ID خود مذاکره باز شود.
-     */
-    window.location.href = `/negotiation/${negotiationId}`;
-  } catch (error: any) {
-    console.error('❌ Start negotiation error:', error);
-
-    showToast(
-      error?.message ||
-        'در برقراری ارتباط با سرور برای شروع مذاکره خطایی رخ داد.'
-    );
-  } finally {
-    setIsNegotiating(false);
-  }
-};
+  };
 
   // ==================== Filtered Products ====================
 
   const filteredProducts =
     useMemo(() => {
-      let result = [
-        ...mockProducts,
-        ...realProducts,
-      ];
+      let result = [...realProducts];
 
       if (searchQuery.trim()) {
         const q =
@@ -1717,7 +1747,7 @@ export default function MarketplacePage() {
 
             {suppliesError && (
               <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
-                {suppliesError} — محصولات نمونه همچنان نمایش داده می‌شوند.
+                {suppliesError} — لطفاً بعداً مجدداً تلاش کنید.
               </div>
             )}
 
@@ -1880,7 +1910,7 @@ export default function MarketplacePage() {
                         {compareList.map(
                           (id) => {
                             const p =
-                              mockProducts.find(
+                              realProducts.find(
                                 (pp) =>
                                   pp.id ===
                                   id
@@ -1924,7 +1954,7 @@ export default function MarketplacePage() {
                         {
                           label: 'قیمت',
                           render: (
-                            p: Product
+                            p: MarketplaceProduct
                           ) =>
                             formatPrice(
                               p
@@ -1933,49 +1963,42 @@ export default function MarketplacePage() {
                         {
                           label: 'TRL',
                           render: (
-                            p: Product
+                            p: MarketplaceProduct
                           ) =>
                             `${p.trl}/۹`,
                         },
                         {
                           label: 'MRL',
                           render: (
-                            p: Product
+                            p: MarketplaceProduct
                           ) =>
                             `${p.mrl}/۹`,
                         },
                         {
                           label: 'زمان تحویل',
                           render: (
-                            p: Product
+                            p: MarketplaceProduct
                           ) =>
                             p.deliveryTime,
                         },
                         {
                           label: 'فروشنده',
                           render: (
-                            p: Product
+                            p: MarketplaceProduct
                           ) =>
                             p.seller.name,
                         },
                         {
                           label: 'امتیاز فروشنده',
                           render: (
-                            p: Product
+                            p: MarketplaceProduct
                           ) =>
                             `${p.seller.rating}/۵`,
                         },
                         {
-                          label: 'تعداد فروش',
-                          render: (
-                            p: Product
-                          ) =>
-                            `${p.seller.totalSales} عدد`,
-                        },
-                        {
                           label: 'ریسک اجرا',
                           render: (
-                            p: Product
+                            p: MarketplaceProduct
                           ) =>
                             getRiskLabel(
                               p.riskLevel
@@ -1984,7 +2007,7 @@ export default function MarketplacePage() {
                         {
                           label: 'خدمات پس از فروش',
                           render: (
-                            p: Product
+                            p: MarketplaceProduct
                           ) =>
                             p.afterSalesService
                               ? '✅ دارد'
@@ -1993,7 +2016,7 @@ export default function MarketplacePage() {
                         {
                           label: 'وضعیت مالکیت فکری',
                           render: (
-                            p: Product
+                            p: MarketplaceProduct
                           ) =>
                             p.ipStatus ===
                             'registered'
@@ -2006,7 +2029,7 @@ export default function MarketplacePage() {
                         {
                           label: 'گواهینامه‌ها',
                           render: (
-                            p: Product
+                            p: MarketplaceProduct
                           ) =>
                             p.certifications
                               .length >
@@ -2032,7 +2055,7 @@ export default function MarketplacePage() {
                             {compareList.map(
                               (id) => {
                                 const p =
-                                  mockProducts.find(
+                                  realProducts.find(
                                     (
                                       pp
                                     ) =>
@@ -2104,7 +2127,7 @@ function ProductCard({
   onToggleCompare,
   onStartNegotiation,
 }: {
-  product: Product;
+  product: MarketplaceProduct;
   isFavorite: boolean;
   isCompared: boolean;
   onToggleFavorite: () => void;
@@ -2335,7 +2358,7 @@ function ProductListItem({
   onToggleCompare,
   onStartNegotiation,
 }: {
-  product: Product;
+  product: MarketplaceProduct;
   isFavorite: boolean;
   isCompared: boolean;
   onToggleFavorite: () => void;

@@ -5,7 +5,7 @@
 
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -42,6 +42,9 @@ export default function LoginPage() {
   }>({});
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+
+  // شمارنده برای تلاش مجدد کپچا (حداکثر ۲ بار)
+  const captchaRetryCount = useRef(0);
 
   const isSubmitDisabled = Boolean(
     isLoading || captchaLoading || captchaError || !captchaQuestion
@@ -95,9 +98,19 @@ export default function LoginPage() {
     }
   };
 
+  // دریافت کپچا در اولین لود
   useEffect(() => {
+    captchaRetryCount.current = 0; // ریست شمارنده
     fetchCaptchaChallenge();
   }, []);
+
+  // تلاش مجدد در صورت بروز خطا (حداکثر ۲ بار)
+  useEffect(() => {
+    if (captchaError && !captchaLoading && captchaRetryCount.current < 2) {
+      captchaRetryCount.current += 1;
+      fetchCaptchaChallenge(true);
+    }
+  }, [captchaError, captchaLoading]);
 
   useEffect(() => {
     try {
@@ -162,6 +175,7 @@ export default function LoginPage() {
       if (isCaptchaError) {
         setFieldErrors({ captcha: loginError });
         setForm((prev) => ({ ...prev, captcha_answer: '' }));
+        captchaRetryCount.current = 0; // ریست شمارنده برای تلاش مجدد
         await fetchCaptchaChallenge(false); // خطای کپچا را پاک نمی‌کند
         return;
       }
@@ -340,7 +354,10 @@ export default function LoginPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => fetchCaptchaChallenge(true)}
+                  onClick={() => {
+                    captchaRetryCount.current = 0; // ریست شمارنده برای تلاش مجدد
+                    fetchCaptchaChallenge(true);
+                  }}
                   disabled={Boolean(captchaLoading || isLoading)}
                   className="flex-shrink-0 p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition disabled:opacity-50"
                   aria-label="بارگذاری مجدد کپچا"
@@ -412,7 +429,7 @@ export default function LoginPage() {
             <div className="h-px flex-1 bg-slate-200" />
           </div>
           <Link
-            href="/signup"   // ← تغییر: به جای /register
+            href="/signup"
             className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-[#1E3A8A] py-3 text-sm font-black text-[#1E3A8A] transition hover:bg-blue-50"
           >
             <UserPlus size={18} />

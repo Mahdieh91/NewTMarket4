@@ -122,7 +122,7 @@ type Negotiation = {
 };
 
 // ============================================================
-// Fake Data
+// Fake Data (Only profile, wallet, needs, supplies, negotiations – NO fake messages)
 // ============================================================
 const FAKE_PROFILE: UserProfile = {
   id: 1,
@@ -142,38 +142,8 @@ const FAKE_PROFILE: UserProfile = {
   created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
 };
 
-const FAKE_MESSAGES: Message[] = [
-  {
-    id: 1,
-    sender: { id: 2, username: 'reza_ahmadi', first_name: 'رضا', last_name: 'احمدی' },
-    receiver: { id: 1, username: 'alimohammadi', first_name: 'علی', last_name: 'محمدی' },
-    subject: 'درخواست همکاری',
-    content: 'سلام علی جان، من به محصول شما علاقه‌مند شدم. لطفاً برای همکاری بیشتر تماس بگیرید.',
-    is_read: false,
-    created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
-    is_archived: false,
-  },
-  {
-    id: 2,
-    sender: { id: 1, username: 'alimohammadi', first_name: 'علی', last_name: 'محمدی' },
-    receiver: { id: 3, username: 'sara_karimi', first_name: 'سارا', last_name: 'کریمی' },
-    subject: 'پاسخ به درخواست',
-    content: 'سلام سارا، پیشنهاد شما رو بررسی کردم. ممنون از پیامتون.',
-    is_read: true,
-    created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-    is_archived: false,
-  },
-  {
-    id: 3,
-    sender: { id: 4, username: 'mohsen_ghasemi', first_name: 'محسن', last_name: 'قاسمی' },
-    receiver: { id: 1, username: 'alimohammadi', first_name: 'علی', last_name: 'محمدی' },
-    subject: 'اطلاعات بیشتر درباره محصول',
-    content: 'علی جان، می‌تونم اطلاعات بیشتری درباره قیمت و شرایط دریافت کنم؟',
-    is_read: true,
-    created_at: new Date(Date.now() - 86400000 * 10).toISOString(),
-    is_archived: true,
-  },
-];
+// ✅ FAKE_MESSAGES is now an empty array (no fake messages)
+const FAKE_MESSAGES: Message[] = [];
 
 const FAKE_WALLET: WalletData = {
   balance: 1000000,
@@ -357,7 +327,7 @@ export default function ProfilePage() {
       setUseFakeData(true);
       setProfile(FAKE_PROFILE);
       setFormData(FAKE_PROFILE);
-      setMessages(FAKE_MESSAGES);
+      setMessages([]); // no fake messages
       setWallet(FAKE_WALLET);
       setMyNeeds(FAKE_NEEDS);
       setMySupplies(FAKE_SUPPLIES);
@@ -381,7 +351,7 @@ export default function ProfilePage() {
         setUseFakeData(true);
         setProfile(FAKE_PROFILE);
         setFormData(FAKE_PROFILE);
-        setMessages(FAKE_MESSAGES);
+        setMessages([]);
         setWallet(FAKE_WALLET);
         setMyNeeds(FAKE_NEEDS);
         setMySupplies(FAKE_SUPPLIES);
@@ -409,7 +379,7 @@ export default function ProfilePage() {
         setUseFakeData(true);
         setProfile(FAKE_PROFILE);
         setFormData(FAKE_PROFILE);
-        setMessages(FAKE_MESSAGES);
+        setMessages([]);
         setWallet(FAKE_WALLET);
         setMyNeeds(FAKE_NEEDS);
         setMySupplies(FAKE_SUPPLIES);
@@ -445,14 +415,14 @@ export default function ProfilePage() {
           const msgData = await msgRes.json();
           let messagesArray = msgData?.results ?? msgData;
           if (!Array.isArray(messagesArray)) messagesArray = [];
-          setMessages(messagesArray.length > 0 ? messagesArray : FAKE_MESSAGES);
+          setMessages(messagesArray.length > 0 ? messagesArray : []);
         } else {
-          console.warn('⚠️ Messages API failed, using fake data');
-          setMessages(FAKE_MESSAGES);
+          console.warn('⚠️ Messages API failed, using empty array');
+          setMessages([]);
         }
       } catch (err) {
-        console.warn('⚠️ Error loading messages, using fake data:', err);
-        setMessages(FAKE_MESSAGES);
+        console.warn('⚠️ Error loading messages, using empty array:', err);
+        setMessages([]);
       }
 
       // 3. Wallet
@@ -539,7 +509,7 @@ export default function ProfilePage() {
       setError(err?.message || 'خطا در دریافت اطلاعات');
       setProfile(FAKE_PROFILE);
       setFormData(FAKE_PROFILE);
-      setMessages(FAKE_MESSAGES);
+      setMessages([]);
       setWallet(FAKE_WALLET);
       setMyNeeds(FAKE_NEEDS);
       setMySupplies(FAKE_SUPPLIES);
@@ -726,7 +696,7 @@ export default function ProfilePage() {
   }
 
   const currentProfile = profile || FAKE_PROFILE;
-  const currentMessages = messages.length > 0 ? messages : FAKE_MESSAGES;
+  const currentMessages = messages.length > 0 ? messages : [];
   const currentWallet = wallet || FAKE_WALLET;
   const currentNeeds = myNeeds.length > 0 ? myNeeds : FAKE_NEEDS;
   const currentSupplies = mySupplies.length > 0 ? mySupplies : FAKE_SUPPLIES;
@@ -742,13 +712,14 @@ export default function ProfilePage() {
       ).length
     : 0;
 
+  // ✅ New order: profile, myNeeds, myProducts, myNegotiations, messages, wallet
   const sidebarItems = [
     { id: 'profile', label: 'اطلاعات کاربری', icon: User },
-    { id: 'messages', label: 'صندوق پیام', icon: MessageSquare, badge: unreadCount },
-    { id: 'wallet', label: 'کیف پول', icon: Wallet },
     { id: 'myNeeds', label: 'نیازهای من', icon: Target },
     { id: 'myProducts', label: 'محصولات من', icon: Package },
     { id: 'myNegotiations', label: 'مذاکرات من', icon: MessageCircle },
+    { id: 'messages', label: 'صندوق پیام', icon: MessageSquare, badge: unreadCount },
+    { id: 'wallet', label: 'کیف پول', icon: Wallet },
   ];
 
   return (
@@ -774,9 +745,7 @@ export default function ProfilePage() {
                     </p>
                     <p className="text-sm text-slate-500 truncate">@{currentProfile.username}</p>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                        {currentProfile.role === 'seller' ? 'تأمین‌کننده' : 'خریدار'}
-                      </span>
+                      {/* ✅ نمایش نقش حذف شد */}
                       {currentProfile.kyc_status === 'approved' && (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
                           تأیید شده
@@ -874,7 +843,7 @@ export default function ProfilePage() {
                     setUseFakeData(true);
                     setProfile(FAKE_PROFILE);
                     setFormData(FAKE_PROFILE);
-                    setMessages(FAKE_MESSAGES);
+                    setMessages([]);
                     setWallet(FAKE_WALLET);
                     setMyNeeds(FAKE_NEEDS);
                     setMySupplies(FAKE_SUPPLIES);
