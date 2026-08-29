@@ -122,7 +122,7 @@ type Negotiation = {
 };
 
 // ============================================================
-// Fake Data (Only profile, wallet, needs, supplies, negotiations – NO fake messages)
+// Fake Data
 // ============================================================
 const FAKE_PROFILE: UserProfile = {
   id: 1,
@@ -142,7 +142,6 @@ const FAKE_PROFILE: UserProfile = {
   created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
 };
 
-// ✅ FAKE_MESSAGES is now an empty array (no fake messages)
 const FAKE_MESSAGES: Message[] = [];
 
 const FAKE_WALLET: WalletData = {
@@ -286,7 +285,7 @@ const FAKE_NEGOTIATIONS: Negotiation[] = [
 ];
 
 // ============================================================
-// Main Component (با سایدبار حرفه‌ای در سمت راست)
+// Main Component
 // ============================================================
 export default function ProfilePage() {
   const router = useRouter();
@@ -327,7 +326,7 @@ export default function ProfilePage() {
       setUseFakeData(true);
       setProfile(FAKE_PROFILE);
       setFormData(FAKE_PROFILE);
-      setMessages([]); // no fake messages
+      setMessages([]);
       setWallet(FAKE_WALLET);
       setMyNeeds(FAKE_NEEDS);
       setMySupplies(FAKE_SUPPLIES);
@@ -712,7 +711,6 @@ export default function ProfilePage() {
       ).length
     : 0;
 
-  // ✅ New order: profile, myNeeds, myProducts, myNegotiations, messages, wallet
   const sidebarItems = [
     { id: 'profile', label: 'اطلاعات کاربری', icon: User },
     { id: 'myNeeds', label: 'نیازهای من', icon: Target },
@@ -723,14 +721,17 @@ export default function ProfilePage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50/80 via-white to-blue-50/80 p-4 sm:p-6">
+    <div
+      dir="rtl"
+      className="min-h-screen bg-gradient-to-br from-slate-50/80 via-white to-blue-50/80 p-4 sm:p-6"
+    >
       <div className="max-w-7xl mx-auto">
         {/* استفاده از flex-row-reverse برای قرارگیری سایدبار در سمت راست */}
-        <div className="flex flex-col lg:flex-row-reverse gap-6">
+        <div className="flex flex-row-reverse gap-6">
           {/* سایدبار حرفه‌ای (سمت راست) */}
           <aside className="lg:w-72 flex-shrink-0">
             <div className="sticky top-6 space-y-4">
-              {/* کارت پروفایل با طراحی مینیمال و شیک */}
+              {/* کارت پروفایل */}
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 transition-all hover:shadow-md">
                 <div className="flex items-center gap-4">
                   <div className="relative">
@@ -745,7 +746,6 @@ export default function ProfilePage() {
                     </p>
                     <p className="text-sm text-slate-500 truncate">@{currentProfile.username}</p>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      {/* ✅ نمایش نقش حذف شد */}
                       {currentProfile.kyc_status === 'approved' && (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
                           تأیید شده
@@ -756,7 +756,7 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              {/* منوی سایدبار با طراحی مدرن */}
+              {/* منوی سایدبار */}
               <nav className="bg-white rounded-2xl shadow-sm border border-slate-100 p-3 transition-all hover:shadow-md">
                 <div className="flex items-center gap-2 px-3 py-2 mb-2 border-b border-slate-100">
                   <LayoutDashboard className="w-5 h-5 text-indigo-500" />
@@ -774,7 +774,6 @@ export default function ProfilePage() {
                           : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                       }`}
                     >
-                      {/* نشانگر عمودی برای آیتم فعال */}
                       {activeTab === item.id && (
                         <span className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gradient-to-b from-indigo-500 to-blue-500 rounded-l-full" />
                       )}
@@ -792,7 +791,6 @@ export default function ProfilePage() {
                   ))}
                 </div>
 
-                {/* دکمه خروج با طراحی جدا */}
                 <div className="border-t border-slate-100 mt-3 pt-3">
                   <button
                     onClick={handleLogout}
@@ -804,7 +802,6 @@ export default function ProfilePage() {
                 </div>
               </nav>
 
-              {/* بخش تنظیمات سریع */}
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 transition-all hover:shadow-md">
                 <button className="flex items-center gap-3 w-full px-2 py-2 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition">
                   <Settings className="w-5 h-5 text-slate-400" />
@@ -853,7 +850,19 @@ export default function ProfilePage() {
               />
             )}
             {activeTab === 'wallet' && <WalletTab wallet={currentWallet} loading={loading} />}
-            {activeTab === 'myNeeds' && <MyNeedsTab needs={currentNeeds} loading={loading} />}
+            {activeTab === 'myNeeds' && (
+              <MyNeedsTab
+                needs={currentNeeds}
+                loading={loading}
+                onRefresh={() => {
+                  const token = getAccessToken();
+                  if (token) fetchAllData(token);
+                  else {
+                    setMyNeeds(FAKE_NEEDS);
+                  }
+                }}
+              />
+            )}
             {activeTab === 'myProducts' && <MyProductsTab supplies={currentSupplies} loading={loading} />}
             {activeTab === 'myNegotiations' && (
               <MyNegotiationsTab
@@ -1908,21 +1917,58 @@ function WalletTab({ wallet, loading }: { wallet: WalletData | null; loading: bo
 }
 
 // ============================================================
-// My Needs Tab
+// My Needs Tab (با دکمه‌های انتشار و بازگشایی فقط)
 // ============================================================
-function MyNeedsTab({ needs, loading }: { needs: Need[]; loading: boolean }) {
+function MyNeedsTab({
+  needs,
+  loading,
+  onRefresh,
+}: {
+  needs: Need[];
+  loading: boolean;
+  onRefresh: () => void;
+}) {
   const router = useRouter();
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
 
+  // نگاشت کامل وضعیت‌ها (هماهنگ با بک‌اند)
   const statusMap: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-    published: { label: 'منتشر شده', color: 'bg-green-100 text-green-700', icon: <CheckCircle size={14} /> },
     draft: { label: 'پیش‌نویس', color: 'bg-slate-100 text-slate-600', icon: <AlertCircle size={14} /> },
-    pending: { label: 'در انتظار تأیید', color: 'bg-yellow-100 text-yellow-700', icon: <AlertCircle size={14} /> },
-    approved: { label: 'تأیید شده', color: 'bg-green-100 text-green-700', icon: <CheckCircle size={14} /> },
-    rejected: { label: 'رد شده', color: 'bg-red-100 text-red-700', icon: <X size={14} /> },
-    submitted: { label: 'ارسال برای بررسی', color: 'bg-blue-100 text-blue-700', icon: <Send size={14} /> },
-    evaluating: { label: 'در حال ارزیابی', color: 'bg-purple-100 text-purple-700', icon: <History size={14} /> },
-    needs_revision: { label: 'نیازمند اصلاح', color: 'bg-orange-100 text-orange-700', icon: <AlertCircle size={14} /> },
-    suspended: { label: 'تعلیق شده', color: 'bg-gray-100 text-gray-600', icon: <AlertCircle size={14} /> },
+    published: { label: 'منتشر شده', color: 'bg-green-100 text-green-700', icon: <CheckCircle size={14} /> },
+    private: { label: 'خصوصی', color: 'bg-purple-100 text-purple-700', icon: <EyeOff size={14} /> },
+    receiving_proposals: { label: 'دریافت پیشنهاد', color: 'bg-blue-100 text-blue-700', icon: <InboxIcon size={14} /> },
+    evaluating: { label: 'در حال ارزیابی', color: 'bg-yellow-100 text-yellow-700', icon: <History size={14} /> },
+    matched: { label: 'تطبیق داده شده', color: 'bg-indigo-100 text-indigo-700', icon: <CheckCircle size={14} /> },
+    in_negotiation: { label: 'در حال مذاکره', color: 'bg-orange-100 text-orange-700', icon: <MessageCircle size={14} /> },
+    contracted: { label: 'تبدیل به قرارداد', color: 'bg-teal-100 text-teal-700', icon: <CheckCircle size={14} /> },
+    executing: { label: 'در حال اجرا', color: 'bg-cyan-100 text-cyan-700', icon: <Zap size={14} /> },
+    closed: { label: 'بسته شده', color: 'bg-gray-100 text-gray-600', icon: <Archive size={14} /> },
+  };
+
+  const handleChangeStatus = async (needId: number, newStatus: string) => {
+    try {
+      const token = getAccessToken();
+      if (!token) {
+        alert('لطفاً دوباره وارد شوید');
+        return;
+      }
+      const res = await authenticatedFetch(
+        `${API_URL}/needs/${needId}/change_status/`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: newStatus }),
+        }
+      );
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'خطا در تغییر وضعیت');
+      }
+      // پس از موفقیت، داده‌ها را بازخوانی می‌کنیم
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message || 'خطا در تغییر وضعیت');
+    }
   };
 
   if (loading) {
@@ -1967,13 +2013,21 @@ function MyNeedsTab({ needs, loading }: { needs: Need[]; loading: boolean }) {
     <div>
       <div className="flex justify-between items-center mb-6 flex-wrap gap-2">
         <h2 className="text-xl font-bold text-slate-800">نیازهای ثبت‌شده</h2>
-        <button
-          onClick={() => (window.location.href = '/needs/register')}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition text-sm font-medium shadow-sm flex items-center gap-2"
-        >
-          <Plus size={16} />
-          ثبت نیاز جدید
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={onRefresh}
+            className="px-3 py-1.5 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition"
+          >
+            🔄 بازخوانی
+          </button>
+          <button
+            onClick={() => (window.location.href = '/needs/register')}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition text-sm font-medium shadow-sm flex items-center gap-2"
+          >
+            <Plus size={16} />
+            ثبت نیاز جدید
+          </button>
+        </div>
       </div>
 
       <div className="space-y-4">
@@ -2017,6 +2071,27 @@ function MyNeedsTab({ needs, loading }: { needs: Need[]; loading: boolean }) {
                     {formatDate(need.created_at)}
                   </span>
                 </div>
+
+                {/* دکمه‌های تغییر وضعیت (فقط انتشار و بازگشایی) */}
+                <div className="flex flex-wrap gap-2">
+                  {need.status === 'draft' && (
+                    <button
+                      onClick={() => handleChangeStatus(need.id, 'published')}
+                      className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition"
+                    >
+                      انتشار
+                    </button>
+                  )}
+                  {need.status === 'closed' && (
+                    <button
+                      onClick={() => handleChangeStatus(need.id, 'published')}
+                      className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition"
+                    >
+                      بازگشایی
+                    </button>
+                  )}
+                </div>
+
                 <button
                   onClick={() => router.push(`/matching/${need.id}`)}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] hover:shadow-lg text-white text-xs font-bold rounded-xl transition-all duration-200"
