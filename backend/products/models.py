@@ -1,4 +1,8 @@
+# ============================================================
 # products/models.py
+# ============================================================
+# اصلاح‌شده: اضافه شدن فیلد view_count به مدل Supply
+# ============================================================
 
 from django.db import models
 from django.conf import settings
@@ -302,6 +306,12 @@ class Supply(models.Model):
         choices=STATUS_CHOICES,
         default='pending',
         verbose_name='وضعیت'
+    )
+
+    # ===== فیلد جدید: تعداد بازدید =====
+    view_count = models.IntegerField(
+        default=0,
+        verbose_name='تعداد بازدید'
     )
 
     created_at = models.DateTimeField(

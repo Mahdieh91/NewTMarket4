@@ -1,6 +1,12 @@
+# ============================================================
+# products/views.py
+# ============================================================
+# اصلاح‌شده: اضافه شدن متد increment_view به SupplyViewSet
+# ============================================================
 
 from rest_framework import viewsets, permissions, filters, status
 from rest_framework.response import Response
+from rest_framework.decorators import action
 from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import Product, Supply
@@ -104,3 +110,16 @@ class SupplyViewSet(viewsets.ModelViewSet):
             headers=headers,
         )
 
+    # ==========================================================
+    # متد افزایش بازدید
+    # ==========================================================
+
+    @action(detail=True, methods=['post'], url_path='increment-view')
+    def increment_view(self, request, pk=None):
+        """
+        افزایش تعداد بازدید یک عرضه
+        """
+        supply = self.get_object()
+        supply.view_count = (supply.view_count or 0) + 1
+        supply.save(update_fields=['view_count'])
+        return Response({'view_count': supply.view_count})

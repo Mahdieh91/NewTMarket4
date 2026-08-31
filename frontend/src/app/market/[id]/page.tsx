@@ -1,6 +1,8 @@
 // ============================================================
 // FILE: C:\Users\Fardad\tmarket4\frontend\src\app\market\[id]\page.tsx
 // ============================================================
+// اصلاح‌شده: اضافه شدن import Eye و افزایش بازدید
+// ============================================================
 
 'use client';
 
@@ -29,7 +31,10 @@ import {
   Layers,
   Tag,
   Sparkles,
+  Eye, // ← اضافه شد
 } from 'lucide-react';
+
+import { useAuthStore } from '@/store/auth-store';
 
 /* ============================================================
    API
@@ -71,6 +76,8 @@ interface Supply {
   documents: string[];
 
   status: string;
+
+  view_count?: number; // ← اضافه شد
 
   created_at: string;
   updated_at: string;
@@ -293,6 +300,7 @@ function SectionTitle({
 
 export default function ProductDetailPage() {
   const params = useParams();
+  const { accessToken, isAuthenticated } = useAuthStore();
 
   const rawId = params?.id;
 
@@ -311,6 +319,9 @@ export default function ProductDetailPage() {
 
   const [selectedImage, setSelectedImage] =
     useState<string | null>(null);
+
+  const [viewIncremented, setViewIncremented] =
+    useState(false);
 
   /* ============================================================
      تشخیص Supply واقعی
@@ -443,6 +454,25 @@ export default function ProductDetailPage() {
             firstImage || null,
           );
         }
+
+        // ===== افزایش بازدید =====
+        if (!viewIncremented && isAuthenticated && accessToken) {
+          try {
+            await fetch(
+              `${API_BASE_URL}/api/products/supplies/${foundSupply.id}/increment-view/`,
+              {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                  'Content-Type': 'application/json',
+                },
+              }
+            );
+            setViewIncremented(true);
+          } catch (viewError) {
+            console.warn('⚠️ خطا در افزایش بازدید:', viewError);
+          }
+        }
       } catch (err) {
         if (cancelled) {
           return;
@@ -470,7 +500,7 @@ export default function ProductDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [supplyId]);
+  }, [supplyId, isAuthenticated, accessToken, viewIncremented]);
 
   /* ============================================================
      Loading
@@ -690,6 +720,14 @@ export default function ProductDetailPage() {
                   <span className="px-3 py-1.5 rounded-full bg-slate-100 text-slate-500 text-xs font-bold">
                     شناسه: {supply!.id}
                   </span>
+
+                  {/* ===== نمایش تعداد بازدید ===== */}
+                  {supply!.view_count !== undefined && supply!.view_count > 0 && (
+                    <span className="px-3 py-1.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold flex items-center gap-1">
+                      <Eye size={12} />
+                      {supply!.view_count.toLocaleString('fa-IR')} بازدید
+                    </span>
+                  )}
                 </div>
 
                 <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 leading-tight">
@@ -876,11 +914,11 @@ export default function ProductDetailPage() {
                     label="مقدار عرضه"
                     value={
                       supply!.quantity
-                        ? `${supply!.quantity}${
+                        ? `${supply!.quantity}${(
                             supply!.unit
                               ? ` ${supply!.unit}`
                               : ''
-                          }`
+                          )}`
                         : null
                     }
                   />
@@ -1225,6 +1263,14 @@ export default function ProductDetailPage() {
                       'fa-IR',
                     )}
                   </p>
+
+                  {/* ===== نمایش تعداد بازدید در پنل ===== */}
+                  {supply!.view_count !== undefined && supply!.view_count > 0 && (
+                    <div className="mt-3 flex items-center gap-2 text-white/80 text-xs">
+                      <Eye size={14} />
+                      <span>{supply!.view_count.toLocaleString('fa-IR')} بازدید</span>
+                    </div>
+                  )}
 
                 </div>
               </div>

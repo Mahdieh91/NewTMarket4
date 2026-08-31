@@ -1,7 +1,7 @@
 // ============================================================
 // FILE: C:\Users\Fardad\tmarket4\frontend\src\app\market\page.tsx
 // ============================================================
-// اصلاح‌شده برای استفاده از Supply (همان Matching و Negotiation)
+// اصلاح‌شده: استفاده از viewCount واقعی و پشتیبانی از فیلتر "پربازدیدترین"
 // ============================================================
 
 'use client';
@@ -106,7 +106,7 @@ const API_URL =
 
 const API_ORIGIN = API_URL.replace(/\/api\/?$/, '');
 
-// ==================== Supply API (همان Matching) ====================
+// ==================== Supply API ====================
 
 type SupplyApi = {
   id: number | string;
@@ -123,6 +123,7 @@ type SupplyApi = {
   documents?: string[];
   status?: string;
   seller_name?: string | null;
+  view_count?: number; // ← اضافه شد
   images?: Array<{
     id: number | string;
     image?: string | null;
@@ -285,7 +286,8 @@ function supplyToMarketplaceProduct(
         supply.status === 'published',
     },
 
-    viewCount: 0,
+    // ===== استفاده از view_count واقعی =====
+    viewCount: supply.view_count || 0,
 
     deliveryTime: '—',
 
@@ -427,7 +429,7 @@ export default function MarketplacePage() {
       | 'popular'
       | 'price-asc'
       | 'price-desc'
-      | 'rating'
+      // | 'rating'  // کامنت شده
     >('newest');
 
   const [selectedRisk, setSelectedRisk] =
@@ -456,7 +458,7 @@ export default function MarketplacePage() {
     }
   }, []);
 
-  // ==================== Load Supplies (از Supply) ====================
+  // ==================== Load Supplies ====================
 
   useEffect(() => {
     if (!mounted || !accessToken || !isAuthenticated) {
@@ -470,7 +472,6 @@ export default function MarketplacePage() {
       setSuppliesError(null);
 
       try {
-        // ===== استفاده از Supply (همان Matching و Negotiation) =====
         const response = await fetch(
           `${API_URL}/products/supplies/`,
           {
@@ -896,6 +897,7 @@ export default function MarketplacePage() {
           break;
 
         case 'popular':
+          // ===== استفاده از viewCount واقعی برای مرتب‌سازی =====
           result.sort(
             (a, b) =>
               b.viewCount -
@@ -951,13 +953,13 @@ export default function MarketplacePage() {
           );
           break;
 
-        case 'rating':
-          result.sort(
-            (a, b) =>
-              b.seller.rating -
-              a.seller.rating
-          );
-          break;
+        // case 'rating': // کامنت شده
+        //   result.sort(
+        //     (a, b) =>
+        //       b.seller.rating -
+        //       a.seller.rating
+        //   );
+        //   break;
       }
 
       return result;
@@ -1574,9 +1576,9 @@ export default function MarketplacePage() {
                     قیمت: زیاد به کم
                   </option>
 
-                  <option value="rating">
+                  {/* <option value="rating">
                     بالاترین امتیاز
-                  </option>
+                  </option> */}
                 </select>
 
                 <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
@@ -2098,7 +2100,7 @@ export default function MarketplacePage() {
 }
 
 // =========================================================
-// Product Card (با استفاده از img معمولی)
+// Product Card
 // =========================================================
 
 function ProductCard({
@@ -2328,7 +2330,7 @@ function ProductCard({
 }
 
 // =========================================================
-// Product List Item (با استفاده از img معمولی)
+// Product List Item
 // =========================================================
 
 function ProductListItem({
