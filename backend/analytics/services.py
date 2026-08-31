@@ -1,5 +1,9 @@
-# analytics/services.py
-# نسخه نهایی با پشتیبانی از تحلیل رقبا در سطح بازار (بدون product_id)
+# ============================================================
+# backend/analytics/services.py
+# ============================================================
+# نسخه کامل با پشتیبانی از تحلیل رقبا، Market Intelligence و Dashboard
+# به اضافه recentNeeds و recentSupplies برای Dashboard
+# ============================================================
 
 import logging
 import json
@@ -11,7 +15,7 @@ from django.db.models import Q, Count, Sum, Avg, Max, Min
 from django.utils import timezone
 from django.core.cache import cache
 
-from products.models import Product
+from products.models import Product, Supply
 
 try:
     from industries.models import IndustryCategory
@@ -32,6 +36,11 @@ try:
     from contract.models import Contract
 except ImportError:
     Contract = None
+
+try:
+    from negotiations.models import Negotiation
+except ImportError:
+    Negotiation = None
 
 try:
     from matching.models import MatchResult, MatchingRequest
@@ -91,6 +100,17 @@ ONGOING_CONTRACT_STATUSES = {
     "approved_supplier",
 }
 
+ONGOING_NEGOTIATION_STATUSES = {
+    "created",
+    "in_progress",
+    "awaiting_proposal",
+    "proposal_sent",
+    "under_review",
+}
+
+RECENT_DAYS = 3
+RECENT_LIMIT = 5
+
 
 # ============================================================
 # Utility Functions
@@ -143,6 +163,135 @@ def resolve_industry_param(value):
         except Exception as e:
             logger.warning(f"Error resolving industry name '{value}': {e}")
     return None
+
+
+def _display_user(user):
+    if not user:
+        return "نامشخص"
+    try:
+        company_name = getattr(user, "company_name", None)
+        if company_name:
+            return company_name
+    except Exception:
+        pass
+    try:
+        full_name = user.get_full_name()
+        if full_name:
+            return full_name
+    except Exception:
+        pass
+    return getattr(user, "username", "نامشخص")
+
+
+def _safe_iso(value):
+    if value is None:
+        return None
+    try:
+        return value.isoformat()
+    except Exception:
+        return None
+
+
+def _recent_with_fallback(queryset, recent_days=RECENT_DAYS, limit=RECENT_LIMIT):
+    now = timezone.now()
+    cutoff = now - timedelta(days=recent_days)
+
+    recent_items = list(
+        queryset.filter(created_at__gte=cutoff)
+        .order_by("-created_at", "-id")[:limit]
+    )
+
+    if len(recent_items) >= limit:
+        return recent_items
+
+    existing_ids = {
+        getattr(item, "id", None)
+        for item in recent_items
+    }
+
+    remaining = limit - len(recent_items)
+
+    older_items = list(
+        queryset.exclude(id__in=existing_ids)
+        .order_by("-created_at", "-id")[:remaining]
+    )
+
+    return recent_items + older_items
+
+
+# ============================================================
+# Recent Needs & Supplies (برای Dashboard)
+# ============================================================
+
+def get_recent_needs(user, limit=RECENT_LIMIT):
+    """
+    آخرین نیازهای واقعی کاربر.
+    اولویت: سه روز اخیر، سپس قدیمی‌تر
+    """
+    if Need is None:
+        return []
+
+    try:
+        queryset = (
+            Need.objects
+            .filter(buyer=user)
+            .select_related("industry")
+            .order_by("-created_at", "-id")
+        )
+
+        needs = _recent_with_fallback(queryset, recent_days=RECENT_DAYS, limit=limit)
+
+        result = []
+        for need in needs:
+            industry_name = None
+            try:
+                if need.industry:
+                    industry_name = need.industry.name
+            except Exception:
+                industry_name = None
+
+            result.append({
+                "id": int(need.id),
+                "title": need.title or "نیاز بدون عنوان",
+                "status": need.status or "",
+                "created_at": _safe_iso(need.created_at),
+                "industry": industry_name,
+            })
+        return result
+
+    except Exception:
+        logger.exception("Dashboard: error loading recent needs")
+        return []
+
+
+def get_recent_supplies(user, limit=RECENT_LIMIT):
+    """
+    آخرین عرضه‌های واقعی کاربر (از مدل Supply).
+    اولویت: سه روز اخیر، سپس قدیمی‌تر
+    """
+    try:
+        queryset = (
+            Supply.objects
+            .filter(seller=user)
+            .order_by("-created_at", "-id")
+        )
+
+        supplies = _recent_with_fallback(queryset, recent_days=RECENT_DAYS, limit=limit)
+
+        result = []
+        for supply in supplies:
+            result.append({
+                "id": int(supply.id),
+                "title": supply.title or "عرضه بدون عنوان",
+                "status": supply.status or "",
+                "created_at": _safe_iso(supply.created_at),
+                "category": supply.category or None,
+            })
+        return result
+
+    except Exception:
+        logger.exception("Dashboard: error loading recent supplies")
+        return []
 
 
 # ============================================================
@@ -561,7 +710,7 @@ def get_top_products_for_company(products, all_products, limit=3):
             "trl": p.trl,
             "mrl": p.mrl,
             "price": safe_float(p.price),
-            "status": p.status or "unknown",   # ← اصلاح: اضافه کردن status
+            "status": p.status or "unknown",
             "view_count": p.view_count or 0,
             "quality_indicator": get_quality_indicator(p),
             "market_readiness": get_market_readiness(p, all_products),
@@ -589,8 +738,6 @@ def analyze_market_competitors(industry_id=None, category=None, region=None, tec
     if category:
         product_qs = product_qs.filter(category=category)
 
-    # در صورت نیاز می‌توان فیلترهای region و tech را اضافه کرد، اما فعلاً ساده می‌گیریم.
-
     products = list(product_qs)
 
     if not products:
@@ -604,12 +751,10 @@ def analyze_market_competitors(industry_id=None, category=None, region=None, tec
             "insights": ["هیچ محصولی در این محدوده یافت نشد."],
         }
 
-    # گروه‌بندی بر اساس فروشنده
     seller_products = defaultdict(list)
     for product in products:
         seller_products[product.seller_id].append(product)
 
-    # محاسبه میانگین قیمت بازار بر اساس شرکت‌ها
     company_avg_prices = []
     for seller_id, prods in seller_products.items():
         prices = [float(p.price) for p in prods if p.price is not None]
@@ -647,7 +792,6 @@ def analyze_market_competitors(industry_id=None, category=None, region=None, tec
 
         eval_confidence = quality_result.get('confidence', 0)
 
-        # امتیاز قیمت با clamp
         price_score = clamp(100 - max(0, price_pos.get('position', 0)))
 
         metrics = {
@@ -662,7 +806,6 @@ def analyze_market_competitors(industry_id=None, category=None, region=None, tec
 
         comp_score = calculate_competitive_score(metrics)
 
-        # محصولات برتر با status
         top_products = get_top_products_for_company(prods, products, limit=3)
 
         competitor_data.append({
@@ -686,11 +829,9 @@ def analyze_market_competitors(industry_id=None, category=None, region=None, tec
             "top_products": top_products,
         })
 
-    # رتبه‌بندی
     competitor_data.sort(key=lambda x: x["competitive_score"], reverse=True)
     top_competitors = competitor_data[:limit]
 
-    # LLM Analysis for market summary
     llm_analysis = {}
     if LLMService is not None and top_competitors:
         try:
@@ -849,7 +990,6 @@ def analyze_competitors_for_product(product_id, limit=10, include_indirect=True)
         direct_count = sum(1 for p in prods if p.industry_id == target_product.industry_id and p.category == target_product.category)
         is_direct = direct_count > 0
 
-        # محصولات برتر با status
         top_products = get_top_products_for_company(prods, all_competitor_products, limit=3)
 
         competitor_data.append({
@@ -898,7 +1038,6 @@ def analyze_competitors_for_product(product_id, limit=10, include_indirect=True)
     competitor_data.sort(key=lambda x: x["competitive_score"]["total"], reverse=True)
     top_competitors = competitor_data[:limit]
 
-    # LLM Analysis
     llm_analysis = {}
     if LLMService is not None and top_competitors:
         try:
@@ -1157,7 +1296,6 @@ def generate_competitor_analysis(
                 'limit': limit,
                 'analysis_type': 'market_level',
             }
-            # برای سازگاری با Serializer، فیلدهای خالی اضافه می‌کنیم
             data['target_product'] = None
             data['gap_analysis'] = []
         return data
@@ -1169,7 +1307,7 @@ def generate_competitor_analysis(
 
 
 # ============================================================
-# توابع دیگر (بدون تغییر)
+# Market Intelligence
 # ============================================================
 
 def build_product_indicator(product, industry_products):
@@ -1561,6 +1699,10 @@ def generate_market_intelligence(industry=None, category=None, trl_min=None, trl
         raise
 
 
+# ============================================================
+# Dashboard Data (با اضافه شدن recentNeeds و recentSupplies)
+# ============================================================
+
 def generate_dashboard_data(user):
     try:
         total_products = Product.objects.filter(seller=user, status__in=MARKET_STATUSES).count()
@@ -1619,6 +1761,10 @@ def generate_dashboard_data(user):
                 })
         except Exception as exc:
             logger.exception("Could not fetch recent contracts: %s", exc)
+
+    # ===== اضافه کردن recentNeeds و recentSupplies =====
+    recent_needs = get_recent_needs(user, limit=RECENT_LIMIT)
+    recent_supplies = get_recent_supplies(user, limit=RECENT_LIMIT)
 
     conversion_funnel = []
     if Contract is not None:
@@ -1741,4 +1887,6 @@ def generate_dashboard_data(user):
         "conversionFunnel": conversion_funnel,
         "topSuppliers": top_suppliers,
         "negotiationInsights": negotiation_insights,
+        "recentNeeds": recent_needs,
+        "recentSupplies": recent_supplies,
     }

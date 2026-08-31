@@ -1,5 +1,9 @@
+# ============================================================
 # analytics/serializers.py
-# نسخه نهایی با تمام فیلدهای مورد نیاز CompetitorAnalysisSerializer
+# ============================================================
+# نسخه نهایی با تمام فیلدهای مورد نیاز برای Dashboard، Market Intelligence و Competitor Analysis
+# شامل فیلدهای recentNeeds و recentSupplies برای Dashboard
+# ============================================================
 
 from rest_framework import serializers
 
@@ -119,7 +123,7 @@ class CompetitorProductSummarySerializer(serializers.Serializer):
     trl = serializers.IntegerField(allow_null=True)
     mrl = serializers.IntegerField(allow_null=True)
     price = serializers.FloatField(allow_null=True)
-    status = serializers.CharField()  # این فیلد باید حتماً وجود داشته باشد
+    status = serializers.CharField()
     view_count = serializers.IntegerField()
     quality_indicator = serializers.FloatField()
     market_readiness = serializers.FloatField()
@@ -203,7 +207,7 @@ class CompetitorAnalysisSerializer(serializers.Serializer):
 
 
 # ============================================================
-# Serializerهای Dashboard
+# Serializerهای Dashboard (با فیلدهای recentNeeds و recentSupplies)
 # ============================================================
 
 class DashboardStatsSerializer(serializers.Serializer):
@@ -211,6 +215,22 @@ class DashboardStatsSerializer(serializers.Serializer):
     activeNeeds = serializers.IntegerField()
     ongoingNegotiations = serializers.IntegerField()
     successfulDeals = serializers.IntegerField()
+
+
+class RecentNeedSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    status = serializers.CharField(required=False, allow_blank=True, default="")
+    created_at = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    industry = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+
+
+class RecentSupplySerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    status = serializers.CharField(required=False, allow_blank=True, default="")
+    created_at = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    category = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
 
 class DashboardDataSerializer(serializers.Serializer):
@@ -222,3 +242,6 @@ class DashboardDataSerializer(serializers.Serializer):
     conversionFunnel = serializers.ListField(required=False, default=list)
     topSuppliers = serializers.ListField(required=False, default=list)
     negotiationInsights = serializers.ListField(required=False, default=list)
+    # فیلدهای جدید برای نیازهای اخیر و محصولات اخیر
+    recentNeeds = RecentNeedSerializer(many=True, required=False, default=list)
+    recentSupplies = RecentSupplySerializer(many=True, required=False, default=list)

@@ -1,4 +1,8 @@
+# ============================================================
 # analytics/views.py
+# ============================================================
+# نسخه نهایی با پشتیبانی از Dashboard، Market Intelligence و Competitor Analysis
+# ============================================================
 
 from rest_framework import permissions, status
 from rest_framework.response import Response
