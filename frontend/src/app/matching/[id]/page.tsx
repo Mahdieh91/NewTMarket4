@@ -1,5 +1,6 @@
-// src/app/matching/[id]/page.tsx - نسخه کامل اصلاح شده با معماری Product‑محور برای مقایسه
-// + ریست خودکار compareList هنگام بارگذاری صفحه
+// ============================================================
+// src/app/matching/[id]/page.tsx
+// ============================================================
 
 'use client';
 
@@ -26,6 +27,7 @@ import {
   Package,
   Plus,
   Loader2,
+  Pencil,  // اضافه شد
 } from 'lucide-react';
 
 import {
@@ -69,7 +71,6 @@ interface NeedSummary {
   expected_outcome?: string;
 }
 
-// نوع جدید برای ذخیره‌سازی مقایسه (Product‑محور)
 interface CompareItem {
   productId: number;
   matchId: number;
@@ -172,6 +173,7 @@ export default function MatchingPage() {
   const [matches, setMatches] = useState<MatchResult[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isEmpty, setIsEmpty] = useState(false);  // جدید
   const [isInitialLoadDone, setIsInitialLoadDone] = useState(false);
 
   const [sortBy, setSortBy] = useState<SortOption>('match');
@@ -181,7 +183,6 @@ export default function MatchingPage() {
   const [categoryFilter, setCategoryFilter] = useState('all');
 
   const [favorites, setFavorites] = useState<number[]>([]);
-  // ========== تغییر اصلی: compareList از نوع CompareItem[] ==========
   const [compareList, setCompareList] = useState<CompareItem[]>([]);
   const [selectedMatch, setSelectedMatch] = useState<MatchResult | null>(null);
   const [isNegotiating, setIsNegotiating] = useState(false);
@@ -199,18 +200,15 @@ export default function MatchingPage() {
   useEffect(() => {
     setMounted(true);
 
-    // ===== تغییر جدید: ریست کردن لیست مقایسه هنگام ورود به صفحه =====
     try {
       localStorage.removeItem('compareList');
-      setCompareList([]); // ← خالی کردن state نیز
+      setCompareList([]);
       console.log('✅ compareList ریست شد');
     } catch (storageError) {
       console.error('❌ خطا در ریست compareList:', storageError);
     }
-    // ================================================================
 
     try {
-      // بارگذاری علاقه‌مندی‌ها (همانند قبل)
       const savedFavorites = localStorage.getItem('matchingFavorites');
       if (savedFavorites) {
         const parsed = JSON.parse(savedFavorites);
@@ -218,15 +216,13 @@ export default function MatchingPage() {
           setFavorites(parsed.filter((item): item is number => Number.isInteger(item)));
         }
       }
-
-      // دیگر نیازی به خواندن savedCompare نیست چون آن را پاک کرده‌ایم
     } catch (storageError) {
       console.error('❌ خطا در خواندن اطلاعات ذخیره‌شده:', storageError);
     }
   }, []);
 
   // ============================================================
-  // Load Data (نیاز و نتایج تطبیق) – بدون تغییر
+  // Load Data (نیاز و نتایج تطبیق)
   // ============================================================
 
   const loadNeed = useCallback(async (id: number): Promise<NeedSummary> => {
@@ -281,6 +277,7 @@ export default function MatchingPage() {
 
     setIsLoading(true);
     setError(null);
+    setIsEmpty(false);
 
     try {
       // 1. دریافت اطلاعات نیاز
@@ -302,8 +299,8 @@ export default function MatchingPage() {
         }
       }
 
-      // 2. دریافت نتایج تطبیق
-      const url = `${API_URL}/matching/results/needs/${needId}/`;
+      // 2. دریافت نتایج تطبیق با استفاده از Endpoint جدید
+      const url = `${API_URL}/matching/needs/${needId}/matches/`;  // تغییر مسیر
       console.log('📡 دریافت نتایج Matching:', url);
 
       const response = await authenticatedFetch(url, {
@@ -313,7 +310,8 @@ export default function MatchingPage() {
       if (!response.ok) {
         if (response.status === 404) {
           setMatches([]);
-          setError('هیچ نتیجه تطبیقی برای این نیاز یافت نشد.');
+          setIsEmpty(true);
+          setError(null);
         } else {
           throw new Error(`خطا در دریافت نتایج (${response.status})`);
         }
@@ -336,15 +334,18 @@ export default function MatchingPage() {
 
       if (resultList.length === 0) {
         setMatches([]);
-        setError('هیچ نتیجه تطبیقی برای این نیاز یافت نشد.');
+        setError(null);
+        setIsEmpty(true);
       } else {
         setMatches(resultList);
         setError(null);
+        setIsEmpty(false);
       }
     } catch (fetchError) {
       console.error('❌ خطا در دریافت Matching:', fetchError);
       setMatches([]);
       setError(fetchError instanceof Error ? fetchError.message : 'خطا در دریافت اطلاعات تطبیق.');
+      setIsEmpty(false);
     } finally {
       setIsLoading(false);
       setIsInitialLoadDone(true);
@@ -358,7 +359,7 @@ export default function MatchingPage() {
   }, [mounted, loadMatches]);
 
   // ============================================================
-  // Filters & Sorting – بدون تغییر
+  // Filters & Sorting
   // ============================================================
 
   const categories = useMemo(() => {
@@ -441,7 +442,7 @@ export default function MatchingPage() {
   }, [matches]);
 
   // ============================================================
-  // Actions – توابع اصلاح‌شده برای مقایسه
+  // Actions
   // ============================================================
 
   const toggleFavorite = (id: number) => {
@@ -456,13 +457,11 @@ export default function MatchingPage() {
     });
   };
 
-  // ===== تابع جدید toggleCompare =====
   const toggleCompare = (match: MatchResult) => {
     const productId = Number(match.product);
     const matchId = Number(match.id);
     const needId = Number(match.need);
 
-    // اعتبارسنجی
     if (!Number.isInteger(productId) || productId <= 0) {
       console.warn('❌ productId نامعتبر:', match.product);
       return;
@@ -471,24 +470,19 @@ export default function MatchingPage() {
     if (!Number.isInteger(needId) || needId <= 0) return;
 
     setCompareList((prev) => {
-      // آیا این محصول قبلاً انتخاب شده است؟
       const exists = prev.some((item) => item.productId === productId);
 
       let next: CompareItem[];
       if (exists) {
-        // حذف محصول
         next = prev.filter((item) => item.productId !== productId);
       } else {
-        // بررسی حداکثر تعداد (۴ مورد)
         if (prev.length >= 4) {
           alert('حداکثر ۴ راهکار را می‌توانید برای مقایسه انتخاب کنید.');
           return prev;
         }
-        // اضافه کردن
         next = [...prev, { productId, matchId, needId }];
       }
 
-      // ذخیره در localStorage
       try {
         localStorage.setItem('compareList', JSON.stringify(next));
       } catch (error) {
@@ -499,7 +493,6 @@ export default function MatchingPage() {
     });
   };
 
-  // تابع کمکی برای بررسی وجود productId در compareList
   const isProductInCompare = (productId: number): boolean => {
     return compareList.some((item) => item.productId === productId);
   };
@@ -553,7 +546,7 @@ export default function MatchingPage() {
   const closeDetails = () => setSelectedMatch(null);
 
   // ============================================================
-  // Render – بخش‌های نمایشی
+  // Render
   // ============================================================
 
   if (!mounted || (isLoading && !isInitialLoadDone)) {
@@ -571,7 +564,8 @@ export default function MatchingPage() {
     );
   }
 
-  if (error && matches.length === 0 && isInitialLoadDone) {
+  // نمایش خطاهای واقعی (غیر از حالت خالی)
+  if (error && isInitialLoadDone) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white" dir="rtl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -595,6 +589,38 @@ export default function MatchingPage() {
       </div>
     );
   }
+
+  // نمایش حالت خالی (بدون نتیجه) با پیام تکمیل اطلاعات
+  if (isEmpty && isInitialLoadDone) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white" dir="rtl">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="max-w-3xl mx-auto mt-20 text-center">
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-8">
+              <Lightbulb className="w-16 h-16 text-amber-500 mx-auto mb-4" />
+              <h2 className="text-xl font-bold text-amber-800 mb-2">
+                برای یافتن تطبیق دقیق‌تر، اطلاعات این نیاز را تکمیل کنید.
+              </h2>
+              <p className="text-amber-700 text-sm leading-relaxed max-w-md mx-auto">
+                در حال حاضر اطلاعات کافی برای شناسایی یک راهکار مناسب وجود ندارد. با افزودن شرح دقیق‌تر، الزامات فنی، بودجه یا نتیجه مورد انتظار، امکان یافتن تطبیق‌های بهتر فراهم می‌شود.
+              </p>
+              <Link
+                href={`/needs/edit/${needId}`}
+                className="mt-6 inline-flex items-center gap-2 px-6 py-3 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition"
+              >
+                <Pencil size={16} />
+                تکمیل اطلاعات نیاز
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ============================================================
+  // Main Render (داشتن نتیجه)
+  // ============================================================
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white" dir="rtl">
@@ -648,7 +674,7 @@ export default function MatchingPage() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Need Card (بدون تغییر) */}
+          {/* Need Card */}
           <div className="lg:col-span-1 space-y-4">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center gap-2 mb-4">
@@ -734,7 +760,7 @@ export default function MatchingPage() {
               )}
             </div>
 
-            {/* Statistics (بدون تغییر) */}
+            {/* Statistics */}
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h3 className="text-sm font-extrabold text-slate-800 mb-4 flex items-center gap-2">
                 <BarChart3 size={16} className="text-[#14B8A6]" />
@@ -780,13 +806,13 @@ export default function MatchingPage() {
                   className="px-3 py-2 rounded-xl border border-slate-200 text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 transition cursor-pointer outline-none"
                 >
                   <option value="match">بیشترین انطباق</option>
-                  <option value="rating">بالاترین امتیاز تطبیق</option>
+                  
                   <option value="price">کمترین قیمت</option>
                 </select>
               </div>
             </div>
 
-            {/* Filters (بدون تغییر) */}
+            {/* Filters */}
             {filterOpen && (
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
@@ -845,7 +871,7 @@ export default function MatchingPage() {
               </div>
             )}
 
-            {/* Empty State (بدون تغییر) */}
+            {/* Empty State (در صورت فیلتر شدن و عدم نتیجه) */}
             {sortedMatches.length === 0 && (
               <div className="rounded-2xl border border-slate-200 bg-white text-center py-12 px-6">
                 <div className="flex justify-center mb-4">
@@ -886,7 +912,7 @@ export default function MatchingPage() {
               </div>
             )}
 
-            {/* Match Cards – با دکمه‌های مقایسه اصلاح‌شده */}
+            {/* Match Cards */}
             <div className="space-y-4">
               {sortedMatches.map((match) => {
                 const percentage = getMatchPercentage(match);
@@ -976,7 +1002,6 @@ export default function MatchingPage() {
                             {isNegotiatingThis ? 'در حال ایجاد...' : 'شروع مذاکره'}
                           </button>
 
-                          {/* دکمه مقایسه – با استفاده از تابع جدید toggleCompare */}
                           <button
                             type="button"
                             onClick={() => toggleCompare(match)}
@@ -1022,9 +1047,7 @@ export default function MatchingPage() {
         </div>
       </main>
 
-      {/* ============================================================
-          Compare Bar – با نمایش تعداد محصولات یکتا
-      ============================================================ */}
+      {/* Compare Bar */}
       {compareList.length > 0 && (
         <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 shadow-2xl p-4">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
@@ -1060,9 +1083,7 @@ export default function MatchingPage() {
         </div>
       )}
 
-      {/* ============================================================
-          Details Modal – دکمه مقایسه در مودال نیز اصلاح شد
-      ============================================================ */}
+      {/* Details Modal */}
       {selectedMatch && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"

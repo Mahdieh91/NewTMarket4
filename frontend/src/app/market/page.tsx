@@ -1,6 +1,8 @@
 // ============================================================
 // FILE: C:\Users\Fardad\tmarket4\frontend\src\app\market\page.tsx
 // ============================================================
+// اصلاح‌شده برای استفاده از Supply (همان Matching و Negotiation)
+// ============================================================
 
 'use client';
 
@@ -33,6 +35,7 @@ import { useAuthStore } from '@/store/auth-store';
 // ==================== Constants ====================
 
 const industries = [
+  'همه',
   'نفت و گاز',
   'پتروشیمی',
   'فولاد و معدن',
@@ -46,6 +49,7 @@ const industries = [
 ];
 
 const technologies = [
+  'همه',
   'هوش مصنوعی',
   'اینترنت اشیاء',
   'دوقلوی دیجیتال',
@@ -55,6 +59,7 @@ const technologies = [
 ];
 
 const trlLevels = [
+  { value: 0, label: 'همه' },
   { value: 1, label: 'TRL 1 - اصول پایه' },
   { value: 2, label: 'TRL 2 - فرمول‌بندی مفهوم' },
   { value: 3, label: 'TRL 3 - اثبات مفهوم' },
@@ -67,6 +72,7 @@ const trlLevels = [
 ];
 
 const mrlLevels = [
+  { value: 0, label: 'همه' },
   { value: 1, label: 'MRL 1 - نیازسنجی بازار' },
   { value: 2, label: 'MRL 2 - تحلیل بازار اولیه' },
   { value: 3, label: 'MRL 3 - تأیید بازار هدف' },
@@ -79,6 +85,7 @@ const mrlLevels = [
 ];
 
 const provinces = [
+  'همه',
   'تهران',
   'اصفهان',
   'شیراز',
@@ -99,7 +106,7 @@ const API_URL =
 
 const API_ORIGIN = API_URL.replace(/\/api\/?$/, '');
 
-// ==================== Supply API ====================
+// ==================== Supply API (همان Matching) ====================
 
 type SupplyApi = {
   id: number | string;
@@ -167,7 +174,7 @@ interface MarketplaceProduct {
   shortDescription: string;
   trl: number;
   mrl: number;
-  price: number; // قیمت به میلیون تومان
+  price: number;
   priceType: 'fixed' | 'range';
   priceRange?: { min: number; max: number };
   images: string[];
@@ -189,9 +196,9 @@ interface MarketplaceProduct {
   createdAt: string;
 }
 
-// ==================== Supply -> Product ====================
+// ==================== Supply -> MarketplaceProduct ====================
 
-function supplyToProduct(
+function supplyToMarketplaceProduct(
   supply: SupplyApi
 ): MarketplaceProduct {
   const trlNumber = Number.parseInt(
@@ -218,9 +225,6 @@ function supplyToProduct(
 
   return {
     id: `supply-${supply.id}`,
-
-    // مهم:
-    // شناسه واقعی Supply را جداگانه نگه می‌داریم.
     supplyId: Number(supply.id),
 
     title: supply.title,
@@ -389,10 +393,10 @@ export default function MarketplacePage() {
     useState('');
 
   const [selectedIndustry, setSelectedIndustry] =
-    useState('all');
+    useState('همه');
 
   const [selectedTechnology, setSelectedTechnology] =
-    useState('all');
+    useState('همه');
 
   const [selectedCategory, setSelectedCategory] =
     useState<
@@ -409,7 +413,7 @@ export default function MarketplacePage() {
     useState<number>(5000);
 
   const [selectedProvince, setSelectedProvince] =
-    useState('all');
+    useState('همه');
 
   const [selectedCertification, setSelectedCertification] =
     useState('all');
@@ -452,7 +456,7 @@ export default function MarketplacePage() {
     }
   }, []);
 
-  // ==================== Load Supplies ====================
+  // ==================== Load Supplies (از Supply) ====================
 
   useEffect(() => {
     if (!mounted || !accessToken || !isAuthenticated) {
@@ -466,6 +470,7 @@ export default function MarketplacePage() {
       setSuppliesError(null);
 
       try {
+        // ===== استفاده از Supply (همان Matching و Negotiation) =====
         const response = await fetch(
           `${API_URL}/products/supplies/`,
           {
@@ -503,7 +508,7 @@ export default function MarketplacePage() {
         if (!cancelled) {
           setRealProducts(
             supplies.map(
-              supplyToProduct
+              supplyToMarketplaceProduct
             )
           );
         }
@@ -754,7 +759,7 @@ export default function MarketplacePage() {
       }
 
       if (
-        selectedIndustry !== 'all'
+        selectedIndustry !== 'همه'
       ) {
         result =
           result.filter(
@@ -765,7 +770,7 @@ export default function MarketplacePage() {
       }
 
       if (
-        selectedTechnology !== 'all'
+        selectedTechnology !== 'همه'
       ) {
         result =
           result.filter(
@@ -818,7 +823,7 @@ export default function MarketplacePage() {
         });
 
       if (
-        selectedProvince !== 'all'
+        selectedProvince !== 'همه'
       ) {
         result =
           result.filter(
@@ -1036,13 +1041,13 @@ export default function MarketplacePage() {
 
   const clearAllFilters = () => {
     setSearchQuery('');
-    setSelectedIndustry('all');
-    setSelectedTechnology('all');
+    setSelectedIndustry('همه');
+    setSelectedTechnology('همه');
     setSelectedCategory('all');
     setSelectedTRL(0);
     setSelectedMRL(0);
     setMaxPrice(5000);
-    setSelectedProvince('all');
+    setSelectedProvince('همه');
     setSelectedCertification('all');
     setMinRating(0);
     setSortBy('newest');
@@ -1050,13 +1055,13 @@ export default function MarketplacePage() {
   };
 
   const activeFilterCount = [
-    selectedIndustry !== 'all',
-    selectedTechnology !== 'all',
+    selectedIndustry !== 'همه',
+    selectedTechnology !== 'همه',
     selectedCategory !== 'all',
     selectedTRL > 0,
     selectedMRL > 0,
     maxPrice < 5000,
-    selectedProvince !== 'all',
+    selectedProvince !== 'همه',
     selectedCertification !== 'all',
     minRating > 0,
     selectedRisk !== 'all',
@@ -1238,10 +1243,6 @@ export default function MarketplacePage() {
                       }
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
                     >
-                      <option value="all">
-                        همه صنایع
-                      </option>
-
                       {industries.map(
                         (ind) => (
                           <option
@@ -1269,10 +1270,6 @@ export default function MarketplacePage() {
                       }
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
                     >
-                      <option value="all">
-                        همه فناوری‌ها
-                      </option>
-
                       {technologies.map(
                         (tech) => (
                           <option
@@ -1302,10 +1299,6 @@ export default function MarketplacePage() {
                       }
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
                     >
-                      <option value={0}>
-                        همه
-                      </option>
-
                       {trlLevels.map(
                         (t) => (
                           <option
@@ -1335,10 +1328,6 @@ export default function MarketplacePage() {
                       }
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
                     >
-                      <option value={0}>
-                        همه
-                      </option>
-
                       {mrlLevels.map(
                         (m) => (
                           <option
@@ -1394,10 +1383,6 @@ export default function MarketplacePage() {
                       }
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
                     >
-                      <option value="all">
-                        همه استان‌ها
-                      </option>
-
                       {provinces.map(
                         (prov) => (
                           <option
@@ -1677,7 +1662,7 @@ export default function MarketplacePage() {
               </div>
             </div>
 
-            {/* Mobile Filters - اصلاح شده */}
+            {/* Mobile Filters */}
             {showFilters && (
               <div className="lg:hidden mb-4 rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
                 <div className="flex items-center justify-between">
@@ -1710,7 +1695,6 @@ export default function MarketplacePage() {
                     onChange={(e) => setSelectedIndustry(e.target.value)}
                     className="px-2 py-2 rounded-xl border border-slate-200 text-xs outline-none"
                   >
-                    <option value="all">صنعت: همه</option>
                     {industries.map((ind) => (
                       <option key={ind} value={ind}>
                         {ind}
@@ -1722,7 +1706,6 @@ export default function MarketplacePage() {
                     onChange={(e) => setSelectedTechnology(e.target.value)}
                     className="px-2 py-2 rounded-xl border border-slate-200 text-xs outline-none"
                   >
-                    <option value="all">فناوری: همه</option>
                     {technologies.map((tech) => (
                       <option key={tech} value={tech}>
                         {tech}
@@ -1734,7 +1717,6 @@ export default function MarketplacePage() {
                     onChange={(e) => setSelectedProvince(e.target.value)}
                     className="px-2 py-2 rounded-xl border border-slate-200 text-xs outline-none"
                   >
-                    <option value="all">استان: همه</option>
                     {provinces.map((prov) => (
                       <option key={prov} value={prov}>
                         {prov}
@@ -2116,7 +2098,7 @@ export default function MarketplacePage() {
 }
 
 // =========================================================
-// Product Card
+// Product Card (با استفاده از img معمولی)
 // =========================================================
 
 function ProductCard({
@@ -2143,12 +2125,11 @@ function ProductCard({
       <div className="h-40 bg-gradient-to-br from-[#1E3A8A10] to-[#14B8A610] flex items-center justify-center relative overflow-hidden">
 
         {productImage ? (
-          <Image
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
             src={productImage}
             alt={product.title}
-            fill
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
-            sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] flex items-center justify-center opacity-80">
@@ -2347,7 +2328,7 @@ function ProductCard({
 }
 
 // =========================================================
-// Product List Item
+// Product List Item (با استفاده از img معمولی)
 // =========================================================
 
 function ProductListItem({
@@ -2376,12 +2357,11 @@ function ProductListItem({
         <div className="relative w-20 h-20 rounded-xl bg-gradient-to-br from-[#1E3A8A10] to-[#14B8A610] overflow-hidden flex-shrink-0">
 
           {productImage ? (
-            <Image
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
               src={productImage}
               alt={product.title}
-              fill
-              className="object-cover transition-transform duration-300 group-hover:scale-105"
-              sizes="80px"
+              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">

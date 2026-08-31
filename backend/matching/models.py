@@ -10,7 +10,7 @@ from django.utils import timezone
 
 class MatchResult(models.Model):
     """
-    مدل ذخیره نتایج تطبیق بین نیاز و محصول
+    مدل ذخیره نتایج تطبیق بین نیاز و عرضه (Supply)
     """
     
     STATUS_CHOICES = [
@@ -20,7 +20,6 @@ class MatchResult(models.Model):
         ('expired', 'منقضی شده'),
     ]
     
-    # ارتباط با نیاز
     need = models.ForeignKey(
         'needs.Need',
         on_delete=models.CASCADE,
@@ -28,43 +27,38 @@ class MatchResult(models.Model):
         verbose_name='نیاز'
     )
     
-    # ارتباط با محصول
+    # ← تغییر مهم: از Product به Supply
     product = models.ForeignKey(
-        'products.Product',
+        'products.Supply',
         on_delete=models.CASCADE,
         related_name='match_results',
-        verbose_name='محصول'
+        verbose_name='عرضه'
     )
     
-    # امتیاز تطبیق (0 تا 100)
     score = models.FloatField(
         validators=[MinValueValidator(0), MaxValueValidator(100)],
         default=0,
         verbose_name='امتیاز تطبیق'
     )
     
-    # درصد تطبیق (0 تا 100)
     match_percentage = models.FloatField(
         validators=[MinValueValidator(0), MaxValueValidator(100)],
         default=0,
         verbose_name='درصد تطبیق'
     )
     
-    # دلیل تطبیق (تولید شده توسط AI یا Rule-based)
     reason = models.TextField(
         blank=True,
         null=True,
         verbose_name='دلیل تطبیق'
     )
     
-    # اقدامات پیشنهادی
     recommended_actions = models.TextField(
         blank=True,
         null=True,
         verbose_name='اقدامات پیشنهادی'
     )
     
-    # وضعیت
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
@@ -72,7 +66,6 @@ class MatchResult(models.Model):
         verbose_name='وضعیت'
     )
     
-    # امتیازدهی کاربر
     user_rating = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
@@ -80,7 +73,6 @@ class MatchResult(models.Model):
         verbose_name='امتیاز کاربر'
     )
     
-    # تاریخ‌ها
     created_at = models.DateTimeField(
         auto_now_add=True,
         verbose_name='تاریخ ایجاد'
@@ -114,10 +106,7 @@ class MatchResult(models.Model):
 
 
 class MatchingRequest(models.Model):
-    """
-    مدل درخواست تطبیق - برای پیگیری وضعیت پردازش تطبیق
-    """
-    
+    # بدون تغییر
     STATUS_CHOICES = [
         ('pending', 'در انتظار پردازش'),
         ('processing', 'در حال پردازش'),
@@ -133,7 +122,6 @@ class MatchingRequest(models.Model):
         ('urgent', 'فوری'),
     ]
     
-    # نیاز مورد نظر برای تطبیق
     need = models.ForeignKey(
         'needs.Need',
         on_delete=models.CASCADE,
@@ -141,7 +129,6 @@ class MatchingRequest(models.Model):
         verbose_name='نیاز'
     )
     
-    # کاربر درخواست‌کننده
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -149,7 +136,6 @@ class MatchingRequest(models.Model):
         verbose_name='کاربر درخواست‌کننده'
     )
     
-    # وضعیت پردازش
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
@@ -157,7 +143,6 @@ class MatchingRequest(models.Model):
         verbose_name='وضعیت'
     )
     
-    # اولویت
     priority = models.CharField(
         max_length=10,
         choices=PRIORITY_CHOICES,
@@ -165,20 +150,17 @@ class MatchingRequest(models.Model):
         verbose_name='اولویت'
     )
     
-    # تعداد کل نتایج پیدا شده
     total_matches = models.PositiveIntegerField(
         default=0,
         verbose_name='تعداد کل تطبیق‌ها'
     )
     
-    # خطا در صورت وجود
     error_message = models.TextField(
         blank=True,
         null=True,
         verbose_name='پیام خطا'
     )
     
-    # تاریخ‌ها
     created_at = models.DateTimeField(
         auto_now_add=True,
         verbose_name='تاریخ ایجاد'
@@ -204,13 +186,11 @@ class MatchingRequest(models.Model):
         return f'درخواست تطبیق #{self.id} - {self.need.title}'
     
     def mark_completed(self):
-        """علامت‌گذاری به عنوان تکمیل شده"""
         self.status = 'completed'
         self.completed_at = timezone.now()
         self.save(update_fields=['status', 'completed_at'])
     
     def mark_failed(self, error_message=None):
-        """علامت‌گذاری به عنوان ناموفق"""
         self.status = 'failed'
         if error_message:
             self.error_message = error_message

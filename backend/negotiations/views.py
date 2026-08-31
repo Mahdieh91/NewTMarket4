@@ -1,4 +1,9 @@
+# ============================================================
 # negotiations/views.py
+# ============================================================
+# اصلاح‌شده برای پشتیبانی از Product و Supply
+# ============================================================
+
 from django.db.models import Q
 from django.db import transaction
 
@@ -28,9 +33,7 @@ class NegotiationViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-
         user = self.request.user
-
         return (
             Negotiation.objects
             .filter(
@@ -52,48 +55,49 @@ class NegotiationViewSet(viewsets.ModelViewSet):
 
     @transaction.atomic
     def create(self, request):
-
+        """
+        ایجاد مذاکره با پشتیبانی از Product و Supply
+        """
+        # ===== دریافت شناسه از درخواست =====
         supply_id = (
-            request.data.get('supply')
-            or request.data.get('supply_id')
-            or request.data.get('product')
+            request.data.get('supply') or
+            request.data.get('supply_id') or
+            request.data.get('product')   # ← پشتیبانی از product
         )
 
         if not supply_id:
             return Response(
                 {
-                    'error': 'supply id required'
+                    'error': 'شناسه محصول یا عرضه الزامی است.'
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
-
+            # ===== جستجوی Supply با شناسه =====
             supply = (
                 Supply.objects
                 .select_related('seller')
                 .get(id=supply_id)
             )
-
         except Supply.DoesNotExist:
-
             return Response(
                 {
-                    'error': 'supply not found'
+                    'error': 'محصول یا عرضه موردنظر یافت نشد.'
                 },
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        # ===== بررسی اینکه کاربر خودش نباشد =====
         if request.user.id == supply.seller_id:
-
             return Response(
                 {
-                    'error':
-                        'cannot negotiate with yourself'
+                    'error': 'شما نمی‌توانید با خودتان مذاکره کنید.'
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # ===== بررسی مذاکره فعال قبلی =====
         existing = (
             Negotiation.objects
             .filter(
@@ -109,17 +113,15 @@ class NegotiationViewSet(viewsets.ModelViewSet):
         )
 
         if existing:
-
             return Response(
                 NegotiationSerializer(
                     existing,
-                    context={
-                        'request': request
-                    },
+                    context={'request': request},
                 ).data,
                 status=status.HTTP_200_OK,
             )
 
+        # ===== ایجاد مذاکره جدید =====
         negotiation = Negotiation.objects.create(
             supply=supply,
             buyer=request.user,
@@ -135,16 +137,11 @@ class NegotiationViewSet(viewsets.ModelViewSet):
         return Response(
             NegotiationSerializer(
                 negotiation,
-                context={
-                    'request': request
-                },
+                context={'request': request},
             ).data,
             status=status.HTTP_201_CREATED,
         )
 
-    # ----------------------------------------------
-    # اضافه شدن این متد برای Broadcast وضعیت
-    # ----------------------------------------------
     def perform_update(self, serializer):
         instance = serializer.save()
         channel_layer = get_channel_layer()
@@ -163,14 +160,11 @@ class MessageViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-
         user = self.request.user
-
         queryset = (
             Message.objects
             .filter(
-                Q(negotiation__buyer=user)
-                |
+                Q(negotiation__buyer=user) |
                 Q(negotiation__supplier=user)
             )
             .select_related(
@@ -183,56 +177,26 @@ class MessageViewSet(viewsets.ModelViewSet):
             )
         )
 
-        negotiation_id = self.request.query_params.get(
-            'negotiation'
-        )
-
+        negotiation_id = self.request.query_params.get('negotiation')
         if negotiation_id:
-
-            queryset = queryset.filter(
-                negotiation_id=negotiation_id
-            )
+            queryset = queryset.filter(negotiation_id=negotiation_id)
 
         return queryset
 
     def perform_create(self, serializer):
-
-        negotiation = (
-            serializer.validated_data[
-                'negotiation'
-            ]
-        )
-
+        negotiation = serializer.validated_data['negotiation']
         user = self.request.user
 
-        if user.id not in {
-            negotiation.buyer_id,
-            negotiation.supplier_id,
-        }:
+        if user.id not in {negotiation.buyer_id, negotiation.supplier_id}:
+            raise PermissionDenied('شما عضو این مذاکره نیستید.')
 
-            raise PermissionDenied(
-                'شما عضو این مذاکره نیستید.'
-            )
-
-        if negotiation.status in {
-            'rejected',
-            'contracted',
-        }:
-
+        if negotiation.status in {'rejected', 'contracted'}:
             raise ValidationError({
-                'negotiation':
-                    'این مذاکره به پایان رسیده است.'
+                'negotiation': 'این مذاکره به پایان رسیده است.'
             })
 
-        uploaded_file = (
-            self.request.FILES.get('file')
-        )
-
-        file_name = (
-            uploaded_file.name
-            if uploaded_file
-            else None
-        )
+        uploaded_file = self.request.FILES.get('file')
+        file_name = uploaded_file.name if uploaded_file else None
 
         serializer.save(
             sender=user,
@@ -240,17 +204,10 @@ class MessageViewSet(viewsets.ModelViewSet):
         )
 
         if negotiation.status == 'created':
-
             negotiation.status = 'in_progress'
+            negotiation.save(update_fields=['status', 'updated_at'])
 
-            negotiation.save(
-                update_fields=[
-                    'status',
-                    'updated_at',
-                ]
-            )
-
-        # Broadcast تغییر وضعیت به WebSocket
+        # Broadcast
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             f'negotiation_{negotiation.id}',

@@ -526,7 +526,7 @@ const ServicesSection = () => {
               return (
                 <Link
                   key={index}
-                  href="/discoverywizard"
+                  href="/discovery-wizard"
                   className="block"
                 >
                   {cardContent}
