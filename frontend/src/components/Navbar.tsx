@@ -54,7 +54,7 @@ export default function Navbar() {
     { title: 'تحلیل بازار', href: '/market-intelligence', icon: <BarChart3 size={17} /> },
     { title: 'ثبت محصول/خدمت', href: '/supply/register', icon: <PlusCircle size={17} /> },
     { title: 'ثبت نیاز', href: '/needs/register', icon: <ClipboardList size={17} /> },
-    { title: 'اجرا', href: '/execution', icon: <PlayCircle size={17} /> },
+   // { title: 'اجرا', href: '/execution', icon: <PlayCircle size={17} /> },
   ];
 
   if (!mounted) return <nav className="h-20 bg-white border-b border-slate-200" dir="rtl" />;
