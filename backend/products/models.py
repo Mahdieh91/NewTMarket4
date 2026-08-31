@@ -382,3 +382,75 @@ class SupplyImage(models.Model):
 
     def __str__(self):
         return f'تصویر {self.supply.title} #{self.id}'
+
+
+# ============================================================
+# products/models.py (ادامه)
+# ============================================================
+class Favorite(models.Model):
+    """
+    مدل علاقه‌مندی کاربران برای محصولات و عرضه‌ها
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='favorites',
+        verbose_name='کاربر'
+    )
+    
+    product = models.ForeignKey(
+        'Product',
+        on_delete=models.CASCADE,
+        related_name='favorites',
+        null=True,
+        blank=True,
+        verbose_name='محصول'
+    )
+    
+    supply = models.ForeignKey(
+        'Supply',
+        on_delete=models.CASCADE,
+        related_name='favorites',
+        null=True,
+        blank=True,
+        verbose_name='عرضه'
+    )
+    
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='تاریخ افزودن'
+    )
+
+    class Meta:
+        verbose_name = 'علاقه‌مندی'
+        verbose_name_plural = 'علاقه‌مندی‌ها'
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'product'],
+                name='unique_user_product_favorite',
+                condition=models.Q(product__isnull=False)
+            ),
+            models.UniqueConstraint(
+                fields=['user', 'supply'],
+                name='unique_user_supply_favorite',
+                condition=models.Q(supply__isnull=False)
+            ),
+        ]
+
+    def __str__(self):
+        if self.product:
+            return f"{self.user.email} ❤️ {self.product.title}"
+        elif self.supply:
+            return f"{self.user.email} ❤️ {self.supply.title}"
+        return f"{self.user.email} ❤️ (نامشخص)"
+
+    def clean(self):
+        if not self.product and not self.supply:
+            raise ValidationError('حداقل یکی از فیلدهای product یا supply باید مقدار داشته باشد.')
+        if self.product and self.supply:
+            raise ValidationError('نمی‌توان همزمان product و supply را مقداردهی کرد.')
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)

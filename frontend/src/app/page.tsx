@@ -424,7 +424,10 @@ const TiltCard = ({ role, index }: { role: any; index: number }) => {
 const ServicesSection = () => {
   const services = [
     {
-      title: 'دارایی نامشهود',
+    
+
+      title: 'دارایی نامشهود (IA)',
+
       icon: Briefcase,
       items: [
         'تشخیص هوشمند',
@@ -630,7 +633,7 @@ export default function HomePage() {
     },
     {
       id: 'investor',
-      label: 'تامین مالی',
+      label: 'تامین‌کننده مالی',
       desc: 'تامین مالی و سرمایه‌گذاری در طرح‌های نوآورانه',
       icon: TrendingUp,
     },

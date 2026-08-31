@@ -10,17 +10,13 @@ from drf_yasg import openapi
 from drf_yasg.views import get_schema_view
 from users.views import CaptchaChallengeView, CaptchaTokenObtainPairView
 from .views import health_check
+from rest_framework.routers import DefaultRouter
+from products.views import FavoriteViewSet
 
-# ============================================================
-# Home
-# ============================================================
 
 def home(request):
     return redirect("/admin/")
 
-# ============================================================
-# Swagger / ReDoc
-# ============================================================
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -35,27 +31,21 @@ schema_view = get_schema_view(
     permission_classes=(permissions.AllowAny,),
 )
 
-# ============================================================
-# Django Admin
-# ============================================================
-
 admin.site.site_header = "مدیریت پلتفرم بازار تحول"
 admin.site.site_title = "مدیریت پلتفرم بازار تحول"
 admin.site.index_title = "پنل مدیریت بازار تحول"
 
-# ============================================================
-# URL Patterns
-# ============================================================
+# ===== Router اختصاصی برای Favorites =====
+favorites_router = DefaultRouter()
+favorites_router.register(r'', FavoriteViewSet, basename='favorite')
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", home, name="home"),
 
-    # JWT with CAPTCHA (برای لاگین)
+    # JWT with CAPTCHA
     path("api/users/token/", CaptchaTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/users/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
-
-    # CAPTCHA Challenge
     path("api/users/captcha/challenge/", CaptchaChallengeView.as_view(), name="captcha-challenge"),
 
     # مستندات
@@ -86,6 +76,9 @@ urlpatterns = [
     path("api/analytics/", include("analytics.urls")),
     path("api/", include("negotiations.urls")),
     path("api/health/", health_check, name="health_check"),
+
+    # ===== مسیر مستقیم برای favorites (رفع خطا) =====
+    path("api/favorites/", include(favorites_router.urls)),
 ]
 
 if settings.DEBUG:

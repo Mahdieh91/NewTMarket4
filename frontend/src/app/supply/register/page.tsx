@@ -1,4 +1,6 @@
 // این فایل: صفحه ثبت عرضه محصول / خدمت در فرانت‌اند
+// اصلاح‌شده: ارسال فیلد supply_type به جای supplyType برای هماهنگی با بک‌اند
+
 'use client';
 
 import { useRef, useState, useEffect } from 'react';
@@ -27,6 +29,7 @@ import { useAuthStore } from '@/store/auth-store';
 
 type SupplyFormData = {
   title: string;
+  supply_type: string; // 'product' | 'service' — نام فیلد مطابق با بک‌اند
   category: string;
   industry: string;
   technology: string;
@@ -127,6 +130,7 @@ const wizardSteps = [
 
 const initialForm: SupplyFormData = {
   title: '',
+  supply_type: 'product',
   category: '',
   industry: '',
   technology: '',
@@ -141,6 +145,13 @@ const initialForm: SupplyFormData = {
 };
 
 const MAX_IMAGES = 3;
+
+// ==================== Helper ====================
+
+const toPersianNumber = (num: number) => {
+  const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+  return String(num).replace(/\d/g, (d) => persianDigits[parseInt(d)]);
+};
 
 // ==================== Main Component ====================
 
@@ -221,6 +232,10 @@ export default function SupplyRegisterPage() {
       if (!form.category) {
         newFieldErrors.category = 'دسته‌بندی الزامی است.';
       }
+
+      if (!form.supply_type) {
+        newFieldErrors.supply_type = 'نوع عرضه الزامی است.';
+      }
     }
 
     if (step === 1) {
@@ -278,8 +293,6 @@ export default function SupplyRegisterPage() {
 
   // ============================================================
   // تابع ثبت عرضه
-  // فقط console.log و console.time برای تشخیص زمان اضافه شده‌اند.
-  // هیچ نام فیلد API یا رفتار قبلی تغییر نکرده است.
   // ============================================================
 
   const handleSubmit = async () => {
@@ -331,8 +344,10 @@ export default function SupplyRegisterPage() {
 
       const formData = new FormData();
 
+      // فیلدهای متنی — توجه: نام فیلد supply_type مطابق با بک‌اند
       const textFields: (keyof SupplyFormData)[] = [
         'title',
+        'supply_type',
         'category',
         'industry',
         'technology',
@@ -354,7 +369,7 @@ export default function SupplyRegisterPage() {
 
       console.log('📦 [SUPPLY SUBMIT] فیلدهای متنی اضافه شدند');
 
-      // تصاویر با همان کلید قبلی
+      // تصاویر با کلید uploaded_images
       form.images.forEach((file) => {
         formData.append('uploaded_images', file);
       });
@@ -363,7 +378,7 @@ export default function SupplyRegisterPage() {
         `🖼️ [SUPPLY SUBMIT] تعداد تصاویر: ${form.images.length}`,
       );
 
-      // مستندات با همان کلید قبلی
+      // مستندات با کلید uploaded_documents
       form.documents.forEach((file) => {
         formData.append('uploaded_documents', file);
       });
@@ -715,7 +730,7 @@ export default function SupplyRegisterPage() {
                             : undefined,
                       }}
                     >
-                      {isDone ? <Check size={14} /> : index + 1}
+                      {isDone ? <Check size={14} /> : toPersianNumber(index + 1)}
                     </div>
 
                     <span
@@ -801,7 +816,7 @@ export default function SupplyRegisterPage() {
                   </h2>
 
                   <p className="mt-1 text-sm text-slate-500">
-                    عنوان، دسته‌بندی، صنعت، فناوری و شهر را مشخص کنید.
+                    عنوان، نوع عرضه، دسته‌بندی، صنعت، فناوری و شهر را مشخص کنید.
                   </p>
                 </div>
 
@@ -814,6 +829,42 @@ export default function SupplyRegisterPage() {
                     icon={<Tag size={18} />}
                     placeholder="مثال: سامانه مدیریت انرژی"
                   />
+
+                  {/* ===== انتخاب نوع عرضه (محصول / خدمت) ===== */}
+                  <div className="col-span-1">
+                    <label className="mb-2 block text-sm font-bold text-slate-700">
+                      نوع عرضه
+                    </label>
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => updateForm('supply_type', 'product')}
+                        className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition ${
+                          form.supply_type === 'product'
+                            ? 'bg-[#1E3A8A] text-white shadow-md'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        محصول
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateForm('supply_type', 'service')}
+                        className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition ${
+                          form.supply_type === 'service'
+                            ? 'bg-[#1E3A8A] text-white shadow-md'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        خدمت
+                      </button>
+                    </div>
+                    {fieldErrors.supply_type && (
+                      <p className="mt-1 text-xs text-red-500">
+                        {fieldErrors.supply_type}
+                      </p>
+                    )}
+                  </div>
 
                   <SelectField
                     label="دسته‌بندی"
@@ -1003,22 +1054,22 @@ export default function SupplyRegisterPage() {
                       label="عنوان"
                       value={form.title}
                     />
-
+                    <SummaryRow
+                      label="نوع عرضه"
+                      value={form.supply_type === 'product' ? 'محصول' : 'خدمت'}
+                    />
                     <SummaryRow
                       label="دسته‌بندی"
                       value={form.category}
                     />
-
                     <SummaryRow
                       label="صنعت"
                       value={form.industry || '-'}
                     />
-
                     <SummaryRow
                       label="فناوری"
                       value={form.technology || '-'}
                     />
-
                     <SummaryRow
                       label="شهر"
                       value={form.city || '-'}
@@ -1030,22 +1081,18 @@ export default function SupplyRegisterPage() {
                       label="توضیحات"
                       value={form.description}
                     />
-
                     <SummaryRow
                       label="مقدار"
                       value={form.quantity}
                     />
-
                     <SummaryRow
                       label="واحد"
                       value={form.unit}
                     />
-
                     <SummaryRow
                       label="قیمت"
                       value={`${form.price} تومان`}
                     />
-
                     <SummaryRow
                       label="TRL"
                       value={form.trl || '-'}
@@ -1061,7 +1108,6 @@ export default function SupplyRegisterPage() {
                           : 'بدون تصویر'
                       }
                     />
-
                     <SummaryRow
                       label="مستندات"
                       value={
@@ -1090,7 +1136,7 @@ export default function SupplyRegisterPage() {
 
               <div className="flex items-center gap-2 text-xs text-slate-400">
                 <Sparkles size={14} />
-                مرحله {step + 1} از {wizardSteps.length}
+                مرحله {toPersianNumber(step + 1)} از {toPersianNumber(wizardSteps.length)}
               </div>
 
               {step < 3 ? (

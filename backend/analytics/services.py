@@ -1,8 +1,8 @@
 # ============================================================
 # backend/analytics/services.py
 # ============================================================
-# نسخه کامل با پشتیبانی از تحلیل رقبا، Market Intelligence و Dashboard
-# به اضافه recentNeeds و recentSupplies برای Dashboard
+# نسخه نهایی با پشتیبانی کامل از Dashboard، Market Intelligence، Competitor Analysis
+# و بهبود بخش "آخرین فعالیت‌ها" با جمع‌آوری رویدادهای واقعی از Need, Supply, Negotiation, Contract
 # ============================================================
 
 import logging
@@ -10,7 +10,7 @@ import json
 import re
 from collections import defaultdict
 from datetime import timedelta
-from statistics import mean, median, stdev
+from statistics import mean, median
 from django.db.models import Q, Count, Sum, Avg, Max, Min
 from django.utils import timezone
 from django.core.cache import cache
@@ -57,7 +57,7 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
-# Statuses
+# Statuses & Constants
 # ============================================================
 
 MARKET_STATUSES = {
@@ -204,11 +204,7 @@ def _recent_with_fallback(queryset, recent_days=RECENT_DAYS, limit=RECENT_LIMIT)
     if len(recent_items) >= limit:
         return recent_items
 
-    existing_ids = {
-        getattr(item, "id", None)
-        for item in recent_items
-    }
-
+    existing_ids = {getattr(item, "id", None) for item in recent_items}
     remaining = limit - len(recent_items)
 
     older_items = list(
@@ -224,13 +220,8 @@ def _recent_with_fallback(queryset, recent_days=RECENT_DAYS, limit=RECENT_LIMIT)
 # ============================================================
 
 def get_recent_needs(user, limit=RECENT_LIMIT):
-    """
-    آخرین نیازهای واقعی کاربر.
-    اولویت: سه روز اخیر، سپس قدیمی‌تر
-    """
     if Need is None:
         return []
-
     try:
         queryset = (
             Need.objects
@@ -238,7 +229,6 @@ def get_recent_needs(user, limit=RECENT_LIMIT):
             .select_related("industry")
             .order_by("-created_at", "-id")
         )
-
         needs = _recent_with_fallback(queryset, recent_days=RECENT_DAYS, limit=limit)
 
         result = []
@@ -248,8 +238,7 @@ def get_recent_needs(user, limit=RECENT_LIMIT):
                 if need.industry:
                     industry_name = need.industry.name
             except Exception:
-                industry_name = None
-
+                pass
             result.append({
                 "id": int(need.id),
                 "title": need.title or "نیاز بدون عنوان",
@@ -258,24 +247,18 @@ def get_recent_needs(user, limit=RECENT_LIMIT):
                 "industry": industry_name,
             })
         return result
-
     except Exception:
         logger.exception("Dashboard: error loading recent needs")
         return []
 
 
 def get_recent_supplies(user, limit=RECENT_LIMIT):
-    """
-    آخرین عرضه‌های واقعی کاربر (از مدل Supply).
-    اولویت: سه روز اخیر، سپس قدیمی‌تر
-    """
     try:
         queryset = (
             Supply.objects
             .filter(seller=user)
             .order_by("-created_at", "-id")
         )
-
         supplies = _recent_with_fallback(queryset, recent_days=RECENT_DAYS, limit=limit)
 
         result = []
@@ -288,10 +271,102 @@ def get_recent_supplies(user, limit=RECENT_LIMIT):
                 "category": supply.category or None,
             })
         return result
-
     except Exception:
         logger.exception("Dashboard: error loading recent supplies")
         return []
+
+
+# ============================================================
+# دریافت آخرین فعالیت‌ها از همه مدل‌ها (اصلاح اصلی)
+# ============================================================
+
+def get_recent_activities(user, limit=RECENT_LIMIT):
+    """
+    جمع‌آوری آخرین فعالیت‌های کاربر از مدل‌های:
+        - Need (ثبت نیاز)
+        - Supply (ثبت محصول/عرضه)
+        - Negotiation (شروع مذاکره)
+        - Contract (ثبت قرارداد / تغییر وضعیت)
+    و بازگرداندن آنها با فرمت یکسان و مرتب بر اساس زمان.
+    """
+    activities = []
+
+    # 1. نیازها
+    if Need is not None:
+        try:
+            needs = Need.objects.filter(buyer=user).order_by("-created_at")[:limit]
+            for need in needs:
+                activities.append({
+                    "id": f"need_{need.id}",
+                    "type": "need",
+                    "title": f"ثبت نیاز: {need.title}",
+                    "user": _display_user(user),
+                    "status": need.status,
+                    "amount": None,
+                    "time": _safe_iso(need.created_at),
+                })
+        except Exception:
+            logger.exception("Error fetching needs for activities")
+
+    # 2. عرضه‌ها (محصولات)
+    try:
+        supplies = Supply.objects.filter(seller=user).order_by("-created_at")[:limit]
+        for supply in supplies:
+            activities.append({
+                "id": f"supply_{supply.id}",
+                "type": "supply",
+                "title": f"ثبت محصول: {supply.title}",
+                "user": _display_user(user),
+                "status": supply.status,
+                "amount": None,
+                "time": _safe_iso(supply.created_at),
+            })
+    except Exception:
+        logger.exception("Error fetching supplies for activities")
+
+    # 3. مذاکرات
+    if Negotiation is not None:
+        try:
+            negotiations = Negotiation.objects.filter(
+                Q(buyer=user) | Q(supplier=user)
+            ).order_by("-created_at")[:limit]
+            for neg in negotiations:
+                other = neg.supplier if neg.buyer_id == user.id else neg.buyer
+                activities.append({
+                    "id": f"negotiation_{neg.id}",
+                    "type": "negotiation",
+                    "title": f"مذاکره با {_display_user(other)}",
+                    "user": _display_user(other),
+                    "status": neg.status,
+                    "amount": None,
+                    "time": _safe_iso(neg.created_at),
+                })
+        except Exception:
+            logger.exception("Error fetching negotiations for activities")
+
+    # 4. قراردادها (معاملات)
+    if Contract is not None:
+        try:
+            contracts = Contract.objects.filter(
+                Q(buyer=user) | Q(supplier=user)
+            ).order_by("-signed_at", "-created_at")[:limit]
+            for contract in contracts:
+                other = contract.supplier if contract.buyer_id == user.id else contract.buyer
+                activities.append({
+                    "id": f"contract_{contract.id}",
+                    "type": "deal",
+                    "title": f"قرارداد #{contract.id} با {_display_user(other)}",
+                    "user": _display_user(other),
+                    "status": contract.status,
+                    "amount": f"{contract.total_value:,.0f} تومان" if contract.total_value else None,
+                    "time": _safe_iso(contract.signed_at or contract.created_at),
+                })
+        except Exception:
+            logger.exception("Error fetching contracts for activities")
+
+    # مرتب‌سازی بر اساس زمان (نزولی) و انتخاب ۵ مورد آخر
+    activities.sort(key=lambda x: x["time"] or "", reverse=True)
+    return activities[:limit]
 
 
 # ============================================================
@@ -679,10 +754,6 @@ def calculate_competitive_score(metrics, weights=None):
     }
 
 
-# ============================================================
-# Helpers for selecting top products (با اضافه کردن status)
-# ============================================================
-
 def get_top_products_for_company(products, all_products, limit=3):
     """
     انتخاب بهترین محصولات یک شرکت بر اساس market_readiness, quality, view_count
@@ -880,7 +951,7 @@ def analyze_market_competitors(industry_id=None, category=None, region=None, tec
 
 
 # ============================================================
-# Product-Centric Competitor Analysis (حالت محصول خاص - با اصلاح status)
+# Product-Centric Competitor Analysis (حالت محصول خاص)
 # ============================================================
 
 def analyze_competitors_for_product(product_id, limit=10, include_indirect=True):
@@ -1700,7 +1771,77 @@ def generate_market_intelligence(industry=None, category=None, trl_min=None, trl
 
 
 # ============================================================
-# Dashboard Data (با اضافه شدن recentNeeds و recentSupplies)
+# Conversion Funnel (اصلاح‌شده بر اساس Supply, Need, Negotiation, Contract)
+# ============================================================
+
+def get_conversion_funnel(user):
+    """
+    قیف مذاکرات بر اساس مراحل واقعی:
+        1. Supplyهای منتشرشده کاربر
+        2. Needهای فعال کاربر
+        3. کل Negotiation‌های کاربر
+        4. Contractهای موفق کاربر
+    """
+    supplies = 0
+    needs = 0
+    negotiations = 0
+    successful_contracts = 0
+
+    try:
+        from products.models import Supply
+        supplies = Supply.objects.filter(seller=user, status="published").count()
+    except Exception:
+        logger.exception("Error counting supplies for funnel")
+
+    try:
+        from needs.models import Need
+        needs = Need.objects.filter(buyer=user, status__in=ACTIVE_NEED_STATUSES).count()
+    except Exception:
+        logger.exception("Error counting needs for funnel")
+
+    try:
+        from negotiations.models import Negotiation
+        negotiations = Negotiation.objects.filter(Q(buyer=user) | Q(supplier=user)).count()
+    except Exception:
+        logger.exception("Error counting negotiations for funnel")
+
+    try:
+        from contract.models import Contract
+        successful_contracts = Contract.objects.filter(
+            Q(buyer=user) | Q(supplier=user),
+            status__in=SUCCESSFUL_CONTRACT_STATUSES
+        ).count()
+    except Exception:
+        logger.exception("Error counting successful contracts for funnel")
+
+    base = max(supplies + needs, 1)
+
+    return [
+        {
+            "label": "محصولات و عرضه‌های فعال",
+            "value": supplies,
+            "percent": round((supplies / base) * 100) if supplies > 0 else 0,
+        },
+        {
+            "label": "نیازهای فعال",
+            "value": needs,
+            "percent": round((needs / base) * 100) if needs > 0 else 0,
+        },
+        {
+            "label": "مذاکرات",
+            "value": negotiations,
+            "percent": round((negotiations / base) * 100) if negotiations > 0 else 0,
+        },
+        {
+            "label": "معاملات موفق",
+            "value": successful_contracts,
+            "percent": round((successful_contracts / base) * 100) if successful_contracts > 0 else 0,
+        },
+    ]
+
+
+# ============================================================
+# Dashboard Data (نسخه نهایی با recentActivities اصلاح‌شده)
 # ============================================================
 
 def generate_dashboard_data(user):
@@ -1737,55 +1878,17 @@ def generate_dashboard_data(user):
         except Exception:
             logger.exception("Error counting successful deals")
 
-    recent_activities = []
-    if Contract is not None:
-        try:
-            recent_contracts = Contract.objects.filter(
-                Q(buyer=user) | Q(supplier=user)
-            ).order_by("-signed_at", "-created_at")[:5]
+    # ===== استفاده از تابع جدید برای فعالیت‌ها =====
+    recent_activities = get_recent_activities(user, limit=RECENT_LIMIT)
 
-            status_labels = dict(Contract.STATUS_CHOICES)
-            for contract in recent_contracts:
-                if contract.buyer_id == user.id:
-                    other_user = contract.supplier
-                else:
-                    other_user = contract.buyer
-
-                recent_activities.append({
-                    "id": str(contract.id),
-                    "title": f"قرارداد #{contract.id}",
-                    "user": get_seller_name(other_user),
-                    "status": contract.status,
-                    "statusLabel": status_labels.get(contract.status, contract.status),
-                    "time": contract.signed_at.isoformat() if contract.signed_at else contract.created_at.isoformat(),
-                })
-        except Exception as exc:
-            logger.exception("Could not fetch recent contracts: %s", exc)
-
-    # ===== اضافه کردن recentNeeds و recentSupplies =====
+    # نیازهای اخیر و عرضه‌های اخیر
     recent_needs = get_recent_needs(user, limit=RECENT_LIMIT)
     recent_supplies = get_recent_supplies(user, limit=RECENT_LIMIT)
 
-    conversion_funnel = []
-    if Contract is not None:
-        try:
-            funnel_data = Contract.objects.filter(
-                Q(buyer=user) | Q(supplier=user)
-            ).values("status").annotate(count=Count("id")).order_by("status")
+    # قیف مذاکرات
+    conversion_funnel = get_conversion_funnel(user)
 
-            status_labels = dict(Contract.STATUS_CHOICES)
-            total_contracts = sum(item["count"] for item in funnel_data)
-            for item in funnel_data:
-                percentage = (item["count"] / total_contracts) * 100 if total_contracts else 0
-                conversion_funnel.append({
-                    "label": status_labels.get(item["status"], item["status"]),
-                    "status": item["status"],
-                    "value": item["count"],
-                    "percent": round(percentage),
-                })
-        except Exception as exc:
-            logger.exception("Could not fetch contract funnel: %s", exc)
-
+    # روند معاملات ماهانه
     monthly_deals = []
     if Contract is not None:
         try:
@@ -1804,28 +1907,22 @@ def generate_dashboard_data(user):
 
                 monthly_deals.append({
                     "month": month_start.strftime("%Y-%m"),
-                    "value": count,
+                    "deals": count,
                 })
         except Exception:
             logger.exception("Error calculating monthly deals")
 
+    # برترین طرف‌های معامله
     top_suppliers = []
     if Contract is not None:
         try:
             supplier_stats = (
                 Contract.objects
-                .filter(
-                    Q(buyer=user),
-                    status__in=SUCCESSFUL_CONTRACT_STATUSES
-                )
+                .filter(Q(buyer=user), status__in=SUCCESSFUL_CONTRACT_STATUSES)
                 .values("supplier_id", "supplier__company_name", "supplier__username")
-                .annotate(
-                    deal_count=Count("id"),
-                    total_value=Sum("total_value")
-                )
+                .annotate(deal_count=Count("id"), total_value=Sum("total_value"))
                 .order_by("-deal_count", "-total_value")[:5]
             )
-
             for item in supplier_stats:
                 name = item["supplier__company_name"] or item["supplier__username"] or "نامشخص"
                 top_suppliers.append({
@@ -1837,40 +1934,42 @@ def generate_dashboard_data(user):
         except Exception:
             logger.exception("Error calculating top suppliers")
 
+    # پیشنهادات هوشمند
     smart_suggestions = []
     if active_needs > 0 and total_products == 0:
         smart_suggestions.append({
             "title": "نیازهای فعال شما آماده بررسی هستند",
-            "description": "برای نیازهای فعال، عرضه‌کنندگان و محصولات مرتبط را بررسی کنید.",
-            "action": "مشاهده نیازها",
+            "match": 85,
+            "reason": "برای نیازهای فعال، عرضه‌کنندگان و محصولات مرتبط را بررسی کنید.",
+            "type": "need"
         })
     if total_products > 0 and active_needs == 0:
         smart_suggestions.append({
             "title": "برای محصولات خود بازار هدف پیدا کنید",
-            "description": "ثبت نیازهای مرتبط می‌تواند فرصت‌های جدیدی ایجاد کند.",
-            "action": "مشاهده بازار",
+            "match": 70,
+            "reason": "ثبت نیازهای مرتبط می‌تواند فرصت‌های جدیدی ایجاد کند.",
+            "type": "supply"
         })
     if successful_deals == 0:
         smart_suggestions.append({
             "title": "هنوز معامله موفقی ثبت نشده است",
-            "description": "با پیگیری قراردادها و تبدیل آن‌ها به معامله موفق، می‌توانید عملکرد خود را بهبود دهید.",
-            "action": "مشاهده قراردادها",
+            "match": 60,
+            "reason": "با پیگیری قراردادها و تبدیل آن‌ها به معامله موفق، عملکرد خود را بهبود دهید.",
+            "type": "opportunity"
         })
 
     negotiation_insights = []
     if ongoing_contracts > 0:
         negotiation_insights.append({
-            "type": "info",
-            "title": "قراردادهای در جریان",
+            "label": "قراردادهای در جریان",
             "value": ongoing_contracts,
-            "description": "قراردادهایی که هنوز به امضا نرسیده‌اند.",
+            "percent": 50,
         })
     if successful_deals > 0:
         negotiation_insights.append({
-            "type": "success",
-            "title": "معاملات موفق",
+            "label": "معاملات موفق",
             "value": successful_deals,
-            "description": "قراردادهای امضا شده یا تکمیل شده.",
+            "percent": 100,
         })
 
     return {

@@ -1,13 +1,12 @@
 // ============================================================
-// FILE: C:\Users\Fardad\tmarket4\frontend\src\app\market\page.tsx
+// FILE: frontend/src/app/market/page.tsx
 // ============================================================
-// اصلاح‌شده: استفاده از viewCount واقعی و پشتیبانی از فیلتر "پربازدیدترین"
+// اصلاح‌شده: تشخیص بهتر نوع عرضه (محصول/خدمت) با لاگ برای دیباگ
 // ============================================================
 
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import Image from 'next/image';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import {
   Search,
@@ -31,6 +30,23 @@ import {
 } from 'lucide-react';
 
 import { useAuthStore } from '@/store/auth-store';
+
+// ===== کتابخانه نمودار =====
+import {
+  BarChart,
+  Bar,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts';
 
 // ==================== Constants ====================
 
@@ -111,7 +127,8 @@ const API_ORIGIN = API_URL.replace(/\/api\/?$/, '');
 type SupplyApi = {
   id: number | string;
   title: string;
-  category: string;
+  supply_type?: 'product' | 'service' | string; // ← فیلد اصلی برای تشخیص نوع
+  category: string; // ← دسته‌بندی انتخابی (برای fallback)
   industry?: string | null;
   technology?: string | null;
   city?: string | null;
@@ -123,7 +140,7 @@ type SupplyApi = {
   documents?: string[];
   status?: string;
   seller_name?: string | null;
-  view_count?: number; // ← اضافه شد
+  view_count?: number;
   images?: Array<{
     id: number | string;
     image?: string | null;
@@ -136,30 +153,36 @@ type SupplyApi = {
 
 // ==================== Helpers ====================
 
-function resolveMediaUrl(
-  url?: string | null
-): string {
-  if (!url) {
-    return '';
-  }
-
-  if (/^https?:\/\//i.test(url)) {
-    return url;
-  }
-
-  return `${API_ORIGIN}${
-    url.startsWith('/') ? '' : '/'
-  }${url}`;
+function resolveMediaUrl(url?: string | null): string {
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${API_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
-function supplyCategoryToMarketplaceCategory(
-  category?: string
-): 'product' | 'service' {
-  const value = (category || '').trim();
-
-  return value.includes('خدمت')
-    ? 'service'
-    : 'product';
+/**
+ * تشخیص نوع عرضه از روی دسته‌بندی (fallback)
+ * اگر دسته‌بندی شامل کلمه "خدمت" یا در لیست دسته‌بندی‌های خدماتی باشد
+ */
+function inferCategoryFromCategoryField(category?: string): 'product' | 'service' {
+  if (!category) return 'product';
+  const cat = category.trim();
+  // لیست دسته‌بندی‌هایی که در فرم ثبت عرضه به عنوان خدمت شناخته می‌شوند
+  const serviceCategoryKeywords = [
+    'خدمات مشاوره',
+    'خدمات فنی و مهندسی',
+    'سرویس',
+    'خدمت',
+  ];
+  // اگر خود کلمه "خدمت" در آن باشد یا یکی از کلیدواژه‌ها باشد
+  if (
+    cat.includes('خدمت') ||
+    serviceCategoryKeywords.some(kw => cat.includes(kw))
+  ) {
+    return 'service';
+  }
+  // همچنین اگر دسته‌بندی از نوع "نرم‌افزار" باشد، معمولاً محصول محسوب می‌شود
+  // ولی اگر کاربر صراحتاً service انتخاب کرده باشد، supply_type اولویت دارد
+  return 'product';
 }
 
 // ==================== Type ====================
@@ -167,7 +190,6 @@ function supplyCategoryToMarketplaceCategory(
 interface MarketplaceProduct {
   id: string;
   supplyId?: number;
-
   title: string;
   category: 'product' | 'service';
   industry: string;
@@ -199,105 +221,62 @@ interface MarketplaceProduct {
 
 // ==================== Supply -> MarketplaceProduct ====================
 
-function supplyToMarketplaceProduct(
-  supply: SupplyApi
-): MarketplaceProduct {
-  const trlNumber = Number.parseInt(
-    String(supply.trl ?? '1'),
-    10
-  );
+function supplyToMarketplaceProduct(supply: SupplyApi): MarketplaceProduct {
+  const trlNumber = Number.parseInt(String(supply.trl ?? '1'), 10);
+  const priceToman = Number(supply.price ?? 0);
+  const priceInMillionToman = Number.isFinite(priceToman) ? priceToman / 1_000_000 : 0;
+  const images = (supply.images || []).map((item) => resolveMediaUrl(item.image)).filter(Boolean);
 
-  const priceToman = Number(
-    supply.price ?? 0
-  );
+  // === تشخیص نوع عرضه ===
+  let category: 'product' | 'service' = 'product';
 
-  const priceInMillionToman =
-    Number.isFinite(priceToman)
-      ? priceToman / 1_000_000
-      : 0;
+  // ۱. اولویت با supply_type (مقدار واقعی از سرور)
+  if (supply.supply_type) {
+    category = supply.supply_type === 'service' ? 'service' : 'product';
+  } else {
+    // ۲. در صورت نبود supply_type، از دسته‌بندی推断 کن
+    category = inferCategoryFromCategoryField(supply.category);
+    // لاگ برای دیباگ (در کنسول مرورگر)
+    console.warn(
+      `⚠️ عرضه "${supply.title}" فاقد supply_type است. بر اساس دسته‌بندی "${supply.category}" => ${category}`
+    );
+  }
 
-  const images = (
-    supply.images || []
-  )
-    .map((item) =>
-      resolveMediaUrl(item.image)
-    )
-    .filter(Boolean);
+  // لاگ برای بررسی همه فیلدها (می‌توانید بعد از تست حذف کنید)
+  console.log('📦 عرضه دریافتی:', {
+    id: supply.id,
+    title: supply.title,
+    supply_type: supply.supply_type,
+    category: supply.category,
+    detected_category: category,
+  });
 
   return {
     id: `supply-${supply.id}`,
     supplyId: Number(supply.id),
-
     title: supply.title,
-
-    category:
-      supplyCategoryToMarketplaceCategory(
-        supply.category
-      ),
-
-    industry:
-      supply.industry || 'سایر',
-
-    technology:
-      supply.technology || 'سایر',
-
-    shortDescription:
-      supply.description ||
-      'عرضه ثبت‌شده در بازار تحول',
-
-    trl:
-      Number.isFinite(trlNumber) &&
-      trlNumber >= 1 &&
-      trlNumber <= 9
-        ? trlNumber
-        : 1,
-
-    mrl: 1,
-
+    category,
+    industry: supply.industry || 'سایر',
+    technology: supply.technology || 'سایر',
+    shortDescription: supply.description || 'عرضه ثبت‌شده در بازار تحول',
+    trl: Number.isFinite(trlNumber) && trlNumber >= 1 && trlNumber <= 9 ? trlNumber : 1,
+    mrl: 0,
     price: priceInMillionToman,
-
     priceType: 'fixed',
-
     priceRange: undefined,
-
     images,
-
-    tags: [
-      supply.category,
-      supply.unit,
-      supply.quantity
-        ? `مقدار: ${supply.quantity}`
-        : '',
-    ].filter(Boolean),
-
+    tags: [supply.category, supply.unit, supply.quantity ? `مقدار: ${supply.quantity}` : ''].filter(Boolean),
     seller: {
-      name:
-        supply.seller_name ||
-        'فروشنده',
-
-      location:
-        supply.city ||
-        'نامشخص',
-
+      name: supply.seller_name || 'فروشنده',
+      location: supply.city || 'نامشخص',
       rating: 0,
-
-      verified:
-        supply.status === 'approved' ||
-        supply.status === 'published',
+      verified: supply.status === 'approved' || supply.status === 'published',
     },
-
-    // ===== استفاده از view_count واقعی =====
     viewCount: supply.view_count || 0,
-
     deliveryTime: '—',
-
     riskLevel: 'low',
-
     certifications: [],
-
-    createdAt:
-      supply.created_at ||
-      new Date().toISOString(),
+    createdAt: supply.created_at || new Date().toISOString(),
   };
 }
 
@@ -307,11 +286,9 @@ function formatPrice(product: MarketplaceProduct): string {
   if (product.priceType === 'range' && product.priceRange) {
     return `${product.priceRange.min.toLocaleString('fa-IR')} - ${product.priceRange.max.toLocaleString('fa-IR')} میلیون تومان`;
   }
-
   if (product.price === 0) {
     return 'قابل مذاکره';
   }
-
   return `${product.price.toLocaleString('fa-IR')} میلیون تومان`;
 }
 
@@ -350,226 +327,171 @@ function getRiskLabel(risk: 'low' | 'medium' | 'high'): string {
 // ==================== Main Component ====================
 
 export default function MarketplacePage() {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const { isAuthenticated, isLoading: authLoading, accessToken } = useAuthStore();
 
-  const [mounted, setMounted] =
-    useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [showFilters, setShowFilters] = useState(true);
+  const [showCompare, setShowCompare] = useState(false);
+  const [compareList, setCompareList] = useState<string[]>([]);
+  const [toast, setToast] = useState<string | null>(null);
+  const [isNegotiating, setIsNegotiating] = useState(false);
 
-  const [viewMode, setViewMode] =
-    useState<'grid' | 'list'>('grid');
+  // ===== علاقه‌مندی‌ها با پشتیبانی از localStorage =====
+  const [favorites, setFavorites] = useState<number[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('marketplace_favorites');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {
+          return [];
+        }
+      }
+    }
+    return [];
+  });
+  const [favoritesLoading, setFavoritesLoading] = useState(false);
 
-  const [showFilters, setShowFilters] =
-    useState(true);
-
-  const [showCompare, setShowCompare] =
-    useState(false);
-
-  const [compareList, setCompareList] =
-    useState<string[]>([]);
-
-  const [favorites, setFavorites] =
-    useState<string[]>([]);
-
-  const [toast, setToast] =
-    useState<string | null>(null);
-
-  const [isNegotiating, setIsNegotiating] =
-    useState(false);
-
-  const [realProducts, setRealProducts] =
-    useState<MarketplaceProduct[]>([]);
-
-  const [suppliesLoading, setSuppliesLoading] =
-    useState(false);
-
-  const [suppliesError, setSuppliesError] =
-    useState<string | null>(null);
-
-  const {
-    accessToken,
-  } = useAuthStore();
+  // ===== محصولات واقعی =====
+  const [realProducts, setRealProducts] = useState<MarketplaceProduct[]>([]);
+  const [suppliesLoading, setSuppliesLoading] = useState(false);
+  const [suppliesError, setSuppliesError] = useState<string | null>(null);
 
   // ==================== Filters ====================
 
-  const [searchQuery, setSearchQuery] =
-    useState('');
-
-  const [selectedIndustry, setSelectedIndustry] =
-    useState('همه');
-
-  const [selectedTechnology, setSelectedTechnology] =
-    useState('همه');
-
-  const [selectedCategory, setSelectedCategory] =
-    useState<
-      'all' | 'product' | 'service'
-    >('all');
-
-  const [selectedTRL, setSelectedTRL] =
-    useState<number>(0);
-
-  const [selectedMRL, setSelectedMRL] =
-    useState<number>(0);
-
-  const [maxPrice, setMaxPrice] =
-    useState<number>(5000);
-
-  const [selectedProvince, setSelectedProvince] =
-    useState('همه');
-
-  const [selectedCertification, setSelectedCertification] =
-    useState('all');
-
-  const [minRating, setMinRating] =
-    useState(0);
-
-  const [sortBy, setSortBy] =
-    useState<
-      | 'newest'
-      | 'popular'
-      | 'price-asc'
-      | 'price-desc'
-      // | 'rating'  // کامنت شده
-    >('newest');
-
-  const [selectedRisk, setSelectedRisk] =
-    useState<
-      'all' | 'low' | 'medium' | 'high'
-    >('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIndustry, setSelectedIndustry] = useState('همه');
+  const [selectedTechnology, setSelectedTechnology] = useState('همه');
+  const [selectedCategory, setSelectedCategory] = useState<'all' | 'product' | 'service'>('all');
+  const [selectedTRL, setSelectedTRL] = useState<number>(0);
+  const [selectedMRL, setSelectedMRL] = useState<number>(0);
+  const [maxPrice, setMaxPrice] = useState<number>(5000);
+  const [selectedProvince, setSelectedProvince] = useState('همه');
+  const [selectedCertification, setSelectedCertification] = useState('all');
+  const [minRating, setMinRating] = useState(0);
+  const [sortBy, setSortBy] = useState<'newest' | 'popular' | 'price-asc' | 'price-desc'>('newest');
+  const [selectedRisk, setSelectedRisk] = useState<'all' | 'low' | 'medium' | 'high'>('all');
 
   // ==================== Mount ====================
 
   useEffect(() => {
     setMounted(true);
-
-    const savedFavorites =
-      localStorage.getItem(
-        'marketplace_favorites'
-      );
-
-    if (savedFavorites) {
-      try {
-        setFavorites(
-          JSON.parse(savedFavorites)
-        );
-      } catch {
-        setFavorites([]);
-      }
-    }
   }, []);
+
+  // ==================== Load Favorites from Backend ====================
+
+  const loadFavorites = useCallback(async () => {
+    if (!accessToken || !isAuthenticated) return;
+
+    try {
+      setFavoritesLoading(true);
+      const res = await fetch(`${API_URL}/favorites/`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (res.status === 404) {
+        setFavorites([]);
+        localStorage.setItem('marketplace_favorites', JSON.stringify([]));
+        return;
+      }
+
+      if (!res.ok) {
+        console.warn('Failed to load favorites:', res.status);
+        return;
+      }
+
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : data.results || [];
+
+      // استخراج supplyId از اشیاء nested
+      const supplyIds = items
+        .map((item: any) => {
+          if (item.supply && typeof item.supply === 'object' && item.supply.id) {
+            return Number(item.supply.id);
+          }
+          if (item.supply && typeof item.supply === 'number') {
+            return Number(item.supply);
+          }
+          if (item.supply_id) {
+            return Number(item.supply_id);
+          }
+          if (item.product && typeof item.product === 'object' && item.product.id) {
+            return Number(item.product.id);
+          }
+          return null;
+        })
+        .filter((id: number | null): id is number => id !== null && id > 0);
+
+      setFavorites(supplyIds);
+      localStorage.setItem('marketplace_favorites', JSON.stringify(supplyIds));
+    } catch (error) {
+      console.error('Error loading favorites:', error);
+    } finally {
+      setFavoritesLoading(false);
+    }
+  }, [accessToken, isAuthenticated]);
+
+  useEffect(() => {
+    if (mounted && accessToken && isAuthenticated) {
+      loadFavorites();
+    }
+  }, [mounted, accessToken, isAuthenticated, loadFavorites]);
 
   // ==================== Load Supplies ====================
 
   useEffect(() => {
-    if (!mounted || !accessToken || !isAuthenticated) {
-      return;
-    }
+    if (!mounted || !accessToken || !isAuthenticated) return;
 
     let cancelled = false;
 
     const loadSupplies = async () => {
       setSuppliesLoading(true);
       setSuppliesError(null);
-
       try {
-        const response = await fetch(
-          `${API_URL}/products/supplies/`,
-          {
-            method: 'GET',
-            headers: {
-              Authorization:
-                `Bearer ${accessToken}`,
-            },
-            cache: 'no-store',
-          }
-        );
+        const response = await fetch(`${API_URL}/products/supplies/`, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${accessToken}` },
+          cache: 'no-store',
+        });
 
         if (!response.ok) {
-          if (response.status === 401) {
-            throw new Error(
-              'نشست کاربری منقضی شده است.'
-            );
-          }
-
-          throw new Error(
-            `خطا در دریافت عرضه‌ها (کد ${response.status})`
-          );
+          if (response.status === 401) throw new Error('نشست کاربری منقضی شده است.');
+          throw new Error(`خطا در دریافت عرضه‌ها (کد ${response.status})`);
         }
 
-        const data =
-          await response.json();
-
-        const supplies: SupplyApi[] =
-          Array.isArray(data)
-            ? data
-            : Array.isArray(data?.results)
-              ? data.results
-              : [];
+        const data = await response.json();
+        const supplies: SupplyApi[] = Array.isArray(data) ? data : Array.isArray(data?.results) ? data.results : [];
 
         if (!cancelled) {
-          setRealProducts(
-            supplies.map(
-              supplyToMarketplaceProduct
-            )
-          );
+          setRealProducts(supplies.map(supplyToMarketplaceProduct));
         }
       } catch (error: any) {
-        console.error(
-          '❌ خطا در دریافت عرضه‌های واقعی:',
-          error
-        );
-
+        console.error('❌ خطا در دریافت عرضه‌های واقعی:', error);
         if (!cancelled) {
-          setSuppliesError(
-            error?.message ||
-            'دریافت عرضه‌های ثبت‌شده با خطا مواجه شد.'
-          );
-
+          setSuppliesError(error?.message || 'دریافت عرضه‌های ثبت‌شده با خطا مواجه شد.');
           setRealProducts([]);
         }
       } finally {
-        if (!cancelled) {
-          setSuppliesLoading(false);
-        }
+        if (!cancelled) setSuppliesLoading(false);
       }
     };
 
     loadSupplies();
-
-    const handleFocus = () =>
-      loadSupplies();
-
-    window.addEventListener(
-      'focus',
-      handleFocus
-    );
-
+    const handleFocus = () => loadSupplies();
+    window.addEventListener('focus', handleFocus);
     return () => {
       cancelled = true;
-
-      window.removeEventListener(
-        'focus',
-        handleFocus
-      );
+      window.removeEventListener('focus', handleFocus);
     };
-  }, [
-    mounted,
-    accessToken,
-    isAuthenticated,
-  ]);
+  }, [mounted, accessToken, isAuthenticated]);
 
   // ==================== Toast ====================
 
-  const showToast = (
-    msg: string
-  ) => {
+  const showToast = useCallback((msg: string) => {
     setToast(msg);
-
-    setTimeout(
-      () => setToast(null),
-      2500
-    );
-  };
+    setTimeout(() => setToast(null), 2500);
+  }, []);
 
   // =========================================================
   // Start / Open Negotiation
@@ -577,45 +499,28 @@ export default function MarketplacePage() {
 
   const handleStartNegotiation = async (product: MarketplaceProduct) => {
     if (!accessToken) {
-      window.location.href =
-        '/login?next=' + encodeURIComponent(`/market/${product.id}`);
+      window.location.href = '/login?next=' + encodeURIComponent(`/market/${product.id}`);
       return;
     }
 
     let supplyId: number | null = null;
-
-    if (
-      product.supplyId !== undefined &&
-      product.supplyId !== null &&
-      Number.isInteger(product.supplyId) &&
-      product.supplyId > 0
-    ) {
+    if (product.supplyId !== undefined && Number.isInteger(product.supplyId) && product.supplyId > 0) {
       supplyId = product.supplyId;
     } else {
       const match = String(product.id).match(/^supply-(\d+)$/);
-
       if (match) {
         const parsedId = Number(match[1]);
-
-        if (Number.isSafeInteger(parsedId) && parsedId > 0) {
-          supplyId = parsedId;
-        }
+        if (Number.isSafeInteger(parsedId) && parsedId > 0) supplyId = parsedId;
       }
     }
 
     if (supplyId === null) {
-      console.error('❌ شناسه واقعی عرضه پیدا نشد:', {
-        productId: product.id,
-        supplyId: product.supplyId,
-        product,
-      });
-
+      console.error('❌ شناسه واقعی عرضه پیدا نشد:', product);
       showToast('شناسه عرضه معتبر نیست.');
       return;
     }
 
     setIsNegotiating(true);
-
     try {
       const response = await fetch(`${API_URL}/negotiations/`, {
         method: 'POST',
@@ -623,421 +528,177 @@ export default function MarketplacePage() {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          supply: supplyId,
-        }),
+        body: JSON.stringify({ supply: supplyId }),
       });
 
       const responseText = await response.text();
-
       let data: any = {};
-
       try {
         data = responseText ? JSON.parse(responseText) : {};
       } catch {
-        data = {
-          detail: responseText || 'پاسخ نامعتبر از سرور دریافت شد.',
-        };
+        data = { detail: responseText || 'پاسخ نامعتبر از سرور دریافت شد.' };
       }
 
       if (!response.ok) {
-        console.error('❌ Start negotiation failed:', {
-          status: response.status,
-          data,
-        });
+        let errorMessage =
+          data?.detail ||
+          data?.message ||
+          data?.error ||
+          `خطا در شروع مذاکره (کد ${response.status})`;
 
-        if (response.status === 401) {
-          showToast('نشست کاربری شما منقضی شده است.');
-          return;
-        }
-
-        if (response.status === 403) {
-          showToast(
-            data?.detail ||
-              'شما اجازه شروع این مذاکره را ندارید.'
-          );
-          return;
-        }
+        const detailText = String(
+          data?.detail ||
+          data?.message ||
+          data?.error ||
+          ''
+        ).toLowerCase();
 
         if (response.status === 400) {
-          showToast(
-            data?.detail ||
-              data?.message ||
-              'امکان شروع مذاکره برای این عرضه وجود ندارد.'
-          );
-          return;
+          if (
+            detailText.includes('owner') ||
+            detailText.includes('yourself') ||
+            detailText.includes('self') ||
+            detailText.includes('cannot negotiate with yourself') ||
+            detailText.includes('خودتان') ||
+            detailText.includes('خود') ||
+            detailText.includes('مالک')
+          ) {
+            errorMessage = 'شما نمی‌توانید با خودتان مذاکره کنید.';
+          } else if (
+            detailText.includes('already') ||
+            detailText.includes('existing') ||
+            detailText.includes('duplicate') ||
+            detailText.includes('قبلاً') ||
+            detailText.includes('مذاکره‌ای شروع شده')
+          ) {
+            errorMessage = 'برای این عرضه قبلاً مذاکره‌ای شروع شده است.';
+          } else if (
+            detailText.includes('status') ||
+            detailText.includes('وضعیت')
+          ) {
+            errorMessage = 'وضعیت این عرضه اجازه‌ی شروع مذاکره را نمی‌دهد.';
+          }
         }
 
-        if (response.status === 405) {
-          console.error(
-            '❌ Backend route does not allow POST /negotiations/.'
-          );
-
-          showToast(
-            'مسیر ایجاد مذاکره در Backend تنظیم نشده است.'
-          );
-          return;
-        }
-
-        showToast(
-          data?.detail ||
-            data?.message ||
-            `خطا در شروع مذاکره (${response.status})`
-        );
-
+        showToast(errorMessage);
         return;
       }
 
-      const negotiationId =
-        data?.id ??
-        data?.negotiation_id ??
-        data?.data?.id ??
-        data?.data?.negotiation_id;
-
+      const negotiationId = data?.id ?? data?.negotiation_id ?? data?.data?.id ?? data?.data?.negotiation_id;
       if (!negotiationId) {
-        console.error(
-          '❌ Negotiation created but no negotiation ID returned:',
-          data
-        );
-
-        showToast(
-          'مذاکره ایجاد شد اما شناسه مذاکره از سرور دریافت نشد.'
-        );
-
+        console.error('❌ Negotiation created but no ID returned:', data);
+        showToast('مذاکره ایجاد شد اما شناسه مذاکره از سرور دریافت نشد.');
         return;
       }
 
-      console.log('✅ Negotiation ready:', {
-        negotiationId,
-        supplyId,
-        data,
-      });
-
+      console.log('✅ Negotiation ready:', { negotiationId, supplyId });
       window.location.href = `/negotiation/${negotiationId}`;
     } catch (error: any) {
       console.error('❌ Start negotiation error:', error);
-
-      showToast(
-        error?.message ||
-          'در برقراری ارتباط با سرور برای شروع مذاکره خطایی رخ داد.'
-      );
+      showToast(error?.message || 'در برقراری ارتباط با سرور برای شروع مذاکره خطایی رخ داد.');
     } finally {
       setIsNegotiating(false);
     }
   };
 
-  // ==================== Filtered Products ====================
+  // ==================== Favorites API ====================
 
-  const filteredProducts =
-    useMemo(() => {
-      let result = [...realProducts];
-
-      if (searchQuery.trim()) {
-        const q =
-          searchQuery.toLowerCase();
-
-        result =
-          result.filter(
-            (p) =>
-              p.title
-                .toLowerCase()
-                .includes(q) ||
-
-              p.shortDescription
-                .toLowerCase()
-                .includes(q) ||
-
-              p.tags.some((t) =>
-                t
-                  .toLowerCase()
-                  .includes(q)
-              ) ||
-
-              p.seller.name
-                .toLowerCase()
-                .includes(q)
-          );
+  const toggleFavorite = useCallback(
+    async (product: MarketplaceProduct) => {
+      if (!accessToken) {
+        showToast('لطفاً ابتدا وارد شوید.');
+        return;
       }
 
-      if (
-        selectedIndustry !== 'همه'
-      ) {
-        result =
-          result.filter(
-            (p) =>
-              p.industry ===
-              selectedIndustry
-          );
+      const supplyId = product.supplyId;
+      if (!supplyId) {
+        showToast('شناسه محصول نامعتبر.');
+        return;
       }
 
-      if (
-        selectedTechnology !== 'همه'
-      ) {
-        result =
-          result.filter(
-            (p) =>
-              p.technology ===
-              selectedTechnology
-          );
-      }
+      const isCurrentlyFavorite = favorites.includes(supplyId);
 
-      if (
-        selectedCategory !== 'all'
-      ) {
-        result =
-          result.filter(
-            (p) =>
-              p.category ===
-              selectedCategory
-          );
-      }
+      try {
+        if (isCurrentlyFavorite) {
+          const res = await fetch(`${API_URL}/favorites/${supplyId}/`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
 
-      if (selectedTRL > 0) {
-        result =
-          result.filter(
-            (p) =>
-              p.trl >= selectedTRL
-          );
-      }
+          if (!res.ok && res.status !== 404) {
+            throw new Error('Failed to remove favorite');
+          }
 
-      if (selectedMRL > 0) {
-        result =
-          result.filter(
-            (p) =>
-              p.mrl >= selectedMRL
-          );
-      }
+          setFavorites((prev) => {
+            const newFavs = prev.filter((id) => id !== supplyId);
+            localStorage.setItem('marketplace_favorites', JSON.stringify(newFavs));
+            return newFavs;
+          });
+          showToast('از علاقه‌مندی‌ها حذف شد');
+        } else {
+          const res = await fetch(`${API_URL}/favorites/`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ supply: supplyId }),
+          });
 
-      result =
-        result.filter((p) => {
-          const effectivePrice =
-            p.priceType ===
-              'range' &&
-            p.priceRange
-              ? p.priceRange.min
-              : p.price;
-
-          return (
-            effectivePrice <=
-            maxPrice
-          );
-        });
-
-      if (
-        selectedProvince !== 'همه'
-      ) {
-        result =
-          result.filter(
-            (p) =>
-              p.seller.location ===
-              selectedProvince
-          );
-      }
-
-      if (
-        selectedCertification !==
-        'all'
-      ) {
-        if (
-          selectedCertification ===
-          'has'
-        ) {
-          result =
-            result.filter(
-              (p) =>
-                p.certifications
-                  .length > 0
-            );
-        }
-
-        if (
-          selectedCertification ===
-          'none'
-        ) {
-          result =
-            result.filter(
-              (p) =>
-                p.certifications
-                  .length === 0
-            );
-        }
-      }
-
-      if (minRating > 0) {
-        result =
-          result.filter(
-            (p) =>
-              p.seller.rating >=
-              minRating
-          );
-      }
-
-      if (
-        selectedRisk !== 'all'
-      ) {
-        result =
-          result.filter(
-            (p) =>
-              p.riskLevel ===
-              selectedRisk
-          );
-      }
-
-      switch (sortBy) {
-        case 'newest':
-          result.sort(
-            (a, b) =>
-              new Date(
-                b.createdAt
-              ).getTime() -
-              new Date(
-                a.createdAt
-              ).getTime()
-          );
-          break;
-
-        case 'popular':
-          // ===== استفاده از viewCount واقعی برای مرتب‌سازی =====
-          result.sort(
-            (a, b) =>
-              b.viewCount -
-              a.viewCount
-          );
-          break;
-
-        case 'price-asc':
-          result.sort(
-            (a, b) => {
-              const priceA =
-                a.priceType ===
-                  'range' &&
-                a.priceRange
-                  ? a.priceRange.min
-                  : a.price;
-
-              const priceB =
-                b.priceType ===
-                  'range' &&
-                b.priceRange
-                  ? b.priceRange.min
-                  : b.price;
-
-              return (
-                priceA - priceB
-              );
+          if (!res.ok) {
+            let errorMsg = 'افزودن به علاقه‌مندی‌ها ممکن نیست.';
+            try {
+              const errData = await res.json();
+              errorMsg = errData?.detail || errData?.message || errorMsg;
+            } catch {
+              // ignore
             }
-          );
-          break;
+            throw new Error(errorMsg);
+          }
 
-        case 'price-desc':
-          result.sort(
-            (a, b) => {
-              const priceA =
-                a.priceType ===
-                  'range' &&
-                a.priceRange
-                  ? a.priceRange.min
-                  : a.price;
+          const responseData = await res.json();
 
-              const priceB =
-                b.priceType ===
-                  'range' &&
-                b.priceRange
-                  ? b.priceRange.min
-                  : b.price;
-
-              return (
-                priceB - priceA
-              );
-            }
-          );
-          break;
-
-        // case 'rating': // کامنت شده
-        //   result.sort(
-        //     (a, b) =>
-        //       b.seller.rating -
-        //       a.seller.rating
-        //   );
-        //   break;
+          if (responseData.is_favorite === true) {
+            setFavorites((prev) => {
+              const newFavs = [...prev, supplyId];
+              localStorage.setItem('marketplace_favorites', JSON.stringify(newFavs));
+              return newFavs;
+            });
+            showToast('به علاقه‌مندی‌ها اضافه شد');
+          } else if (responseData.is_favorite === false) {
+            setFavorites((prev) => {
+              const newFavs = prev.filter((id) => id !== supplyId);
+              localStorage.setItem('marketplace_favorites', JSON.stringify(newFavs));
+              return newFavs;
+            });
+            showToast('از علاقه‌مندی‌ها حذف شد');
+          }
+        }
+      } catch (error: any) {
+        console.error('Error toggling favorite:', error);
+        showToast(error?.message || 'خطا در ثبت علاقه‌مندی. دوباره تلاش کنید.');
+        await loadFavorites();
       }
-
-      return result;
-    }, [
-      searchQuery,
-      selectedIndustry,
-      selectedTechnology,
-      selectedCategory,
-      selectedTRL,
-      selectedMRL,
-      maxPrice,
-      selectedProvince,
-      selectedCertification,
-      minRating,
-      sortBy,
-      selectedRisk,
-      realProducts,
-    ]);
-
-  // ==================== Favorites ====================
-
-  const toggleFavorite = (
-    id: string
-  ) => {
-    setFavorites((prev) => {
-      const next =
-        prev.includes(id)
-          ? prev.filter(
-              (f) => f !== id
-            )
-          : [...prev, id];
-
-      localStorage.setItem(
-        'marketplace_favorites',
-        JSON.stringify(next)
-      );
-
-      showToast(
-        prev.includes(id)
-          ? 'از علاقه‌مندی‌ها حذف شد'
-          : 'به علاقه‌مندی‌ها اضافه شد'
-      );
-
-      return next;
-    });
-  };
+    },
+    [accessToken, favorites, loadFavorites, showToast]
+  );
 
   // ==================== Compare ====================
 
-  const toggleCompare = (
-    id: string
-  ) => {
+  const toggleCompare = useCallback((id: string) => {
     setCompareList((prev) => {
       if (prev.includes(id)) {
-        showToast(
-          'از لیست مقایسه حذف شد'
-        );
-
-        return prev.filter(
-          (c) => c !== id
-        );
+        showToast('از لیست مقایسه حذف شد');
+        return prev.filter((c) => c !== id);
       }
-
       if (prev.length >= 4) {
-        showToast(
-          'حداکثر ۴ محصول قابل مقایسه است'
-        );
-
+        showToast('حداکثر ۴ محصول قابل مقایسه است');
         return prev;
       }
-
-      showToast(
-        'به لیست مقایسه اضافه شد'
-      );
-
+      showToast('به لیست مقایسه اضافه شد');
       return [...prev, id];
     });
-  };
+  }, [showToast]);
 
   // ==================== Clear Filters ====================
 
@@ -1068,6 +729,88 @@ export default function MarketplacePage() {
     minRating > 0,
     selectedRisk !== 'all',
   ].filter(Boolean).length;
+
+  // ==================== Filtered Products ====================
+
+  const filteredProducts = useMemo(() => {
+    let result = [...realProducts];
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (p) =>
+          p.title.toLowerCase().includes(q) ||
+          p.shortDescription.toLowerCase().includes(q) ||
+          p.tags.some((t) => t.toLowerCase().includes(q)) ||
+          p.seller.name.toLowerCase().includes(q)
+      );
+    }
+
+    if (selectedIndustry !== 'همه') result = result.filter((p) => p.industry === selectedIndustry);
+    if (selectedTechnology !== 'همه') result = result.filter((p) => p.technology === selectedTechnology);
+    if (selectedCategory !== 'all') result = result.filter((p) => p.category === selectedCategory);
+    if (selectedTRL > 0) result = result.filter((p) => p.trl >= selectedTRL);
+    if (selectedMRL > 0) result = result.filter((p) => p.mrl >= selectedMRL);
+    result = result.filter((p) => {
+      const effectivePrice = p.priceType === 'range' && p.priceRange ? p.priceRange.min : p.price;
+      return effectivePrice <= maxPrice;
+    });
+    if (selectedProvince !== 'همه') result = result.filter((p) => p.seller.location === selectedProvince);
+    if (selectedCertification !== 'all') {
+      if (selectedCertification === 'has') result = result.filter((p) => p.certifications.length > 0);
+      if (selectedCertification === 'none') result = result.filter((p) => p.certifications.length === 0);
+    }
+    if (minRating > 0) result = result.filter((p) => p.seller.rating >= minRating);
+    if (selectedRisk !== 'all') result = result.filter((p) => p.riskLevel === selectedRisk);
+
+    switch (sortBy) {
+      case 'newest':
+        result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        break;
+      case 'popular':
+        result.sort((a, b) => b.viewCount - a.viewCount);
+        break;
+      case 'price-asc':
+        result.sort((a, b) => {
+          const priceA = a.priceType === 'range' && a.priceRange ? a.priceRange.min : a.price;
+          const priceB = b.priceType === 'range' && b.priceRange ? b.priceRange.min : b.price;
+          return priceA - priceB;
+        });
+        break;
+      case 'price-desc':
+        result.sort((a, b) => {
+          const priceA = a.priceType === 'range' && a.priceRange ? a.priceRange.min : a.price;
+          const priceB = b.priceType === 'range' && b.priceRange ? b.priceRange.min : b.price;
+          return priceB - priceA;
+        });
+        break;
+    }
+
+    return result;
+  }, [
+    searchQuery,
+    selectedIndustry,
+    selectedTechnology,
+    selectedCategory,
+    selectedTRL,
+    selectedMRL,
+    maxPrice,
+    selectedProvince,
+    selectedCertification,
+    minRating,
+    sortBy,
+    selectedRisk,
+    realProducts,
+  ]);
+
+  // ==================== Check if product is favorite ====================
+
+  const isProductFavorite = useCallback(
+    (product: MarketplaceProduct) => {
+      return product.supplyId !== undefined && favorites.includes(product.supplyId);
+    },
+    [favorites]
+  );
 
   // ==================== نمایش پیام ورود ====================
 
@@ -1102,10 +845,7 @@ export default function MarketplacePage() {
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] flex items-center justify-center animate-pulse">
             <ShoppingCart className="w-8 h-8 text-white" />
           </div>
-
-          <p className="text-slate-500">
-            در حال بارگذاری بازار...
-          </p>
+          <p className="text-slate-500">در حال بارگذاری بازار...</p>
         </div>
       </div>
     );
@@ -1117,74 +857,45 @@ export default function MarketplacePage() {
     <div
       className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#f0fdfa]"
       style={{
-        fontFamily:
-          "'Vazir', 'Vazirmatn', 'Iran Sans', Tahoma, sans-serif",
+        fontFamily: "'Vazir', 'Vazirmatn', 'Iran Sans', Tahoma, sans-serif",
       }}
       dir="rtl"
     >
       {/* Toast */}
-
       {toast && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-[#1E3A8A] text-white px-6 py-3 rounded-2xl shadow-lg flex items-center gap-2 animate-bounce">
           <CheckCircle size={16} />
-
-          <span className="text-sm font-bold">
-            {toast}
-          </span>
+          <span className="text-sm font-bold">{toast}</span>
         </div>
       )}
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="flex gap-6">
-
           {/* ==================== Sidebar ==================== */}
-
           {showFilters && (
             <aside className="hidden lg:block w-72 flex-shrink-0">
               <div className="sticky top-24 space-y-4">
                 <div className="rounded-2xl border border-slate-200 bg-white p-5">
-
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                      <SlidersHorizontal
-                        size={16}
-                        className="text-[#1E3A8A]"
-                      />
-
+                      <SlidersHorizontal size={16} className="text-[#1E3A8A]" />
                       فیلترها
                     </h3>
-
                     {activeFilterCount > 0 && (
-                      <button
-                        onClick={
-                          clearAllFilters
-                        }
-                        className="text-xs text-red-500 hover:text-red-700 font-medium"
-                      >
+                      <button onClick={clearAllFilters} className="text-xs text-red-500 hover:text-red-700 font-medium">
                         حذف همه
                       </button>
                     )}
                   </div>
 
                   <div className="mb-4">
-                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">
-                      جستجو
-                    </label>
-
+                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">جستجو</label>
                     <div className="relative">
-                      <Search
-                        size={14}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-                      />
-
+                      <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
                       <input
                         type="text"
                         value={searchQuery}
-                        onChange={(e) =>
-                          setSearchQuery(
-                            e.target.value
-                          )
-                        }
+                        onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="عنوان، برچسب، فروشنده..."
                         className="w-full pl-3 pr-9 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none focus:border-[#1E3A8A] focus:ring-1 focus:ring-[#1E3A8A20]"
                       />
@@ -1192,35 +903,18 @@ export default function MarketplacePage() {
                   </div>
 
                   <div className="mb-4">
-                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">
-                      نوع
-                    </label>
-
+                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">نوع</label>
                     <div className="flex gap-1">
                       {[
-                        {
-                          value: 'all',
-                          label: 'همه',
-                        },
-                        {
-                          value: 'product',
-                          label: 'محصول',
-                        },
-                        {
-                          value: 'service',
-                          label: 'خدمت',
-                        },
+                        { value: 'all', label: 'همه' },
+                        { value: 'product', label: 'محصول' },
+                        { value: 'service', label: 'خدمت' },
                       ].map((opt) => (
                         <button
                           key={opt.value}
-                          onClick={() =>
-                            setSelectedCategory(
-                              opt.value as any
-                            )
-                          }
+                          onClick={() => setSelectedCategory(opt.value as any)}
                           className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${
-                            selectedCategory ===
-                            opt.value
+                            selectedCategory === opt.value
                               ? 'bg-[#1E3A8A] text-white'
                               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                           }`}
@@ -1232,259 +926,137 @@ export default function MarketplacePage() {
                   </div>
 
                   <div className="mb-4">
-                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">
-                      صنعت
-                    </label>
-
+                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">صنعت</label>
                     <select
                       value={selectedIndustry}
-                      onChange={(e) =>
-                        setSelectedIndustry(
-                          e.target.value
-                        )
-                      }
+                      onChange={(e) => setSelectedIndustry(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
                     >
-                      {industries.map(
-                        (ind) => (
-                          <option
-                            key={ind}
-                            value={ind}
-                          >
-                            {ind}
-                          </option>
-                        )
-                      )}
+                      {industries.map((ind) => (
+                        <option key={ind} value={ind}>
+                          {ind}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
                   <div className="mb-4">
-                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">
-                      فناوری
-                    </label>
-
+                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">فناوری</label>
                     <select
                       value={selectedTechnology}
-                      onChange={(e) =>
-                        setSelectedTechnology(
-                          e.target.value
-                        )
-                      }
+                      onChange={(e) => setSelectedTechnology(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
                     >
-                      {technologies.map(
-                        (tech) => (
-                          <option
-                            key={tech}
-                            value={tech}
-                          >
-                            {tech}
-                          </option>
-                        )
-                      )}
+                      {technologies.map((tech) => (
+                        <option key={tech} value={tech}>
+                          {tech}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
                   <div className="mb-4">
-                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">
-                      حداقل TRL
-                    </label>
-
+                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">حداقل TRL</label>
                     <select
                       value={selectedTRL}
-                      onChange={(e) =>
-                        setSelectedTRL(
-                          Number(
-                            e.target.value
-                          )
-                        )
-                      }
+                      onChange={(e) => setSelectedTRL(Number(e.target.value))}
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
                     >
-                      {trlLevels.map(
-                        (t) => (
-                          <option
-                            key={t.value}
-                            value={t.value}
-                          >
-                            {t.label}
-                          </option>
-                        )
-                      )}
+                      {trlLevels.map((t) => (
+                        <option key={t.value} value={t.value}>
+                          {t.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
                   <div className="mb-4">
-                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">
-                      حداقل MRL
-                    </label>
-
+                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">حداقل MRL</label>
                     <select
                       value={selectedMRL}
-                      onChange={(e) =>
-                        setSelectedMRL(
-                          Number(
-                            e.target.value
-                          )
-                        )
-                      }
+                      onChange={(e) => setSelectedMRL(Number(e.target.value))}
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
                     >
-                      {mrlLevels.map(
-                        (m) => (
-                          <option
-                            key={m.value}
-                            value={m.value}
-                          >
-                            {m.label}
-                          </option>
-                        )
-                      )}
+                      {mrlLevels.map((m) => (
+                        <option key={m.value} value={m.value}>
+                          {m.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
                   <div className="mb-4">
                     <label className="text-xs font-bold text-slate-600 mb-1.5 block">
-                      حداکثر قیمت (میلیون تومان):{' '}
-                      {maxPrice.toLocaleString(
-                        'fa-IR'
-                      )}
+                      حداکثر قیمت (میلیون تومان): {maxPrice.toLocaleString('fa-IR')}
                     </label>
-
                     <input
                       type="range"
                       min={0}
                       max={5000}
                       step={100}
                       value={maxPrice}
-                      onChange={(e) =>
-                        setMaxPrice(
-                          Math.max(
-                            0,
-                            Number(
-                              e.target.value
-                            )
-                          )
-                        )
-                      }
+                      onChange={(e) => setMaxPrice(Math.max(0, Number(e.target.value)))}
                       className="w-full accent-[#1E3A8A]"
                     />
                   </div>
 
                   <div className="mb-4">
-                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">
-                      استان فروشنده
-                    </label>
-
+                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">استان فروشنده</label>
                     <select
                       value={selectedProvince}
-                      onChange={(e) =>
-                        setSelectedProvince(
-                          e.target.value
-                        )
-                      }
+                      onChange={(e) => setSelectedProvince(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
                     >
-                      {provinces.map(
-                        (prov) => (
-                          <option
-                            key={prov}
-                            value={prov}
-                          >
-                            {prov}
-                          </option>
-                        )
-                      )}
+                      {provinces.map((prov) => (
+                        <option key={prov} value={prov}>
+                          {prov}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
                   <div className="mb-4">
-                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">
-                      گواهینامه
-                    </label>
-
+                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">گواهینامه</label>
                     <select
-                      value={
-                        selectedCertification
-                      }
-                      onChange={(e) =>
-                        setSelectedCertification(
-                          e.target.value
-                        )
-                      }
+                      value={selectedCertification}
+                      onChange={(e) => setSelectedCertification(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white outline-none cursor-pointer"
                     >
-                      <option value="all">
-                        همه
-                      </option>
-
-                      <option value="has">
-                        دارای گواهینامه
-                      </option>
-
-                      <option value="none">
-                        بدون گواهینامه
-                      </option>
+                      <option value="all">همه</option>
+                      <option value="has">دارای گواهینامه</option>
+                      <option value="none">بدون گواهینامه</option>
                     </select>
                   </div>
 
                   <div className="mb-4">
                     <label className="text-xs font-bold text-slate-600 mb-1.5 block">
-                      حداقل امتیاز فروشنده:{' '}
-                      {minRating}
+                      حداقل امتیاز فروشنده: {minRating}
                     </label>
-
                     <input
                       type="range"
                       min={0}
                       max={5}
                       step={0.5}
                       value={minRating}
-                      onChange={(e) =>
-                        setMinRating(
-                          Number(
-                            e.target.value
-                          )
-                        )
-                      }
+                      onChange={(e) => setMinRating(Number(e.target.value))}
                       className="w-full accent-[#D4A547]"
                     />
                   </div>
 
                   <div className="mb-4">
-                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">
-                      سطح ریسک
-                    </label>
-
+                    <label className="text-xs font-bold text-slate-600 mb-1.5 block">سطح ریسک</label>
                     <div className="flex gap-1">
                       {[
-                        {
-                          value: 'all',
-                          label: 'همه',
-                        },
-                        {
-                          value: 'low',
-                          label: 'کم',
-                        },
-                        {
-                          value: 'medium',
-                          label: 'متوسط',
-                        },
-                        {
-                          value: 'high',
-                          label: 'زیاد',
-                        },
+                        { value: 'all', label: 'همه' },
+                        { value: 'low', label: 'کم' },
+                        { value: 'medium', label: 'متوسط' },
+                        { value: 'high', label: 'زیاد' },
                       ].map((opt) => (
                         <button
                           key={opt.value}
-                          onClick={() =>
-                            setSelectedRisk(
-                              opt.value as any
-                            )
-                          }
+                          onClick={() => setSelectedRisk(opt.value as any)}
                           className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${
-                            selectedRisk ===
-                            opt.value
+                            selectedRisk === opt.value
                               ? 'bg-[#1E3A8A] text-white'
                               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                           }`}
@@ -1494,173 +1066,87 @@ export default function MarketplacePage() {
                       ))}
                     </div>
                   </div>
-
                 </div>
               </div>
             </aside>
           )}
 
           {/* ==================== Main Content ==================== */}
-
           <div className="flex-1 min-w-0">
-
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#1E3A8A] via-[#1E3A8A] to-[#14B8A6] p-6 sm:p-8 text-white mb-6">
-
               <div className="absolute inset-0 opacity-10">
                 <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-
                 <div className="absolute bottom-0 left-0 w-64 h-64 bg-[#D4A547] rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
               </div>
-
               <div className="relative">
-                <h1 className="text-2xl sm:text-3xl font-black">
-                  بازار محصولات و خدمات فناورانه
-                </h1>
-
-                <p className="mt-2 text-white/80 text-sm">
-                  جستجو، کشف و مقایسهٔ هوشمند محصولات و خدمات نوآورانه
-                </p>
+                <h1 className="text-xl sm:text-2xl font-black">بازار محصولات و خدمات فناورانه و نوآورانه</h1>
+                <p className="mt-2 text-white/80 text-sm">جستجو، کشف و مقایسهٔ هوشمند محصولات و خدمات نوآورانه</p>
               </div>
             </div>
 
             {/* Toolbar */}
-
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
-
               <div className="flex items-center gap-2 flex-wrap">
-
                 <button
-                  onClick={() =>
-                    setShowFilters(
-                      !showFilters
-                    )
-                  }
+                  onClick={() => setShowFilters(!showFilters)}
                   className="lg:hidden inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50"
                 >
                   <Filter size={14} />
-
                   فیلترها
-
-                  {activeFilterCount >
-                    0 && (
+                  {activeFilterCount > 0 && (
                     <span className="w-5 h-5 rounded-full bg-[#1E3A8A] text-white text-xs flex items-center justify-center">
-                      {
-                        activeFilterCount
-                      }
+                      {activeFilterCount}
                     </span>
                   )}
                 </button>
 
                 <select
                   value={sortBy}
-                  onChange={(e) =>
-                    setSortBy(
-                      e.target.value as any
-                    )
-                  }
+                  onChange={(e) => setSortBy(e.target.value as any)}
                   className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 bg-white outline-none cursor-pointer"
                 >
-                  <option value="newest">
-                    جدیدترین
-                  </option>
-
-                  <option value="popular">
-                    پربازدیدترین
-                  </option>
-
-                  <option value="price-asc">
-                    قیمت: کم به زیاد
-                  </option>
-
-                  <option value="price-desc">
-                    قیمت: زیاد به کم
-                  </option>
-
-                  {/* <option value="rating">
-                    بالاترین امتیاز
-                  </option> */}
+                  <option value="newest">جدیدترین</option>
+                  <option value="popular">پربازدیدترین</option>
+                  <option value="price-asc">قیمت: کم به زیاد</option>
+                  <option value="price-desc">قیمت: زیاد به کم</option>
                 </select>
 
                 <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
-
                   <button
-                    onClick={() =>
-                      setViewMode('grid')
-                    }
+                    onClick={() => setViewMode('grid')}
                     className={`p-1.5 rounded-lg transition ${
-                      viewMode ===
-                      'grid'
-                        ? 'bg-white shadow text-[#1E3A8A]'
-                        : 'text-slate-400'
+                      viewMode === 'grid' ? 'bg-white shadow text-[#1E3A8A]' : 'text-slate-400'
                     }`}
                   >
                     <Grid3X3 size={16} />
                   </button>
-
                   <button
-                    onClick={() =>
-                      setViewMode('list')
-                    }
+                    onClick={() => setViewMode('list')}
                     className={`p-1.5 rounded-lg transition ${
-                      viewMode ===
-                      'list'
-                        ? 'bg-white shadow text-[#1E3A8A]'
-                        : 'text-slate-400'
+                      viewMode === 'list' ? 'bg-white shadow text-[#1E3A8A]' : 'text-slate-400'
                     }`}
                   >
                     <List size={16} />
                   </button>
-
                 </div>
 
-                {compareList.length >
-                  0 && (
+                {compareList.length > 0 && (
                   <button
-                    onClick={() =>
-                      setShowCompare(
-                        true
-                      )
-                    }
+                    onClick={() => setShowCompare(true)}
                     className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#14B8A6] text-white text-xs font-bold hover:bg-[#14B8A6]/90 transition"
                   >
                     <Scale size={14} />
-
-                    مقایسه (
-                    {
-                      compareList.length
-                    }
-                    )
+                    مقایسه ({compareList.length})
                   </button>
                 )}
-
               </div>
 
               <div className="flex items-center gap-2">
-
-                <span className="text-xs text-slate-500">
-                  {
-                    filteredProducts.length
-                  }{' '}
-                  مورد یافت شد
-                </span>
-
-                {suppliesLoading && (
-                  <span className="text-[11px] text-teal-600">
-                    در حال دریافت عرضه‌های واقعی...
-                  </span>
+                <span className="text-xs text-slate-500">{filteredProducts.length} مورد یافت شد</span>
+                {suppliesLoading && <span className="text-[11px] text-teal-600">در حال دریافت عرضه‌های واقعی...</span>}
+                {!suppliesLoading && realProducts.length > 0 && (
+                  <span className="text-[11px] text-emerald-600">{realProducts.length} عرضه ثبت‌شده</span>
                 )}
-
-                {!suppliesLoading &&
-                  realProducts.length >
-                    0 && (
-                    <span className="text-[11px] text-emerald-600">
-                      {
-                        realProducts.length
-                      }{' '}
-                      عرضه ثبت‌شده
-                    </span>
-                  )}
-
               </div>
             </div>
 
@@ -1736,363 +1222,317 @@ export default function MarketplacePage() {
             )}
 
             {/* Products */}
-
-            {filteredProducts.length ===
-            0 ? (
+            {filteredProducts.length === 0 ? (
               <div className="text-center py-16">
-
                 <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-slate-100 flex items-center justify-center">
-                  <Package
-                    size={32}
-                    className="text-slate-400"
-                  />
+                  <Package size={32} className="text-slate-400" />
                 </div>
-
-                <h3 className="text-lg font-bold text-slate-700 mb-2">
-                  محصولی یافت نشد
-                </h3>
-
-                <p className="text-sm text-slate-500 mb-4">
-                  با تغییر فیلترها دوباره جستجو کنید
-                </p>
-
-                <button
-                  onClick={
-                    clearAllFilters
-                  }
-                  className="px-4 py-2 rounded-xl bg-[#1E3A8A] text-white text-sm font-bold hover:bg-[#1E3A8A]/90"
-                >
+                <h3 className="text-lg font-bold text-slate-700 mb-2">محصولی یافت نشد</h3>
+                <p className="text-sm text-slate-500 mb-4">با تغییر فیلترها دوباره جستجو کنید</p>
+                <button onClick={clearAllFilters} className="px-4 py-2 rounded-xl bg-[#1E3A8A] text-white text-sm font-bold hover:bg-[#1E3A8A]/90">
                   حذف همه فیلترها
                 </button>
-
               </div>
-            ) : viewMode ===
-              'grid' ? (
-
+            ) : viewMode === 'grid' ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-
-                {filteredProducts.map(
-                  (product) => (
-                    <ProductCard
-                      key={product.id}
-                      product={product}
-                      isFavorite={favorites.includes(
-                        product.id
-                      )}
-                      isCompared={compareList.includes(
-                        product.id
-                      )}
-                      onToggleFavorite={() =>
-                        toggleFavorite(
-                          product.id
-                        )
-                      }
-                      onToggleCompare={() =>
-                        toggleCompare(
-                          product.id
-                        )
-                      }
-                      onStartNegotiation={() =>
-                        handleStartNegotiation(
-                          product
-                        )
-                      }
-                    />
-                  )
-                )}
-
+                {filteredProducts.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    isFavorite={isProductFavorite(product)}
+                    isCompared={compareList.includes(product.id)}
+                    onToggleFavorite={() => toggleFavorite(product)}
+                    onToggleCompare={() => toggleCompare(product.id)}
+                    onStartNegotiation={() => handleStartNegotiation(product)}
+                  />
+                ))}
               </div>
-
             ) : (
-
               <div className="space-y-3">
-
-                {filteredProducts.map(
-                  (product) => (
-                    <ProductListItem
-                      key={product.id}
-                      product={product}
-                      isFavorite={favorites.includes(
-                        product.id
-                      )}
-                      isCompared={compareList.includes(
-                        product.id
-                      )}
-                      onToggleFavorite={() =>
-                        toggleFavorite(
-                          product.id
-                        )
-                      }
-                      onToggleCompare={() =>
-                        toggleCompare(
-                          product.id
-                        )
-                      }
-                      onStartNegotiation={() =>
-                        handleStartNegotiation(
-                          product
-                        )
-                      }
-                    />
-                  )
-                )}
-
+                {filteredProducts.map((product) => (
+                  <ProductListItem
+                    key={product.id}
+                    product={product}
+                    isFavorite={isProductFavorite(product)}
+                    isCompared={compareList.includes(product.id)}
+                    onToggleFavorite={() => toggleFavorite(product)}
+                    onToggleCompare={() => toggleCompare(product.id)}
+                    onStartNegotiation={() => handleStartNegotiation(product)}
+                  />
+                ))}
               </div>
             )}
-
           </div>
         </div>
 
-        {/* ==================== Compare ==================== */}
-
-        {showCompare &&
-          compareList.length >= 2 && (
-            <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-
-              <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[85vh] overflow-y-auto p-6 shadow-2xl">
-
-                <div className="flex items-center justify-between mb-6">
-
-                  <h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
-
-                    <Scale
-                      size={20}
-                      className="text-[#1E3A8A]"
-                    />
-
-                    مقایسه محصولات
-
-                  </h2>
-
-                  <button
-                    onClick={() =>
-                      setShowCompare(
-                        false
-                      )
-                    }
-                    className="p-2 rounded-xl hover:bg-slate-100"
-                  >
-                    <X
-                      size={20}
-                      className="text-slate-500"
-                    />
-                  </button>
-
-                </div>
-
-                <div className="overflow-x-auto">
-
-                  <table className="w-full text-sm">
-
-                    <thead>
-                      <tr className="border-b border-slate-200">
-
-                        <th className="py-3 px-4 text-right text-slate-500 font-medium min-w-[120px]">
-                          معیار
-                        </th>
-
-                        {compareList.map(
-                          (id) => {
-                            const p =
-                              realProducts.find(
-                                (pp) =>
-                                  pp.id ===
-                                  id
-                              );
-
-                            if (!p)
-                              return null;
-
-                            return (
-                              <th
-                                key={id}
-                                className="py-3 px-4 text-center min-w-[180px]"
-                              >
-                                <p className="font-bold text-slate-800 text-xs">
-                                  {
-                                    p.title
-                                  }
-                                </p>
-
-                                <button
-                                  onClick={() =>
-                                    toggleCompare(
-                                      id
-                                    )
-                                  }
-                                  className="mt-1 text-xs text-red-500"
-                                >
-                                  حذف
-                                </button>
-                              </th>
-                            );
-                          }
-                        )}
-
-                      </tr>
-                    </thead>
-
-                    <tbody>
-
-                      {[
-                        {
-                          label: 'قیمت',
-                          render: (
-                            p: MarketplaceProduct
-                          ) =>
-                            formatPrice(
-                              p
-                            ),
-                        },
-                        {
-                          label: 'TRL',
-                          render: (
-                            p: MarketplaceProduct
-                          ) =>
-                            `${p.trl}/۹`,
-                        },
-                        {
-                          label: 'MRL',
-                          render: (
-                            p: MarketplaceProduct
-                          ) =>
-                            `${p.mrl}/۹`,
-                        },
-                        {
-                          label: 'زمان تحویل',
-                          render: (
-                            p: MarketplaceProduct
-                          ) =>
-                            p.deliveryTime,
-                        },
-                        {
-                          label: 'فروشنده',
-                          render: (
-                            p: MarketplaceProduct
-                          ) =>
-                            p.seller.name,
-                        },
-                        {
-                          label: 'امتیاز فروشنده',
-                          render: (
-                            p: MarketplaceProduct
-                          ) =>
-                            `${p.seller.rating}/۵`,
-                        },
-                        {
-                          label: 'ریسک اجرا',
-                          render: (
-                            p: MarketplaceProduct
-                          ) =>
-                            getRiskLabel(
-                              p.riskLevel
-                            ),
-                        },
-                        {
-                          label: 'خدمات پس از فروش',
-                          render: (
-                            p: MarketplaceProduct
-                          ) =>
-                            p.afterSalesService
-                              ? '✅ دارد'
-                              : '❌ ندارد',
-                        },
-                        {
-                          label: 'وضعیت مالکیت فکری',
-                          render: (
-                            p: MarketplaceProduct
-                          ) =>
-                            p.ipStatus ===
-                            'registered'
-                              ? 'ثبت شده'
-                              : p.ipStatus ===
-                                'pending'
-                                ? 'در حال ثبت'
-                                : 'ندارد',
-                        },
-                        {
-                          label: 'گواهینامه‌ها',
-                          render: (
-                            p: MarketplaceProduct
-                          ) =>
-                            p.certifications
-                              .length >
-                            0
-                              ? p.certifications.join(
-                                  '، '
-                                )
-                              : 'ندارد',
-                        },
-                      ].map(
-                        (row, i) => (
-                          <tr
-                            key={i}
-                            className="border-b border-slate-100"
-                          >
-
-                            <td className="py-3 px-4 font-medium text-slate-700">
-                              {
-                                row.label
-                              }
-                            </td>
-
-                            {compareList.map(
-                              (id) => {
-                                const p =
-                                  realProducts.find(
-                                    (
-                                      pp
-                                    ) =>
-                                      pp.id ===
-                                      id
-                                  );
-
-                                if (!p) {
-                                  return (
-                                    <td
-                                      key={id}
-                                      className="py-3 px-4 text-center"
-                                    >
-                                      -
-                                    </td>
-                                  );
-                                }
-
-                                return (
-                                  <td
-                                    key={id}
-                                    className="py-3 px-4 text-center text-slate-600"
-                                  >
-                                    {row.render(
-                                      p
-                                    )}
-                                  </td>
-                                );
-                              }
-                            )}
-
-                          </tr>
-                        )
-                      )}
-
-                    </tbody>
-
-                  </table>
-
-                </div>
-
+        {/* ==================== Compare Modal (Graphical) ==================== */}
+        {showCompare && compareList.length >= 2 && (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                  <Scale size={20} className="text-[#1E3A8A]" />
+                  مقایسه گرافیکی محصولات
+                </h2>
+                <button
+                  onClick={() => setShowCompare(false)}
+                  className="p-2 rounded-xl hover:bg-slate-100"
+                >
+                  <X size={20} className="text-slate-500" />
+                </button>
               </div>
 
-            </div>
-          )}
+              {(() => {
+                const selectedProducts = compareList
+                  .map((id) => realProducts.find((p) => p.id === id))
+                  .filter((p): p is MarketplaceProduct => p !== undefined);
 
+                if (selectedProducts.length < 2) return null;
+
+                const colorPalette = [
+                  '#1E3A8A', '#14B8A6', '#D4A547', '#EF4444',
+                  '#8B5CF6', '#EC4899', '#F97316', '#10B981',
+                  '#6366F1', '#F59E0B',
+                ];
+
+                const productColors = selectedProducts.map(
+                  (_, idx) => colorPalette[idx % colorPalette.length]
+                );
+
+                const metrics = [
+                  {
+                    key: 'price',
+                    label: 'قیمت',
+                    unit: 'میلیون تومان',
+                    max: 5000,
+                    getValue: (p: MarketplaceProduct) => Number(p.price || 0),
+                  },
+                  {
+                    key: 'trl',
+                    label: 'TRL',
+                    unit: '',
+                    max: 9,
+                    getValue: (p: MarketplaceProduct) => Number(p.trl || 0),
+                  },
+                  {
+                    key: 'mrl',
+                    label: 'MRL',
+                    unit: '',
+                    max: 9,
+                    getValue: (p: MarketplaceProduct) => Number(p.mrl || 0),
+                  },
+                  {
+                    key: 'rating',
+                    label: 'امتیاز فروشنده',
+                    unit: 'از ۵',
+                    max: 5,
+                    getValue: (p: MarketplaceProduct) =>
+                      Number(p.seller.rating || 0),
+                  },
+                ];
+
+                const activeMetrics = metrics.filter((metric) =>
+                  selectedProducts.some(
+                    (product) => metric.getValue(product) > 0
+                  )
+                );
+
+                if (activeMetrics.length === 0) {
+                  return (
+                    <div className="text-center py-10">
+                      <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-slate-100 flex items-center justify-center">
+                        <Scale size={28} className="text-slate-400" />
+                      </div>
+                      <h3 className="text-sm font-bold text-slate-700 mb-2">
+                        اطلاعات عددی قابل مقایسه وجود ندارد
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        برای این موارد، تمام معیارهای عددی مانند قیمت، TRL، MRL
+                        و امتیاز فروشنده صفر یا نامشخص هستند.
+                      </p>
+                    </div>
+                  );
+                }
+
+                const comparisonRows = [
+                  { label: 'صنعت', key: 'industry' },
+                  { label: 'فناوری', key: 'technology' },
+                  { label: 'محل فروشنده', key: 'location' },
+                  { label: 'ریسک', key: 'risk' },
+                  { label: 'گواهینامه‌ها', key: 'certs' },
+                  { label: 'خدمات پس از فروش', key: 'afterSales' },
+                  { label: 'وضعیت IP', key: 'ip' },
+                ];
+
+                return (
+                  <div className="space-y-8">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-700 mb-4 text-center">
+                        مقایسه معیارهای عددی
+                      </h3>
+                      <div className="grid grid-cols-1 gap-5">
+                        {activeMetrics.map((metric) => {
+                          const chartData = selectedProducts.map((product) => ({
+                            name:
+                              product.title.length > 22
+                                ? `${product.title.slice(0, 22)}…`
+                                : product.title,
+                            value: metric.getValue(product),
+                            fullTitle: product.title,
+                          }));
+
+                          return (
+                            <div
+                              key={metric.key}
+                              className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                            >
+                              <div className="mb-3 text-center">
+                                <h4 className="text-sm font-extrabold text-slate-800">
+                                  {metric.label}
+                                </h4>
+                                {metric.unit && (
+                                  <p className="text-[11px] text-slate-500 mt-1">
+                                    {metric.unit}
+                                  </p>
+                                )}
+                              </div>
+
+                              <ResponsiveContainer width="100%" height={280}>
+                                <BarChart
+                                  data={chartData}
+                                  margin={{ top: 10, right: 15, left: 0, bottom: 50 }}
+                                >
+                                  <CartesianGrid strokeDasharray="3 3" />
+                                  <XAxis
+                                    dataKey="name"
+                                    tick={{ fontSize: 10 }}
+                                    interval={0}
+                                    angle={-20}
+                                    textAnchor="end"
+                                  />
+                                  <YAxis
+                                    domain={[0, metric.max]}
+                                    allowDecimals={metric.key === 'rating' || metric.key === 'price'}
+                                  />
+                                  <Tooltip
+                                    formatter={(value: number | string) => [
+                                      Number(value).toLocaleString('fa-IR'),
+                                      metric.label,
+                                    ]}
+                                    labelFormatter={(_, payload) =>
+                                      payload?.[0]?.payload?.fullTitle || ''
+                                    }
+                                  />
+                                  {selectedProducts.map((product, idx) => {
+                                    const productIndex = selectedProducts.findIndex(
+                                      (item) => item.id === product.id
+                                    );
+                                    return (
+                                      <Bar
+                                        key={product.id}
+                                        dataKey="value"
+                                        name={product.title}
+                                        data={[
+                                          {
+                                            name:
+                                              product.title.length > 22
+                                                ? `${product.title.slice(0, 22)}…`
+                                                : product.title,
+                                            value: metric.getValue(product),
+                                            fullTitle: product.title,
+                                          },
+                                        ]}
+                                        fill={productColors[productIndex]}
+                                        radius={[6, 6, 0, 0]}
+                                      />
+                                    );
+                                  })}
+                                  <Legend />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <h3 className="text-sm font-bold text-slate-700 mb-3 text-center">
+                        جدول مقایسه مشخصات
+                      </h3>
+                      <table className="w-full text-sm border-collapse">
+                        <thead>
+                          <tr className="bg-slate-100">
+                            <th className="py-3 px-3 text-right text-slate-600 font-medium">
+                              ویژگی
+                            </th>
+                            {selectedProducts.map((p, idx) => (
+                              <th
+                                key={p.id}
+                                className="py-3 px-3 text-center"
+                                style={{ color: productColors[idx] }}
+                              >
+                                {p.title}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {comparisonRows.map((row) => (
+                            <tr key={row.key} className="border-b border-slate-100">
+                              <td className="py-3 px-3 font-medium text-slate-700">
+                                {row.label}
+                              </td>
+                              {selectedProducts.map((p) => {
+                                let value = '';
+                                if (row.key === 'industry') {
+                                  value = p.industry;
+                                } else if (row.key === 'technology') {
+                                  value = p.technology;
+                                } else if (row.key === 'location') {
+                                  value = p.seller.location;
+                                } else if (row.key === 'risk') {
+                                  value = getRiskLabel(p.riskLevel);
+                                } else if (row.key === 'certs') {
+                                  value =
+                                    p.certifications.length > 0
+                                      ? p.certifications.join('، ')
+                                      : 'ندارد';
+                                } else if (row.key === 'afterSales') {
+                                  value = p.afterSalesService ? '✅ دارد' : '❌ ندارد';
+                                } else if (row.key === 'ip') {
+                                  value =
+                                    p.ipStatus === 'registered'
+                                      ? 'ثبت شده'
+                                      : p.ipStatus === 'pending'
+                                      ? 'در حال ثبت'
+                                      : 'ندارد';
+                                }
+                                return (
+                                  <td
+                                    key={p.id}
+                                    className="py-3 px-3 text-center text-slate-600 text-xs"
+                                  >
+                                    {value}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
       </main>
 
       <footer className="border-t border-slate-200 bg-white py-6 mt-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-xs text-slate-400">
-            بازار محصولات و خدمات فناورانه — بازار تحول
-          </p>
+          <p className="text-xs text-slate-400">بازار محصولات و خدمات فناورانه — بازار تحول</p>
         </div>
       </footer>
     </div>
@@ -2118,16 +1558,12 @@ function ProductCard({
   onToggleCompare: () => void;
   onStartNegotiation: () => void;
 }) {
-  const productImage =
-    product.images?.[0];
+  const productImage = product.images?.[0];
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white hover:shadow-lg hover:border-[#1E3A8A20] transition-all group overflow-hidden">
-
       <div className="h-40 bg-gradient-to-br from-[#1E3A8A10] to-[#14B8A610] flex items-center justify-center relative overflow-hidden">
-
         {productImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={productImage}
             alt={product.title}
@@ -2135,29 +1571,18 @@ function ProductCard({
           />
         ) : (
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] flex items-center justify-center opacity-80">
-
-            {product.category ===
-            'service' ? (
-              <Wrench
-                size={28}
-                className="text-white"
-              />
+            {product.category === 'service' ? (
+              <Wrench size={28} className="text-white" />
             ) : (
-              <Package
-                size={28}
-                className="text-white"
-              />
+              <Package size={28} className="text-white" />
             )}
-
           </div>
         )}
-
         {productImage && (
           <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/10 pointer-events-none" />
         )}
 
         <div className="absolute top-2 left-2 flex gap-1 z-10">
-
           <button
             type="button"
             onClick={(e) => {
@@ -2166,22 +1591,12 @@ function ProductCard({
               onToggleFavorite();
             }}
             className={`p-1.5 rounded-lg transition ${
-              isFavorite
-                ? 'bg-red-50 text-red-500'
-                : 'bg-white/90 text-slate-400 hover:text-red-400'
+              isFavorite ? 'bg-red-50 text-red-500' : 'bg-white/90 text-slate-400 hover:text-red-400'
             }`}
             aria-label="افزودن به علاقه‌مندی‌ها"
           >
-            <Heart
-              size={14}
-              fill={
-                isFavorite
-                  ? 'currentColor'
-                  : 'none'
-              }
-            />
+            <Heart size={14} fill={isFavorite ? 'currentColor' : 'none'} />
           </button>
-
           <button
             type="button"
             onClick={(e) => {
@@ -2190,140 +1605,74 @@ function ProductCard({
               onToggleCompare();
             }}
             className={`p-1.5 rounded-lg transition ${
-              isCompared
-                ? 'bg-[#14B8A6]/20 text-[#14B8A6]'
-                : 'bg-white/90 text-slate-400 hover:text-[#14B8A6]'
+              isCompared ? 'bg-[#14B8A6]/20 text-[#14B8A6]' : 'bg-white/90 text-slate-400 hover:text-[#14B8A6]'
             }`}
             aria-label="افزودن به مقایسه"
           >
             <Scale size={14} />
           </button>
-
         </div>
 
         <div className="absolute top-2 right-2 flex gap-1 z-10">
-
           <span
             className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-              product.category ===
-              'service'
-                ? 'bg-purple-100 text-purple-700'
-                : 'bg-blue-100 text-blue-700'
+              product.category === 'service' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
             }`}
           >
-            {product.category ===
-            'service'
-              ? 'خدمت'
-              : 'محصول'}
+            {product.category === 'service' ? 'خدمت' : 'محصول'}
           </span>
-
         </div>
-
       </div>
 
       <div className="p-4">
-
         <h3 className="text-sm font-extrabold text-slate-900 mb-1 line-clamp-2 group-hover:text-[#1E3A8A] transition">
           {product.title}
         </h3>
-
-        <p className="text-xs text-slate-500 line-clamp-2 mb-3">
-          {
-            product.shortDescription
-          }
-        </p>
+        <p className="text-xs text-slate-500 line-clamp-2 mb-3">{product.shortDescription}</p>
 
         <div className="flex flex-wrap gap-1 mb-3">
-
-          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">
-            {product.industry}
-          </span>
-
-          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">
-            {product.technology}
-          </span>
-
-          <span
-            className={`px-2 py-0.5 rounded-full text-xs font-medium ${getTRLColor(
-              product.trl
-            )}`}
-          >
+          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">{product.industry}</span>
+          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">{product.technology}</span>
+          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getTRLColor(product.trl)}`}>
             TRL {product.trl}
           </span>
-
         </div>
 
         <div className="flex items-center justify-between mb-3">
-
-          <span className="text-sm font-extrabold text-[#1E3A8A]">
-            {formatPrice(
-              product
-            )}
-          </span>
-
+          <span className="text-sm font-extrabold text-[#1E3A8A]">{formatPrice(product)}</span>
           <div className="flex items-center gap-1">
-
-            <Star
-              size={14}
-              className="text-[#D4A547] fill-[#D4A547]"
-            />
-
-            <span className="text-xs font-bold text-slate-600">
-              {
-                product.seller
-                  .rating
-              }
-            </span>
-
+            <Star size={14} className="text-[#D4A547] fill-[#D4A547]" />
+            <span className="text-xs font-bold text-slate-600">{product.seller.rating}</span>
           </div>
-
         </div>
 
         <div className="flex items-center justify-between text-xs text-slate-500 mb-3">
-
           <span className="flex items-center gap-1">
             <MapPin size={12} />
-
-            {
-              product.seller
-                .location
-            }
+            {product.seller.location}
           </span>
-
           <span className="flex items-center gap-1">
             <Eye size={12} />
-
-            {
-              product.viewCount
-            }
+            {product.viewCount}
           </span>
-
         </div>
 
         <div className="flex gap-2">
-
           <Link
             href={`/market/${product.id}`}
             className="flex-1 py-2 rounded-xl bg-[#1E3A8A] text-white text-xs font-bold text-center hover:bg-[#1E3A8A]/90 transition"
           >
             مشاهده و درخواست
           </Link>
-
           <button
             type="button"
-            onClick={
-              onStartNegotiation
-            }
+            onClick={onStartNegotiation}
             className="p-2 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-[#1E3A8A] transition"
             title="شروع مذاکره"
           >
-            <MessageCircle
-              size={14}
-            />
+            <MessageCircle size={14} />
           </button>
-
         </div>
-
       </div>
     </div>
   );
@@ -2348,18 +1697,13 @@ function ProductListItem({
   onToggleCompare: () => void;
   onStartNegotiation: () => void;
 }) {
-  const productImage =
-    product.images?.[0];
+  const productImage = product.images?.[0];
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white hover:shadow-md hover:border-[#1E3A8A20] transition-all group p-4">
-
       <div className="flex items-start gap-4">
-
         <div className="relative w-20 h-20 rounded-xl bg-gradient-to-br from-[#1E3A8A10] to-[#14B8A610] overflow-hidden flex-shrink-0">
-
           {productImage ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={productImage}
               alt={product.title}
@@ -2367,203 +1711,102 @@ function ProductListItem({
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
-
-              {product.category ===
-              'service' ? (
-                <Wrench
-                  size={22}
-                  className="text-[#1E3A8A]"
-                />
+              {product.category === 'service' ? (
+                <Wrench size={22} className="text-[#1E3A8A]" />
               ) : (
-                <Package
-                  size={22}
-                  className="text-[#1E3A8A]"
-                />
+                <Package size={22} className="text-[#1E3A8A]" />
               )}
-
             </div>
           )}
-
         </div>
 
         <div className="flex-1 min-w-0">
-
           <div className="flex items-start justify-between gap-2">
-
             <div>
-
               <h3 className="text-sm font-extrabold text-slate-900 group-hover:text-[#1E3A8A] transition">
                 {product.title}
               </h3>
-
-              <p className="text-xs text-slate-500 mt-0.5">
-                {
-                  product.shortDescription
-                }
-              </p>
-
+              <p className="text-xs text-slate-500 mt-0.5">{product.shortDescription}</p>
             </div>
-
             <div className="flex items-center gap-1 flex-shrink-0">
-
               <button
                 type="button"
-                onClick={
-                  onToggleFavorite
-                }
+                onClick={onToggleFavorite}
                 className={`p-1.5 rounded-lg transition ${
-                  isFavorite
-                    ? 'text-red-500'
-                    : 'text-slate-400 hover:text-red-400'
+                  isFavorite ? 'text-red-500' : 'text-slate-400 hover:text-red-400'
                 }`}
                 aria-label="افزودن به علاقه‌مندی‌ها"
               >
-                <Heart
-                  size={14}
-                  fill={
-                    isFavorite
-                      ? 'currentColor'
-                      : 'none'
-                  }
-                />
+                <Heart size={14} fill={isFavorite ? 'currentColor' : 'none'} />
               </button>
-
               <button
                 type="button"
-                onClick={
-                  onToggleCompare
-                }
+                onClick={onToggleCompare}
                 className={`p-1.5 rounded-lg transition ${
-                  isCompared
-                    ? 'text-[#14B8A6]'
-                    : 'text-slate-400 hover:text-[#14B8A6]'
+                  isCompared ? 'text-[#14B8A6]' : 'text-slate-400 hover:text-[#14B8A6]'
                 }`}
                 aria-label="افزودن به مقایسه"
               >
                 <Scale size={14} />
               </button>
-
             </div>
-
           </div>
 
           <div className="flex flex-wrap items-center gap-2 mt-2">
-
-            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">
-              {product.industry}
-            </span>
-
-            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">
-              {product.technology}
-            </span>
-
-            <span
-              className={`px-2 py-0.5 rounded-full text-xs font-medium ${getTRLColor(
-                product.trl
-              )}`}
-            >
+            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">{product.industry}</span>
+            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">{product.technology}</span>
+            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getTRLColor(product.trl)}`}>
               TRL {product.trl}
             </span>
-
-            <span
-              className={`px-2 py-0.5 rounded-full text-xs font-medium ${getRiskColor(
-                product.riskLevel
-              )}`}
-            >
-              {getRiskLabel(
-                product.riskLevel
-              )}
+            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getRiskColor(product.riskLevel)}`}>
+              {getRiskLabel(product.riskLevel)}
             </span>
-
-            {product.seller
-              .verified && (
+            {product.seller.verified && (
               <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
                 <Shield size={12} />
                 تأیید شده
               </span>
             )}
-
           </div>
 
           <div className="flex items-center justify-between mt-3">
-
             <div className="flex items-center gap-4 text-xs text-slate-500">
-
               <span className="flex items-center gap-1">
                 <MapPin size={12} />
-
-                {
-                  product.seller
-                    .location
-                }
+                {product.seller.location}
               </span>
-
               <span className="flex items-center gap-1">
                 <Eye size={12} />
-
-                {
-                  product.viewCount
-                }
+                {product.viewCount}
               </span>
-
               <span className="flex items-center gap-1">
                 <Clock size={12} />
-
-                {
-                  product.deliveryTime
-                }
+                {product.deliveryTime}
               </span>
-
             </div>
 
             <div className="flex items-center gap-3">
-
               <div className="flex items-center gap-1">
-
-                <Star
-                  size={14}
-                  className="text-[#D4A547] fill-[#D4A547]"
-                />
-
-                <span className="text-xs font-bold text-slate-600">
-                  {
-                    product.seller
-                      .rating
-                  }
-                </span>
-
+                <Star size={14} className="text-[#D4A547] fill-[#D4A547]" />
+                <span className="text-xs font-bold text-slate-600">{product.seller.rating}</span>
               </div>
-
-              <span className="text-sm font-extrabold text-[#1E3A8A]">
-                {formatPrice(
-                  product
-                )}
-              </span>
-
+              <span className="text-sm font-extrabold text-[#1E3A8A]">{formatPrice(product)}</span>
               <Link
                 href={`/market/${product.id}`}
                 className="px-3 py-1.5 rounded-lg bg-[#1E3A8A] text-white text-xs font-bold hover:bg-[#1E3A8A]/90 transition"
               >
                 مشاهده
               </Link>
-
               <button
                 type="button"
-                onClick={
-                  onStartNegotiation
-                }
+                onClick={onStartNegotiation}
                 className="p-2 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-[#1E3A8A] transition"
                 title="شروع مذاکره"
               >
-                <MessageCircle
-                  size={14}
-                />
+                <MessageCircle size={14} />
               </button>
-
             </div>
-
           </div>
-
         </div>
       </div>
     </div>

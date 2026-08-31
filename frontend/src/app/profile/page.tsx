@@ -5,6 +5,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
+import Link from 'next/link'; //
 import {
   useAuthStore,
   authenticatedFetch,
@@ -38,6 +39,10 @@ import {
   LogOut,
   Settings,
   ChevronLeft,
+  Heart,
+  MapPin,
+  Star,
+  ShoppingCart,
 } from 'lucide-react';
 
 // ============================================================
@@ -119,6 +124,35 @@ type Negotiation = {
   created_at: string;
   updated_at: string;
   messages?: any[];
+};
+
+// ===== نوع علاقه‌مندی (مطابق با بک‌اند) =====
+type Favorite = {
+  id: number;
+  product?: {
+    id: number;
+    title: string;
+    short_description?: string;
+    price?: string;
+    category?: string;
+    industry?: { name: string } | null;
+    trl?: number;
+    images?: { image: string }[];
+    view_count?: number;
+  };
+  supply?: {
+    id: number;
+    title: string;
+    description?: string;
+    price?: string;
+    category?: string;
+    industry?: string;
+    technology?: string;
+    city?: string;
+    images?: { image: string }[];
+    view_count?: number;
+  };
+  created_at: string;
 };
 
 // ============================================================
@@ -284,6 +318,54 @@ const FAKE_NEGOTIATIONS: Negotiation[] = [
   },
 ];
 
+// ===== داده‌های فیک برای علاقه‌مندی‌ها =====
+const FAKE_FAVORITES: Favorite[] = [
+  {
+    id: 1,
+    supply: {
+      id: 3,
+      title: 'سامانه هوشمند مدیریت انبار و موجودی (WMS)',
+      description: 'پلتفرمی تحت وب برای مدیریت انبار با قابلیت ردیابی کالا با بارکد و RFID',
+      price: '350,000,000',
+      category: 'نرم‌افزار',
+      industry: 'فناوری اطلاعات',
+      technology: 'هوش مصنوعی',
+      city: 'تهران',
+      view_count: 120,
+    },
+    created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
+  },
+  {
+    id: 2,
+    supply: {
+      id: 2,
+      title: 'خدمات طراحی UI/UX حرفه‌ای',
+      description: 'طراحی رابط کاربری و تجربه کاربری برای وب‌سایت و اپلیکیشن',
+      price: '12,000,000',
+      category: 'خدمات',
+      industry: 'فناوری اطلاعات',
+      technology: 'طراحی',
+      city: 'اصفهان',
+      view_count: 85,
+    },
+    created_at: new Date(Date.now() - 86400000 * 7).toISOString(),
+  },
+  {
+    id: 3,
+    product: {
+      id: 10,
+      title: 'سیستم جامع مدیریت زنجیره تأمین (SCM)',
+      short_description: 'سیستم مدیریت یکپارچه زنجیره تأمین با قابلیت پیگیری سفارشات',
+      price: '280,000,000',
+      category: 'product',
+      industry: { name: 'صنایع تولیدی' },
+      trl: 8,
+      view_count: 45,
+    },
+    created_at: new Date(Date.now() - 86400000 * 14).toISOString(),
+  },
+];
+
 // ============================================================
 // Main Component
 // ============================================================
@@ -295,10 +377,24 @@ export default function ProfilePage() {
   const [mounted, setMounted] = useState(false);
 
   const initialTab = searchParams?.get('tab') || 'profile';
-  const validTabs = ['profile', 'messages', 'wallet', 'myNeeds', 'myProducts', 'myNegotiations'];
+  const validTabs = [
+    'profile',
+    'messages',
+    'wallet',
+    'myNeeds',
+    'myProducts',
+    'myNegotiations',
+    'myFavorites',
+  ];
   const defaultTab = validTabs.includes(initialTab) ? initialTab : 'profile';
   const [activeTab, setActiveTab] = useState<
-    'profile' | 'messages' | 'wallet' | 'myNeeds' | 'myProducts' | 'myNegotiations'
+    | 'profile'
+    | 'messages'
+    | 'wallet'
+    | 'myNeeds'
+    | 'myProducts'
+    | 'myNegotiations'
+    | 'myFavorites'
   >(defaultTab as any);
 
   const [loading, setLoading] = useState(true);
@@ -308,6 +404,8 @@ export default function ProfilePage() {
   const [myNeeds, setMyNeeds] = useState<Need[]>([]);
   const [mySupplies, setMySupplies] = useState<Supply[]>([]);
   const [myNegotiations, setMyNegotiations] = useState<Negotiation[]>([]);
+  const [favorites, setFavorites] = useState<Favorite[]>([]);
+  const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [formData, setFormData] = useState<Partial<UserProfile>>({});
@@ -331,6 +429,7 @@ export default function ProfilePage() {
       setMyNeeds(FAKE_NEEDS);
       setMySupplies(FAKE_SUPPLIES);
       setMyNegotiations(FAKE_NEGOTIATIONS);
+      setFavorites(FAKE_FAVORITES);
       setLoading(false);
       return;
     }
@@ -355,6 +454,7 @@ export default function ProfilePage() {
         setMyNeeds(FAKE_NEEDS);
         setMySupplies(FAKE_SUPPLIES);
         setMyNegotiations(FAKE_NEGOTIATIONS);
+        setFavorites(FAKE_FAVORITES);
         setLoading(false);
         return;
       }
@@ -383,6 +483,7 @@ export default function ProfilePage() {
         setMyNeeds(FAKE_NEEDS);
         setMySupplies(FAKE_SUPPLIES);
         setMyNegotiations(FAKE_NEGOTIATIONS);
+        setFavorites(FAKE_FAVORITES);
         setLoading(false);
         return;
       }
@@ -503,6 +604,10 @@ export default function ProfilePage() {
         console.warn('⚠️ Error loading negotiations, using fake data:', err);
         setMyNegotiations(FAKE_NEGOTIATIONS);
       }
+
+      // ===== 7. Favorites (علاقه‌مندی‌ها) =====
+      await loadFavorites();
+
     } catch (err: any) {
       console.error('❌ Error fetching data, using fake data:', err);
       setError(err?.message || 'خطا در دریافت اطلاعات');
@@ -513,8 +618,78 @@ export default function ProfilePage() {
       setMyNeeds(FAKE_NEEDS);
       setMySupplies(FAKE_SUPPLIES);
       setMyNegotiations(FAKE_NEGOTIATIONS);
+      setFavorites(FAKE_FAVORITES);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ===== تابع بارگذاری علاقه‌مندی‌ها =====
+  const loadFavorites = async () => {
+    try {
+      setFavoritesLoading(true);
+      const token = getAccessToken();
+      if (!token) {
+        setFavorites(FAKE_FAVORITES);
+        return;
+      }
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+      const res = await authenticatedFetch(`${apiUrl}/favorites/`, {
+        method: 'GET',
+      });
+
+      if (res.status === 404 || res.status === 401) {
+        setFavorites(FAKE_FAVORITES);
+        return;
+      }
+
+      if (!res.ok) {
+        console.warn('⚠️ Failed to load favorites:', res.status);
+        setFavorites(FAKE_FAVORITES);
+        return;
+      }
+
+      const data = await res.json();
+      let favArray = data?.results ?? data;
+      if (!Array.isArray(favArray)) favArray = [];
+      setFavorites(favArray.length > 0 ? favArray : FAKE_FAVORITES);
+    } catch (err) {
+      console.warn('⚠️ Error loading favorites, using fake data:', err);
+      setFavorites(FAKE_FAVORITES);
+    } finally {
+      setFavoritesLoading(false);
+    }
+  };
+
+  // ===== تابع حذف علاقه‌مندی =====
+  const removeFavorite = async (favoriteId: number) => {
+    try {
+      const token = getAccessToken();
+      if (!token) {
+        setFavorites((prev) => prev.filter((f) => f.id !== favoriteId));
+        return;
+      }
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+      const res = await authenticatedFetch(`${apiUrl}/favorites/${favoriteId}/`, {
+        method: 'DELETE',
+      });
+
+      if (res.status === 401 || res.status === 404) {
+        setFavorites((prev) => prev.filter((f) => f.id !== favoriteId));
+        return;
+      }
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData?.detail || 'خطا در حذف علاقه‌مندی');
+      }
+
+      setFavorites((prev) => prev.filter((f) => f.id !== favoriteId));
+    } catch (err: any) {
+      console.error('❌ Error removing favorite:', err);
+      alert(err.message || 'خطا در حذف علاقه‌مندی');
     }
   };
 
@@ -700,6 +875,7 @@ export default function ProfilePage() {
   const currentNeeds = myNeeds.length > 0 ? myNeeds : FAKE_NEEDS;
   const currentSupplies = mySupplies.length > 0 ? mySupplies : FAKE_SUPPLIES;
   const currentNegotiations = myNegotiations.length > 0 ? myNegotiations : FAKE_NEGOTIATIONS;
+  const currentFavorites = favorites.length > 0 ? favorites : FAKE_FAVORITES;
 
   const unreadCount = Array.isArray(currentMessages)
     ? currentMessages.filter(
@@ -713,6 +889,7 @@ export default function ProfilePage() {
 
   const sidebarItems = [
     { id: 'profile', label: 'اطلاعات کاربری', icon: User },
+    { id: 'myFavorites', label: 'علاقه‌مندی‌ها', icon: Heart },
     { id: 'myNeeds', label: 'نیازهای من', icon: Target },
     { id: 'myProducts', label: 'محصولات من', icon: Package },
     { id: 'myNegotiations', label: 'مذاکرات من', icon: MessageCircle },
@@ -726,12 +903,10 @@ export default function ProfilePage() {
       className="min-h-screen bg-gradient-to-br from-slate-50/80 via-white to-blue-50/80 p-4 sm:p-6"
     >
       <div className="max-w-7xl mx-auto">
-        {/* استفاده از flex-row-reverse برای قرارگیری سایدبار در سمت راست */}
         <div className="flex flex-row-reverse gap-6">
-          {/* سایدبار حرفه‌ای (سمت راست) */}
+          {/* سایدبار */}
           <aside className="lg:w-72 flex-shrink-0">
             <div className="sticky top-6 space-y-4">
-              {/* کارت پروفایل */}
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 transition-all hover:shadow-md">
                 <div className="flex items-center gap-4">
                   <div className="relative">
@@ -756,7 +931,6 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              {/* منوی سایدبار */}
               <nav className="bg-white rounded-2xl shadow-sm border border-slate-100 p-3 transition-all hover:shadow-md">
                 <div className="flex items-center gap-2 px-3 py-2 mb-2 border-b border-slate-100">
                   <LayoutDashboard className="w-5 h-5 text-indigo-500" />
@@ -811,7 +985,7 @@ export default function ProfilePage() {
             </div>
           </aside>
 
-          {/* محتوای اصلی (سمت چپ) */}
+          {/* محتوای اصلی */}
           <main className="flex-1 min-w-0 bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
             {activeTab === 'profile' && (
               <ProfileTab
@@ -845,6 +1019,7 @@ export default function ProfilePage() {
                     setMyNeeds(FAKE_NEEDS);
                     setMySupplies(FAKE_SUPPLIES);
                     setMyNegotiations(FAKE_NEGOTIATIONS);
+                    setFavorites(FAKE_FAVORITES);
                   }
                 }}
               />
@@ -878,6 +1053,21 @@ export default function ProfilePage() {
                 }}
               />
             )}
+            {activeTab === 'myFavorites' && (
+              <MyFavoritesTab
+                favorites={currentFavorites}
+                loading={favoritesLoading}
+                onRefresh={() => {
+                  const token = getAccessToken();
+                  if (token) loadFavorites();
+                  else {
+                    setFavorites(FAKE_FAVORITES);
+                  }
+                }}
+                onRemove={removeFavorite}
+                profileId={currentProfile.id}
+              />
+            )}
           </main>
         </div>
       </div>
@@ -886,7 +1076,7 @@ export default function ProfilePage() {
 }
 
 // ============================================================
-// Profile Tab
+// Profile Tab (بدون تغییر)
 // ============================================================
 function ProfileTab({
   profile,
@@ -1005,7 +1195,7 @@ function ProfileTab({
 }
 
 // ============================================================
-// Messages Tab
+// Messages Tab (بدون تغییر)
 // ============================================================
 function MessagesTab({
   messages,
@@ -1794,7 +1984,7 @@ function MessagesTab({
 }
 
 // ============================================================
-// Wallet Tab
+// Wallet Tab (بدون تغییر)
 // ============================================================
 function WalletTab({ wallet, loading }: { wallet: WalletData | null; loading: boolean }) {
   const [showBalance, setShowBalance] = useState(true);
@@ -1917,7 +2107,7 @@ function WalletTab({ wallet, loading }: { wallet: WalletData | null; loading: bo
 }
 
 // ============================================================
-// My Needs Tab (با دکمه‌های انتشار و بازگشایی فقط)
+// My Needs Tab (بدون تغییر)
 // ============================================================
 function MyNeedsTab({
   needs,
@@ -1931,7 +2121,6 @@ function MyNeedsTab({
   const router = useRouter();
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
 
-  // نگاشت کامل وضعیت‌ها (هماهنگ با بک‌اند)
   const statusMap: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
     draft: { label: 'پیش‌نویس', color: 'bg-slate-100 text-slate-600', icon: <AlertCircle size={14} /> },
     published: { label: 'منتشر شده', color: 'bg-green-100 text-green-700', icon: <CheckCircle size={14} /> },
@@ -1964,7 +2153,6 @@ function MyNeedsTab({
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.error || 'خطا در تغییر وضعیت');
       }
-      // پس از موفقیت، داده‌ها را بازخوانی می‌کنیم
       onRefresh();
     } catch (err: any) {
       alert(err.message || 'خطا در تغییر وضعیت');
@@ -2072,7 +2260,6 @@ function MyNeedsTab({
                   </span>
                 </div>
 
-                {/* دکمه‌های تغییر وضعیت (فقط انتشار و بازگشایی) */}
                 <div className="flex flex-wrap gap-2">
                   {need.status === 'draft' && (
                     <button
@@ -2109,7 +2296,7 @@ function MyNeedsTab({
 }
 
 // ============================================================
-// My Products Tab
+// My Products Tab (بدون تغییر)
 // ============================================================
 function MyProductsTab({ supplies, loading }: { supplies: Supply[]; loading: boolean }) {
   const statusMap: Record<string, { label: string; color: string }> = {
@@ -2185,7 +2372,7 @@ function MyProductsTab({ supplies, loading }: { supplies: Supply[]; loading: boo
 }
 
 // ============================================================
-// My Negotiations Tab
+// My Negotiations Tab (بدون تغییر)
 // ============================================================
 function MyNegotiationsTab({
   negotiations,
@@ -2348,6 +2535,256 @@ function MyNegotiationsTab({
                   </p>
                 </div>
               )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// My Favorites Tab (جدید)
+// ============================================================
+function MyFavoritesTab({
+  favorites,
+  loading,
+  onRefresh,
+  onRemove,
+  profileId,
+}: {
+  favorites: Favorite[];
+  loading: boolean;
+  onRefresh: () => void;
+  onRemove: (id: number) => Promise<void>;
+  profileId: number;
+}) {
+  const router = useRouter();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <span className="mr-3 text-slate-500">در حال بارگذاری علاقه‌مندی‌ها...</span>
+      </div>
+    );
+  }
+
+  if (!favorites || favorites.length === 0) {
+    return (
+      <div className="text-center py-12 text-slate-400">
+        <Heart className="h-16 w-16 mx-auto mb-4 stroke-1" />
+        <p className="text-lg font-medium text-slate-600">هیچ علاقه‌مندی ثبت نشده است</p>
+        <p className="text-sm mt-1 text-slate-400">
+          برای افزودن به علاقه‌مندی‌ها، به بازار رفته و روی قلب ❤️ محصولات کلیک کنید.
+        </p>
+        <button
+          onClick={() => router.push('/market')}
+          className="mt-5 px-6 py-2.5 bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] hover:shadow-lg text-white rounded-xl transition shadow-sm text-sm font-medium"
+        >
+          رفتن به بازار
+        </button>
+      </div>
+    );
+  }
+
+  const formatPrice = (price?: string) => {
+    if (!price) return 'قابل مذاکره';
+    const num = parseFloat(price.replace(/,/g, ''));
+    if (isNaN(num)) return price;
+    if (num >= 1000000000) return (num / 1000000000).toFixed(1) + ' میلیارد تومان';
+    if (num >= 1000000) return (num / 1000000).toFixed(0) + ' میلیون تومان';
+    return num.toLocaleString('fa-IR') + ' تومان';
+  };
+
+  const formatDate = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('fa-IR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const getImageUrl = (favorite: Favorite) => {
+    if (favorite.product?.images?.[0]?.image) {
+      return favorite.product.images[0].image;
+    }
+    if (favorite.supply?.images?.[0]?.image) {
+      return favorite.supply.images[0].image;
+    }
+    return null;
+  };
+
+  const getTitle = (favorite: Favorite) => {
+    return favorite.product?.title || favorite.supply?.title || 'بدون عنوان';
+  };
+
+  const getDescription = (favorite: Favorite) => {
+    return favorite.product?.short_description || favorite.supply?.description || '';
+  };
+
+  const getCategory = (favorite: Favorite) => {
+    return favorite.product?.category || favorite.supply?.category || '';
+  };
+
+  const getIndustry = (favorite: Favorite) => {
+    return favorite.product?.industry?.name || favorite.supply?.industry || '';
+  };
+
+  const getType = (favorite: Favorite) => {
+    if (favorite.product) return 'محصول';
+    if (favorite.supply) return 'عرضه';
+    return '';
+  };
+
+  const getTypeColor = (favorite: Favorite) => {
+    if (favorite.product) return 'bg-blue-100 text-blue-700';
+    if (favorite.supply) return 'bg-purple-100 text-purple-700';
+    return 'bg-slate-100 text-slate-600';
+  };
+
+  const getLink = (favorite: Favorite) => {
+    if (favorite.product) return `/market/product/${favorite.product.id}`;
+    if (favorite.supply) return `/market/supply/${favorite.supply.id}`;
+    return '#';
+  };
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-6 flex-wrap gap-2">
+        <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+          <Heart className="w-6 h-6 text-rose-500 fill-rose-500" />
+          علاقه‌مندی‌های من
+          <span className="text-sm font-normal text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+            {favorites.length} مورد
+          </span>
+        </h2>
+        <div className="flex gap-2">
+          <button
+            onClick={onRefresh}
+            className="px-3 py-1.5 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition"
+          >
+            🔄 بازخوانی
+          </button>
+          <button
+            onClick={() => router.push('/market')}
+            className="px-3 py-1.5 text-sm bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition"
+          >
+            <ShoppingCart size={16} className="inline ml-1" />
+            بازار
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        {favorites.map((favorite) => {
+          const image = getImageUrl(favorite);
+          const title = getTitle(favorite);
+          const description = getDescription(favorite);
+          const category = getCategory(favorite);
+          const industry = getIndustry(favorite);
+          const type = getType(favorite);
+          const typeColor = getTypeColor(favorite);
+          const link = getLink(favorite);
+          const price = favorite.product?.price || favorite.supply?.price;
+          const viewCount = favorite.product?.view_count || favorite.supply?.view_count || 0;
+
+          return (
+            <div
+              key={favorite.id}
+              className="group bg-white border border-slate-200 rounded-2xl overflow-hidden hover:shadow-lg hover:border-rose-200 transition-all duration-200"
+            >
+              {/* تصویر */}
+              <div className="relative h-40 bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden">
+                {image ? (
+                  <img
+                    src={image}
+                    alt={title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-rose-50 to-pink-50">
+                    <Heart className="w-12 h-12 text-rose-200" />
+                  </div>
+                )}
+
+                {/* برچسب نوع */}
+                <div className="absolute top-3 right-3">
+                  <span
+                    className={`text-xs px-2.5 py-1 rounded-full font-medium ${typeColor}`}
+                  >
+                    {type}
+                  </span>
+                </div>
+
+                {/* دکمه حذف */}
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (confirm('آیا از حذف این مورد از علاقه‌مندی‌ها مطمئن هستید؟')) {
+                      await onRemove(favorite.id);
+                      onRefresh();
+                    }
+                  }}
+                  className="absolute top-3 left-3 p-1.5 bg-white/90 hover:bg-rose-50 rounded-lg transition text-slate-400 hover:text-rose-500 shadow-sm"
+                  title="حذف از علاقه‌مندی‌ها"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* محتوا */}
+              <div className="p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <h3
+                    className="text-sm font-bold text-slate-800 line-clamp-1 group-hover:text-rose-600 transition"
+                    title={title}
+                  >
+                    {title}
+                  </h3>
+                </div>
+
+                {description && (
+                  <p className="text-xs text-slate-500 line-clamp-2 mt-1.5">{description}</p>
+                )}
+
+                <div className="flex flex-wrap gap-1.5 mt-2.5">
+                  {category && (
+                    <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded-full">
+                      {category}
+                    </span>
+                  )}
+                  {industry && (
+                    <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded-full">
+                      {industry}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-100">
+                  <div className="flex items-center gap-3 text-xs text-slate-400">
+                    <span className="flex items-center gap-1">
+                      <Eye size={12} />
+                      {viewCount}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Heart size={12} className="text-rose-400" />
+                      اضافه شده: {formatDate(favorite.created_at)}
+                    </span>
+                  </div>
+                  <Link
+                    href={link}
+                    className="px-3 py-1 text-xs bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] text-white rounded-lg hover:shadow-md transition font-medium"
+                  >
+                    مشاهده
+                  </Link>
+                </div>
+              </div>
             </div>
           );
         })}

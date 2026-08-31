@@ -2,7 +2,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from django.urls import reverse
-from .models import Supply, SupplyImage
+from .models import Supply, SupplyImage, Favorite
 import json
 
 
@@ -152,9 +152,6 @@ class SupplyAdmin(admin.ModelAdmin):
         return f'{count} تصویر'
     image_count.short_description = 'تعداد تصاویر'
 
-    # ============================================================
-    # متدهای مستندات با آیکون‌های زیبا و بدون وابستگی خارجی
-    # ============================================================
     def documents_count(self, obj):
         count = len(obj.documents or [])
         if count:
@@ -174,7 +171,6 @@ class SupplyAdmin(admin.ModelAdmin):
         html = '<div style="display: flex; flex-direction: column; gap: 8px; padding: 4px 0;">'
         for url in docs:
             filename = url.split('/')[-1] if '/' in url else url
-            # استخراج پسوند فایل برای نمایش آیکون مناسب
             ext = filename.split('.')[-1].lower() if '.' in filename else ''
             icon = '📄'
             if ext in ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg']:
@@ -308,3 +304,80 @@ class SupplyImageAdmin(admin.ModelAdmin):
             )
         return 'بدون تصویر'
     image_preview.short_description = 'پیش‌نمایش (قابل کلیک و دانلود)'
+
+
+# ============================================================
+# ادمین برای مدل Favorite
+# ============================================================
+
+@admin.register(Favorite)
+class FavoriteAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'user_email',
+        'product_link',
+        'supply_link',
+        'created_at_short',
+    )
+    list_filter = ('created_at', 'user')
+    search_fields = (
+        'user__email',
+        'user__username',
+        'product__title',
+        'supply__title',
+    )
+    raw_id_fields = ('user', 'product', 'supply')
+    readonly_fields = ('created_at',)
+    ordering = ('-created_at',)
+    list_per_page = 25
+
+    fieldsets = (
+        ('اطلاعات اصلی', {
+            'fields': ('user',)
+        }),
+        ('موارد علاقه‌مندی', {
+            'fields': ('product', 'supply'),
+            'description': '⚠️ فقط یکی از دو فیلد product یا supply باید مقدار داشته باشد.'
+        }),
+        ('اطلاعات زمانی', {
+            'fields': ('created_at',),
+            'classes': ('collapse',),
+        }),
+    )
+
+    def user_email(self, obj):
+        return obj.user.email if obj.user else '—'
+    user_email.short_description = 'ایمیل کاربر'
+    user_email.admin_order_field = 'user__email'
+
+    def product_link(self, obj):
+        if obj.product:
+            change_url = reverse(
+                f'admin:{obj.product._meta.app_label}_{obj.product._meta.model_name}_change',
+                args=[obj.product.id]
+            )
+            return format_html(
+                '<a href="{}" target="_blank" style="color: #0d6efd;">{}</a>',
+                change_url,
+                obj.product.title
+            )
+        return '—'
+    product_link.short_description = 'محصول'
+
+    def supply_link(self, obj):
+        if obj.supply:
+            change_url = reverse(
+                f'admin:{obj.supply._meta.app_label}_{obj.supply._meta.model_name}_change',
+                args=[obj.supply.id]
+            )
+            return format_html(
+                '<a href="{}" target="_blank" style="color: #0d6efd;">{}</a>',
+                change_url,
+                obj.supply.title
+            )
+        return '—'
+    supply_link.short_description = 'عرضه'
+
+    def created_at_short(self, obj):
+        return obj.created_at.strftime('%Y/%m/%d %H:%M')
+    created_at_short.short_description = 'تاریخ افزودن'

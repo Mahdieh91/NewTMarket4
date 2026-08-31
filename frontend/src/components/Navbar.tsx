@@ -46,11 +46,13 @@ export default function Navbar() {
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
+  // ===== منوی اصلی با ترتیب جدید =====
   const mainMenuItems = [
+    { title: 'پروفایل', href: '/profile', icon: <User size={17} /> },
     { title: 'داشبورد', href: '/dashboard', icon: <LayoutDashboard size={17} /> },
     { title: 'بازار', href: '/market', icon: <Store size={17} /> },
     { title: 'تحلیل بازار', href: '/market-intelligence', icon: <BarChart3 size={17} /> },
-    { title: 'ثبت محصول', href: '/supply/register', icon: <PlusCircle size={17} /> },
+    { title: 'ثبت محصول/خدمت', href: '/supply/register', icon: <PlusCircle size={17} /> },
     { title: 'ثبت نیاز', href: '/needs/register', icon: <ClipboardList size={17} /> },
     { title: 'اجرا', href: '/execution', icon: <PlayCircle size={17} /> },
   ];
@@ -82,7 +84,7 @@ export default function Navbar() {
             </div>
           </Link>
 
-          {/* منوی دسکتاپ */}
+          {/* ===== منوی دسکتاپ ===== */}
           <div className="hidden xl:flex items-center gap-0.5">
             {mainMenuItems.map((item) => (
               <Link
@@ -98,22 +100,9 @@ export default function Navbar() {
                 {item.title}
               </Link>
             ))}
-            {user && (
-              <Link
-                href="/profile"
-                className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-bold transition ${
-                  isActive('/profile')
-                    ? 'bg-blue-50 text-[#1E3A8A]'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-[#1E3A8A]'
-                }`}
-              >
-                <User size={17} />
-                پروفایل
-              </Link>
-            )}
           </div>
 
-          {/* بخش ورود/کاربر */}
+          {/* ===== بخش ورود/کاربر (سمت راست) ===== */}
           <div className="hidden xl:flex items-center gap-2">
             {!isAuthenticated || !user ? (
               <>
@@ -134,7 +123,8 @@ export default function Navbar() {
               </>
             ) : (
               <>
-                <Link href="/profile" className="flex items-center gap-1 hover:bg-slate-50 rounded-lg px-2 py-1">
+                {/* نمایش اطلاعات کاربر (بدون لینک پروفایل) */}
+                <div className="flex items-center gap-1 hover:bg-slate-50 rounded-lg px-2 py-1">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#1E3A8A] to-[#14B8A6] text-white flex items-center justify-center font-black text-sm">
                     {getInitial()}
                   </div>
@@ -146,7 +136,7 @@ export default function Navbar() {
                       {user.role === 'admin' ? 'مدیر' : user.role === 'buyer' ? 'خریدار' : 'فروشنده'}
                     </div>
                   </div>
-                </Link>
+                </div>
                 <button
                   onClick={handleLogout}
                   className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-bold text-red-600 hover:bg-red-50"
@@ -167,7 +157,7 @@ export default function Navbar() {
           </button>
         </div>
 
-        {/* منوی موبایل */}
+        {/* ===== منوی موبایل ===== */}
         {mobileMenuOpen && (
           <div className="xl:hidden border-t border-slate-100 py-4 space-y-2">
             {mainMenuItems.map((item) => (
@@ -182,23 +172,13 @@ export default function Navbar() {
               </Link>
             ))}
             {isAuthenticated && user ? (
-              <>
-                <Link
-                  href="/profile"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-700 hover:bg-slate-50 text-sm font-bold"
-                >
-                  <User size={18} />
-                  پروفایل
-                </Link>
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-600 hover:bg-red-50 text-sm font-bold text-right"
-                >
-                  <LogOut size={18} />
-                  خروج از حساب
-                </button>
-              </>
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-600 hover:bg-red-50 text-sm font-bold text-right"
+              >
+                <LogOut size={18} />
+                خروج از حساب
+              </button>
             ) : (
               <>
                 <Link
