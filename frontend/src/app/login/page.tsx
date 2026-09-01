@@ -1,9 +1,9 @@
+'use client';
+
 // ============================================================
 // src/app/login/page.tsx
-// نسخه نهایی - مدیریت خطا بدون Console Error برای کپچا
+// نسخه نهایی - رفع کامل مشکل کپچا پس از logout
 // ============================================================
-
-'use client';
 
 import { FormEvent, useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
@@ -23,7 +23,7 @@ import { useAuthStore } from '@/store/auth-store';
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, isLoading, error, clearError } = useAuthStore();
+  const { login, isLoading, error, clearError, isAuthenticated } = useAuthStore();
 
   const [form, setForm] = useState({ username: '', password: '', captcha_answer: '' });
   const [showPassword, setShowPassword] = useState(false);
@@ -31,7 +31,7 @@ export default function LoginPage() {
   const [logoError, setLogoError] = useState(false);
 
   const [captchaQuestion, setCaptchaQuestion] = useState('');
-  const [captchaLoading, setCaptchaLoading] = useState(false);
+  const [captchaLoading, setCaptchaLoading] = useState(true);
   const [captchaError, setCaptchaError] = useState(false);
 
   const [fieldErrors, setFieldErrors] = useState<{
@@ -42,15 +42,23 @@ export default function LoginPage() {
   }>({});
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
-
-  // شمارنده برای تلاش مجدد کپچا (حداکثر ۲ بار)
   const captchaRetryCount = useRef(0);
+  const isMounted = useRef(true);
+  const previousAuthState = useRef(isAuthenticated);
 
   const isSubmitDisabled = Boolean(
-    isLoading || captchaLoading || captchaError || !captchaQuestion
+    isLoading ||
+    captchaLoading ||
+    captchaError ||
+    !captchaQuestion
   );
 
+  // ============================================================
+  // دریافت کپچا از سرور
+  // ============================================================
   const fetchCaptchaChallenge = async (clearCaptchaError: boolean = true) => {
+    if (!isMounted.current) return;
+
     setCaptchaLoading(true);
     setCaptchaError(false);
     setCaptchaQuestion('');
@@ -68,6 +76,8 @@ export default function LoginPage() {
         headers: { Accept: 'application/json' },
       });
 
+      if (!isMounted.current) return;
+
       if (!response.ok) {
         let errorMessage = `خطا در دریافت کپچا (${response.status})`;
         try {
@@ -80,6 +90,11 @@ export default function LoginPage() {
       }
 
       const data = await response.json();
+
+      if (!isMounted.current) return;
+
+      console.log('📥 پاسخ کپچا از سرور:', data);
+
       if (!data?.question) {
         throw new Error('پاسخ CAPTCHA از سرور ناقص است.');
       }
@@ -87,6 +102,7 @@ export default function LoginPage() {
       setCaptchaQuestion(String(data.question));
       setCaptchaError(false);
     } catch (err) {
+      if (!isMounted.current) return;
       console.error('❌ خطا در دریافت کپچا:', err);
       setCaptchaQuestion('');
       setCaptchaError(true);
@@ -94,17 +110,51 @@ export default function LoginPage() {
         setFieldErrors({ general: 'مشکل در ارتباط با سرور کپچا' });
       }
     } finally {
-      setCaptchaLoading(false);
+      if (isMounted.current) {
+        setCaptchaLoading(false);
+      }
     }
   };
 
+  // ============================================================
   // دریافت کپچا در اولین لود
+  // ============================================================
   useEffect(() => {
-    captchaRetryCount.current = 0; // ریست شمارنده
+    isMounted.current = true;
+    captchaRetryCount.current = 0;
+    previousAuthState.current = isAuthenticated;
     fetchCaptchaChallenge();
+
+    return () => {
+      isMounted.current = false;
+    };
   }, []);
 
-  // تلاش مجدد در صورت بروز خطا (حداکثر ۲ بار)
+  // ============================================================
+  // در صورت تغییر isAuthenticated به false (لاگ‌اوت)، رفرش صفحه
+  // ============================================================
+  useEffect(() => {
+    // اگر قبلاً احراز هویت داشته و اکنون ندارد => لاگ‌اوت انجام شده
+    if (previousAuthState.current === true && isAuthenticated === false) {
+      console.log('🔄 تشخیص لاگ‌اوت، رفرش صفحه برای دریافت کپچای جدید');
+      // رفرش صفحه با حفظ مسیر فعلی
+      window.location.reload();
+    }
+    previousAuthState.current = isAuthenticated;
+  }, [isAuthenticated]);
+
+  // ============================================================
+  // اگر احراز هویت شده، به داشبورد برو
+  // ============================================================
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.push('/dashboard');
+    }
+  }, [isAuthenticated, router]);
+
+  // ============================================================
+  // تلاش مجدد در صورت خطا (حداکثر ۲ بار)
+  // ============================================================
   useEffect(() => {
     if (captchaError && !captchaLoading && captchaRetryCount.current < 2) {
       captchaRetryCount.current += 1;
@@ -112,6 +162,9 @@ export default function LoginPage() {
     }
   }, [captchaError, captchaLoading]);
 
+  // ============================================================
+  // بارگذاری نام کاربری ذخیره‌شده
+  // ============================================================
   useEffect(() => {
     try {
       const savedUsername = localStorage.getItem('rememberedUsername');
@@ -124,6 +177,9 @@ export default function LoginPage() {
     }
   }, []);
 
+  // ============================================================
+  // تغییر فیلدها
+  // ============================================================
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
@@ -131,6 +187,9 @@ export default function LoginPage() {
     if (error) clearError();
   };
 
+  // ============================================================
+  // ارسال فرم (بدون captcha_id)
+  // ============================================================
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (isSubmitDisabled) return;
@@ -155,32 +214,30 @@ export default function LoginPage() {
       return;
     }
 
-    // ============================================================
-    // فراخوانی login و بررسی نتیجه
-    // ============================================================
+    console.log('📤 ارسال لاگین بدون captcha_id');
+
     const success = await login(username, password, captcha_answer);
 
     if (!success) {
-      // دریافت جدیدترین خطا از store
       const loginError = useAuthStore.getState().error || '';
       const errorText = loginError.toLowerCase();
 
-      // تشخیص خطای کپچا
       const isCaptchaError =
         errorText.includes('captcha') ||
         errorText.includes('کپچا') ||
         errorText.includes('پاسخ کپچا') ||
-        errorText.includes('نشست معتبر');
+        errorText.includes('نشست معتبر') ||
+        errorText.includes('invalid') ||
+        errorText.includes('معتبر');
 
       if (isCaptchaError) {
-        setFieldErrors({ captcha: loginError });
+        setFieldErrors({ captcha: loginError || 'کپچا صحیح نیست. لطفاً دوباره تلاش کنید.' });
         setForm((prev) => ({ ...prev, captcha_answer: '' }));
-        captchaRetryCount.current = 0; // ریست شمارنده برای تلاش مجدد
-        await fetchCaptchaChallenge(false); // خطای کپچا را پاک نمی‌کند
+        captchaRetryCount.current = 0;
+        await fetchCaptchaChallenge(true);
         return;
       }
 
-      // تشخیص خطای نام کاربری
       const isUsernameError =
         errorText.includes('نام کاربری') ||
         errorText.includes('username') ||
@@ -191,7 +248,6 @@ export default function LoginPage() {
         return;
       }
 
-      // تشخیص خطای رمز عبور
       const isPasswordError =
         errorText.includes('رمز عبور') ||
         errorText.includes('password') ||
@@ -202,14 +258,11 @@ export default function LoginPage() {
         return;
       }
 
-      // سایر خطاها
       setFieldErrors({ general: loginError || 'خطا در ورود به حساب کاربری' });
       return;
     }
 
-    // ============================================================
-    // ورود موفق
-    // ============================================================
+    // ===== ورود موفق =====
     if (rememberMe) {
       localStorage.setItem('rememberedUsername', username);
     } else {
@@ -218,12 +271,16 @@ export default function LoginPage() {
 
     window.dispatchEvent(new Event('auth-change'));
 
+    // ریدایرکت به صفحه بعدی یا داشبورد
     const nextPage = searchParams.get('next');
     const redirectPath = nextPage && nextPage.startsWith('/') ? nextPage : '/dashboard';
     router.push(redirectPath);
     router.refresh();
   };
 
+  // ============================================================
+  // Render
+  // ============================================================
   return (
     <main
       dir="rtl"
@@ -355,12 +412,13 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    captchaRetryCount.current = 0; // ریست شمارنده برای تلاش مجدد
+                    captchaRetryCount.current = 0;
                     fetchCaptchaChallenge(true);
                   }}
-                  disabled={Boolean(captchaLoading || isLoading)}
+                  disabled={captchaLoading || isLoading}
                   className="flex-shrink-0 p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition disabled:opacity-50"
                   aria-label="بارگذاری مجدد کپچا"
+                  suppressHydrationWarning
                 >
                   <RefreshCw size={20} className="text-slate-500" />
                 </button>

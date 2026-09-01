@@ -1,6 +1,8 @@
 // ============================================================
 // src/app/matching/[id]/page.tsx
 // ============================================================
+// اصلاح‌شده: هماهنگی با صفحه مقایسه (ذخیره فقط productId)
+// ============================================================
 
 'use client';
 
@@ -27,7 +29,7 @@ import {
   Package,
   Plus,
   Loader2,
-  Pencil,  // اضافه شد
+  Pencil,
 } from 'lucide-react';
 
 import {
@@ -71,14 +73,15 @@ interface NeedSummary {
   expected_outcome?: string;
 }
 
-interface CompareItem {
-  productId: number;
-  matchId: number;
-  needId: number;
-}
-
 type SortOption = 'match' | 'price' | 'rating';
 type RiskLevel = 'low' | 'medium' | 'high';
+
+// ============================================================
+// Constants
+// ============================================================
+
+const COMPARE_STORAGE_KEY = 'compareList';
+const MAX_COMPARE_ITEMS = 4;
 
 // ============================================================
 // Helpers
@@ -135,20 +138,6 @@ const getRiskLevel = (percentage: number): RiskLevel => {
   return 'high';
 };
 
-const getRiskFromMatch = (match: MatchResult): RiskLevel => {
-  const actions = match.recommended_actions || '';
-  if (actions.includes('ریسک بالا') || actions.toLowerCase().includes('high')) {
-    return 'high';
-  }
-  if (actions.includes('ریسک متوسط') || actions.toLowerCase().includes('medium')) {
-    return 'medium';
-  }
-  if (actions.includes('ریسک پایین') || actions.toLowerCase().includes('low')) {
-    return 'low';
-  }
-  return getRiskLevel(getMatchPercentage(match));
-};
-
 const displayValue = (value: unknown, fallback = 'اعلام نشده'): string => {
   if (value === null || value === undefined || value === '') {
     return fallback;
@@ -173,7 +162,7 @@ export default function MatchingPage() {
   const [matches, setMatches] = useState<MatchResult[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isEmpty, setIsEmpty] = useState(false);  // جدید
+  const [isEmpty, setIsEmpty] = useState(false);
   const [isInitialLoadDone, setIsInitialLoadDone] = useState(false);
 
   const [sortBy, setSortBy] = useState<SortOption>('match');
@@ -183,7 +172,7 @@ export default function MatchingPage() {
   const [categoryFilter, setCategoryFilter] = useState('all');
 
   const [favorites, setFavorites] = useState<number[]>([]);
-  const [compareList, setCompareList] = useState<CompareItem[]>([]);
+  const [compareList, setCompareList] = useState<number[]>([]); // ← فقط productId
   const [selectedMatch, setSelectedMatch] = useState<MatchResult | null>(null);
   const [isNegotiating, setIsNegotiating] = useState(false);
   const [negotiatingProductId, setNegotiatingProductId] = useState<number | null>(null);
@@ -194,20 +183,37 @@ export default function MatchingPage() {
   const needLoadCalledRef = useRef(false);
 
   // ============================================================
-  // Mount – بارگذاری favorites و compareList + ریست خودکار
+  // Mount – بارگذاری favorites و compareList
   // ============================================================
 
   useEffect(() => {
     setMounted(true);
 
+    // ===== بارگذاری compareList از localStorage =====
     try {
-      localStorage.removeItem('compareList');
-      setCompareList([]);
-      console.log('✅ compareList ریست شد');
+      const saved = localStorage.getItem(COMPARE_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          // پشتیبانی از هر دو فرمت (عدد خالص یا شیء)
+          const ids = parsed
+            .map((item) => {
+              if (typeof item === 'number') return item;
+              if (typeof item === 'object' && item !== null && 'productId' in item) {
+                return Number(item.productId);
+              }
+              return null;
+            })
+            .filter((id): id is number => Number.isInteger(id) && id > 0)
+            .slice(0, MAX_COMPARE_ITEMS);
+          setCompareList(ids);
+        }
+      }
     } catch (storageError) {
-      console.error('❌ خطا در ریست compareList:', storageError);
+      console.error('❌ خطا در خواندن compareList:', storageError);
     }
 
+    // ===== بارگذاری favorites =====
     try {
       const savedFavorites = localStorage.getItem('matchingFavorites');
       if (savedFavorites) {
@@ -217,9 +223,22 @@ export default function MatchingPage() {
         }
       }
     } catch (storageError) {
-      console.error('❌ خطا در خواندن اطلاعات ذخیره‌شده:', storageError);
+      console.error('❌ خطا در خواندن favorites:', storageError);
     }
   }, []);
+
+  // ============================================================
+  // ذخیره compareList در localStorage هنگام تغییر
+  // ============================================================
+
+  useEffect(() => {
+    if (!mounted) return;
+    try {
+      localStorage.setItem(COMPARE_STORAGE_KEY, JSON.stringify(compareList));
+    } catch (storageError) {
+      console.error('❌ خطا در ذخیره compareList:', storageError);
+    }
+  }, [compareList, mounted]);
 
   // ============================================================
   // Load Data (نیاز و نتایج تطبیق)
@@ -299,8 +318,8 @@ export default function MatchingPage() {
         }
       }
 
-      // 2. دریافت نتایج تطبیق با استفاده از Endpoint جدید
-      const url = `${API_URL}/matching/needs/${needId}/matches/`;  // تغییر مسیر
+      // 2. دریافت نتایج تطبیق
+      const url = `${API_URL}/matching/needs/${needId}/matches/`;
       console.log('📡 دریافت نتایج Matching:', url);
 
       const response = await authenticatedFetch(url, {
@@ -457,44 +476,32 @@ export default function MatchingPage() {
     });
   };
 
+  // ===== اصلاح شده: فقط productId را ذخیره می‌کند =====
   const toggleCompare = (match: MatchResult) => {
     const productId = Number(match.product);
-    const matchId = Number(match.id);
-    const needId = Number(match.need);
-
     if (!Number.isInteger(productId) || productId <= 0) {
       console.warn('❌ productId نامعتبر:', match.product);
       return;
     }
-    if (!Number.isInteger(matchId) || matchId <= 0) return;
-    if (!Number.isInteger(needId) || needId <= 0) return;
 
     setCompareList((prev) => {
-      const exists = prev.some((item) => item.productId === productId);
+      const exists = prev.includes(productId);
 
-      let next: CompareItem[];
       if (exists) {
-        next = prev.filter((item) => item.productId !== productId);
-      } else {
-        if (prev.length >= 4) {
-          alert('حداکثر ۴ راهکار را می‌توانید برای مقایسه انتخاب کنید.');
-          return prev;
-        }
-        next = [...prev, { productId, matchId, needId }];
+        return prev.filter((id) => id !== productId);
       }
 
-      try {
-        localStorage.setItem('compareList', JSON.stringify(next));
-      } catch (error) {
-        console.error('❌ خطا در ذخیره compareList:', error);
+      if (prev.length >= MAX_COMPARE_ITEMS) {
+        alert(`حداکثر ${MAX_COMPARE_ITEMS} راهکار را می‌توانید برای مقایسه انتخاب کنید.`);
+        return prev;
       }
 
-      return next;
+      return [...prev, productId];
     });
   };
 
   const isProductInCompare = (productId: number): boolean => {
-    return compareList.some((item) => item.productId === productId);
+    return compareList.includes(productId);
   };
 
   const startNegotiation = async (match: MatchResult) => {
@@ -564,7 +571,7 @@ export default function MatchingPage() {
     );
   }
 
-  // نمایش خطاهای واقعی (غیر از حالت خالی)
+  // نمایش خطاهای واقعی
   if (error && isInitialLoadDone) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white" dir="rtl">
@@ -590,7 +597,7 @@ export default function MatchingPage() {
     );
   }
 
-  // نمایش حالت خالی (بدون نتیجه) با پیام تکمیل اطلاعات
+  // نمایش حالت خالی
   if (isEmpty && isInitialLoadDone) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white" dir="rtl">
@@ -619,7 +626,7 @@ export default function MatchingPage() {
   }
 
   // ============================================================
-  // Main Render (داشتن نتیجه)
+  // Main Render
   // ============================================================
 
   return (
@@ -806,7 +813,6 @@ export default function MatchingPage() {
                   className="px-3 py-2 rounded-xl border border-slate-200 text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 transition cursor-pointer outline-none"
                 >
                   <option value="match">بیشترین انطباق</option>
-                  
                   <option value="price">کمترین قیمت</option>
                 </select>
               </div>
@@ -871,7 +877,7 @@ export default function MatchingPage() {
               </div>
             )}
 
-            {/* Empty State (در صورت فیلتر شدن و عدم نتیجه) */}
+            {/* Empty State */}
             {sortedMatches.length === 0 && (
               <div className="rounded-2xl border border-slate-200 bg-white text-center py-12 px-6">
                 <div className="flex justify-center mb-4">
@@ -1062,11 +1068,6 @@ export default function MatchingPage() {
                 type="button"
                 onClick={() => {
                   setCompareList([]);
-                  try {
-                    localStorage.removeItem('compareList');
-                  } catch (error) {
-                    console.error('❌ خطا در حذف لیست مقایسه:', error);
-                  }
                 }}
                 className="px-4 py-2 rounded-xl text-sm font-medium text-slate-500 hover:bg-slate-100 transition"
               >

@@ -1,6 +1,6 @@
 // ============================================================
 // src/store/auth-store.ts
-// نسخه نهایی - بدون throw و console.error برای خطاهای اعتبارسنجی
+// نسخه نهایی - ارسال captcha_id به بک‌اند
 // ============================================================
 
 import { create } from 'zustand';
@@ -46,8 +46,9 @@ interface AuthState {
   login: (
     username: string,
     password: string,
-    captcha_answer: string
-  ) => Promise<boolean>; // تغییر: به جای void، boolean برمی‌گرداند
+    captcha_answer: string,
+    captcha_id?: string | null
+  ) => Promise<boolean>;
   logout: () => void;
   fetchUser: () => Promise<void>;
   setUser: (user: User) => void;
@@ -220,25 +221,25 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
-      // ============================================================
-      // login - بدون throw برای خطاهای اعتبارسنجی
-      // ============================================================
-      login: async (username, password, captcha_answer) => {
+      login: async (username, password, captcha_answer, captcha_id = null) => {
         set({ isLoading: true, error: null });
 
         try {
+          const body: any = { username, password, captcha_answer };
+          // ===== ارسال captcha_id به بک‌اند =====
+          if (captcha_id) {
+            body.captcha_id = captcha_id;
+          }
+
           const tokenRes = await fetch(`${API_URL}/users/token/`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({ username, password, captcha_answer }),
+            body: JSON.stringify(body),
           });
 
           const tokenData = await tokenRes.json().catch(() => ({}));
 
-          // ============================================================
-          // خطای اعتبارسنجی (400, 401, ...)
-          // ============================================================
           if (!tokenRes.ok) {
             let message = 'خطا در ورود به حساب کاربری';
 
@@ -275,12 +276,9 @@ export const useAuthStore = create<AuthState>()(
               isAuthenticated: false,
             });
 
-            return false; // ورود ناموفق
+            return false;
           }
 
-          // ============================================================
-          // بررسی توکن
-          // ============================================================
           const access = tokenData?.access;
           const refresh = tokenData?.refresh;
 
@@ -297,9 +295,6 @@ export const useAuthStore = create<AuthState>()(
             return false;
           }
 
-          // ============================================================
-          // دریافت کاربر
-          // ============================================================
           let user: User;
           const userRes = await fetch(`${API_URL}/users/me/`, {
             headers: {
@@ -320,9 +315,6 @@ export const useAuthStore = create<AuthState>()(
             });
           }
 
-          // ============================================================
-          // ذخیره احراز هویت
-          // ============================================================
           saveTokens(access, refresh);
           if (isBrowser()) {
             localStorage.setItem('user', JSON.stringify(user));
@@ -338,12 +330,8 @@ export const useAuthStore = create<AuthState>()(
             error: null,
           });
 
-          return true; // ورود موفق
-
+          return true;
         } catch (error: any) {
-          // ============================================================
-          // خطای شبکه یا غیرمنتظره
-          // ============================================================
           const message =
             error?.message ||
             'ارتباط با سرور برقرار نشد. لطفاً دوباره تلاش کنید.';
