@@ -1,0 +1,9 @@
+Shop wallet (Solana, mint authority):
+FchKhYxxwXhHMDEaiqjq9BCoYiqkHr9HtkqwNovrLUTT
+
+TECH SPL mint (devnet):
+FD3QyXXZSYvRKYSw57Z6Bgy94RaTrpCjJe9ZyY3Ga27W
+
+Change the shop balance / total supply:
+Admin Console (/admin) → Shop Management,
+or POST /api/solana/token-state  { "shopBalance": "2500" }  /  { "supply": "…" }

@@ -1,0 +1,22 @@
+[
+  {
+    "id": "solana-solana-devnet",
+    "chain": "solana",
+    "network": "solana-devnet",
+    "managed": true,
+    "address": "FD3QyXXZSYvRKYSw57Z6Bgy94RaTrpCjJe9ZyY3Ga27W",
+    "name": "Tech Token",
+    "symbol": "TECH",
+    "decimals": 9,
+    "iconUrl": "https://mkiani.ir/tech-token/token-logo.png",
+    "metadataUrl": "https://mkiani.ir/tech-token/metadata.json",
+    "description": "TECH — cross-chain demo token.",
+    "totalSupply": "100000000",
+    "usdtRate": 10,
+    "owner": "FchKhYxxwXhHMDEaiqjq9BCoYiqkHr9HtkqwNovrLUTT",
+    "shopWallet": "FchKhYxxwXhHMDEaiqjq9BCoYiqkHr9HtkqwNovrLUTT",
+    "currency": "SOL",
+    "deployTx": "4zZfFYVMFJ1nHi1C5K5kFmQk6rXvUUP8oHeQiSWrFrDvikySHcwbBQo7MhP21ctYuH41tFhpZPhZLygFCEofGa1j",
+    "deployedAt": "2026-08-30T06:20:56.658Z"
+  }
+]

@@ -1,0 +1,126 @@
+[
+  {
+    "id": "mtfkv7kd-fnf12q",
+    "timestamp": "2026-08-30T08:58:58.957Z",
+    "type": "BUY_TECH",
+    "status": "confirmed",
+    "label": "TECH purchase",
+    "productId": null,
+    "productName": null,
+    "techBaseUnits": "10000000000",
+    "solLamports": "666666667",
+    "exchangeRate": 10,
+    "userWallet": "7aDkj1aUjY96zCSdNaHGjBeZvxJjnGVEni9VHaCwp6mB",
+    "solSignature": "4p23nKr8cHYTh5UsSKMW7aU1yX8CJcoVGXzoFKmFT8f4ZLkh4PKXBRqSNKoDScv9MSfpwodSQFxzga6YNHWRox9t",
+    "techSignature": "5sQbgx4GAwgSGxBekqNcMGQ5SDoco8DqoYurwRhwMSezr3bwSytLK1NCyTXA6aA565hZSoiEKjrAGfCTjacp1FEN",
+    "detail": "Paid ≈ 0.666666667 SOL, received 10 TECH (1 TECH = 10 USDT · 1 SOL ≈ 150 USDT)",
+    "legs": [
+      {
+        "account": "7aDkj1aUjY96zCSdNaHGjBeZvxJjnGVEni9VHaCwp6mB",
+        "asset": "SOL",
+        "direction": "debit",
+        "amountBaseUnits": "666666667",
+        "txSignature": "4p23nKr8cHYTh5UsSKMW7aU1yX8CJcoVGXzoFKmFT8f4ZLkh4PKXBRqSNKoDScv9MSfpwodSQFxzga6YNHWRox9t"
+      },
+      {
+        "account": "FchKhYxxwXhHMDEaiqjq9BCoYiqkHr9HtkqwNovrLUTT",
+        "asset": "SOL",
+        "direction": "credit",
+        "amountBaseUnits": "666666667",
+        "txSignature": "4p23nKr8cHYTh5UsSKMW7aU1yX8CJcoVGXzoFKmFT8f4ZLkh4PKXBRqSNKoDScv9MSfpwodSQFxzga6YNHWRox9t"
+      },
+      {
+        "account": "FchKhYxxwXhHMDEaiqjq9BCoYiqkHr9HtkqwNovrLUTT",
+        "asset": "TECH",
+        "direction": "debit",
+        "amountBaseUnits": "10000000000",
+        "txSignature": "5sQbgx4GAwgSGxBekqNcMGQ5SDoco8DqoYurwRhwMSezr3bwSytLK1NCyTXA6aA565hZSoiEKjrAGfCTjacp1FEN"
+      },
+      {
+        "account": "7aDkj1aUjY96zCSdNaHGjBeZvxJjnGVEni9VHaCwp6mB",
+        "asset": "TECH",
+        "direction": "credit",
+        "amountBaseUnits": "10000000000",
+        "txSignature": "5sQbgx4GAwgSGxBekqNcMGQ5SDoco8DqoYurwRhwMSezr3bwSytLK1NCyTXA6aA565hZSoiEKjrAGfCTjacp1FEN"
+      }
+    ]
+  },
+  {
+    "id": "mtfkukrm-4tecuo",
+    "timestamp": "2026-08-30T08:58:29.410Z",
+    "type": "BUY_PRODUCT",
+    "status": "confirmed",
+    "label": "Ballpoint Pen",
+    "productId": "pen",
+    "productName": "Ballpoint Pen",
+    "techBaseUnits": "500000000",
+    "solLamports": null,
+    "exchangeRate": null,
+    "userWallet": "7aDkj1aUjY96zCSdNaHGjBeZvxJjnGVEni9VHaCwp6mB",
+    "solSignature": null,
+    "techSignature": "CRjhibAY7JhEo1JeTQ2vonr4SXj5AG372UuYtb4Ck27xCz9JW21YrUMV6ag27Vhvj8F8Ex8JUEubWdBwsMEBtBz",
+    "detail": "Paid 0.5 TECH for 🖊️ Ballpoint Pen",
+    "legs": [
+      {
+        "account": "7aDkj1aUjY96zCSdNaHGjBeZvxJjnGVEni9VHaCwp6mB",
+        "asset": "TECH",
+        "direction": "debit",
+        "amountBaseUnits": "500000000",
+        "txSignature": "CRjhibAY7JhEo1JeTQ2vonr4SXj5AG372UuYtb4Ck27xCz9JW21YrUMV6ag27Vhvj8F8Ex8JUEubWdBwsMEBtBz"
+      },
+      {
+        "account": "FchKhYxxwXhHMDEaiqjq9BCoYiqkHr9HtkqwNovrLUTT",
+        "asset": "TECH",
+        "direction": "credit",
+        "amountBaseUnits": "500000000",
+        "txSignature": "CRjhibAY7JhEo1JeTQ2vonr4SXj5AG372UuYtb4Ck27xCz9JW21YrUMV6ag27Vhvj8F8Ex8JUEubWdBwsMEBtBz"
+      }
+    ]
+  },
+  {
+    "id": "mtfj6wcy-wbo39o",
+    "timestamp": "2026-08-30T08:12:05.074Z",
+    "type": "BUY_TECH",
+    "status": "confirmed",
+    "label": "TECH purchase",
+    "productId": null,
+    "productName": null,
+    "techBaseUnits": "1000000000",
+    "solLamports": "96767951",
+    "exchangeRate": 10,
+    "userWallet": "7aDkj1aUjY96zCSdNaHGjBeZvxJjnGVEni9VHaCwp6mB",
+    "solSignature": "4fXmtDjhw57w8ymn4ipRJt9PW9Swbeo3B1cLAExgYHSJTtdY9sJyybCmUM2pLnkCuG4zMDfNgbyWA9w25CNhvQmk",
+    "techSignature": "68pQYuFqp5mF7bnwAseN8QjbPtU4HLcEjKXkCzf7kSHEzZecbVHDuYATnYrFtvgzgmSjjBDujfr7tgda18jLqpo",
+    "detail": "Paid ≈ 0.096767951 SOL, received 1 TECH (1 TECH = 10 USDT · 1 SOL ≈ 103.34 USDT)",
+    "legs": [
+      {
+        "account": "7aDkj1aUjY96zCSdNaHGjBeZvxJjnGVEni9VHaCwp6mB",
+        "asset": "SOL",
+        "direction": "debit",
+        "amountBaseUnits": "96767951",
+        "txSignature": "4fXmtDjhw57w8ymn4ipRJt9PW9Swbeo3B1cLAExgYHSJTtdY9sJyybCmUM2pLnkCuG4zMDfNgbyWA9w25CNhvQmk"
+      },
+      {
+        "account": "FchKhYxxwXhHMDEaiqjq9BCoYiqkHr9HtkqwNovrLUTT",
+        "asset": "SOL",
+        "direction": "credit",
+        "amountBaseUnits": "96767951",
+        "txSignature": "4fXmtDjhw57w8ymn4ipRJt9PW9Swbeo3B1cLAExgYHSJTtdY9sJyybCmUM2pLnkCuG4zMDfNgbyWA9w25CNhvQmk"
+      },
+      {
+        "account": "FchKhYxxwXhHMDEaiqjq9BCoYiqkHr9HtkqwNovrLUTT",
+        "asset": "TECH",
+        "direction": "debit",
+        "amountBaseUnits": "1000000000",
+        "txSignature": "68pQYuFqp5mF7bnwAseN8QjbPtU4HLcEjKXkCzf7kSHEzZecbVHDuYATnYrFtvgzgmSjjBDujfr7tgda18jLqpo"
+      },
+      {
+        "account": "7aDkj1aUjY96zCSdNaHGjBeZvxJjnGVEni9VHaCwp6mB",
+        "asset": "TECH",
+        "direction": "credit",
+        "amountBaseUnits": "1000000000",
+        "txSignature": "68pQYuFqp5mF7bnwAseN8QjbPtU4HLcEjKXkCzf7kSHEzZecbVHDuYATnYrFtvgzgmSjjBDujfr7tgda18jLqpo"
+      }
+    ]
+  }
+]

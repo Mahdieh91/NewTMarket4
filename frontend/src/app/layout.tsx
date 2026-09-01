@@ -4,7 +4,8 @@ import type { Metadata } from 'next';
 import { Vazirmatn } from 'next/font/google';
 import './globals.css';
 import Navbar from '@/components/Navbar';
-import AIAssistant from '@/components/AIAssistant/AIAssistant'; // ← اضافه شد
+import AIAssistant from '@/components/AIAssistant/AIAssistant';
+import { Providers } from './providers'; // ← اضافه شد
 
 const vazir = Vazirmatn({
   subsets: ['arabic'],
@@ -27,11 +28,11 @@ export default function RootLayout({
       <body
         className={`${vazir.className} min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#f0fdfa]`}
       >
-        <Navbar />
-        <main>{children}</main>
-
-        {/* ===== دستیار هوشمند (در تمام صفحات) ===== */}
-        <AIAssistant />
+        <Providers>
+          <Navbar />
+          <main>{children}</main>
+          <AIAssistant />
+        </Providers>
       </body>
     </html>
   );

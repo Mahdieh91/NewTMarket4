@@ -9,12 +9,18 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@solana/spl-token": "^0.4.15",
+    "@solana/wallet-adapter-react": "^0.15.39",
+    "@solana/wallet-adapter-react-ui": "^0.9.39",
+    "@solana/wallet-adapter-wallets": "^0.19.38",
+    "@solana/web3.js": "^1.98.4",
     "axios": "^1.19.0",
     "critters": "^0.0.23",
     "lucide-react": "^1.24.0",
     "next": "^16.3.2",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-is": "^19.2.8",
     "recharts": "^3.10.1",
     "zustand": "^5.0.14"
   },

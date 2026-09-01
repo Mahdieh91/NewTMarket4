@@ -2,10 +2,15 @@
 
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+import { Connection, PublicKey } from '@solana/web3.js';
+import { getAssociatedTokenAddress, getAccount } from '@solana/spl-token';
+
 import {
   useAuthStore,
   authenticatedFetch,
@@ -77,18 +82,19 @@ type Message = {
   is_archived: boolean;
 };
 
-type Transaction = {
-  id: number;
-  amount: string;
-  type: 'deposit' | 'withdraw' | 'payment' | 'refund';
-  description: string;
-  status: 'pending' | 'completed' | 'failed';
-  created_at: string;
+// ===== نوع جدید برای تراکنش‌های سولانا =====
+type SolanaTransaction = {
+  signature: string;
+  slot: number;
+  blockTime: number | null;
+  amount: number;
+  type: 'send' | 'receive' | 'unknown';
+  status: 'confirmed' | 'finalized' | 'failed';
 };
 
 type WalletData = {
   balance: number;
-  transactions: Transaction[];
+  transactions: SolanaTransaction[];
 };
 
 type Need = {
@@ -126,7 +132,6 @@ type Negotiation = {
   messages?: any[];
 };
 
-// ===== نوع علاقه‌مندی (مطابق با بک‌اند) =====
 type Favorite = {
   id: number;
   product?: {
@@ -156,7 +161,19 @@ type Favorite = {
 };
 
 // ============================================================
-// Fake Data
+// Constants
+// ============================================================
+
+const TOKEN_MINT_RAW = process.env.NEXT_PUBLIC_TOKEN_MINT?.trim() || '';
+const SHOP_WALLET_RAW = process.env.NEXT_PUBLIC_SHOP_WALLET?.trim() || '';
+const IS_DEPLOYED = TOKEN_MINT_RAW.length > 0 && SHOP_WALLET_RAW.length > 0;
+const TOKEN_MINT = IS_DEPLOYED ? new PublicKey(TOKEN_MINT_RAW) : null!;
+const DECIMALS = Number(process.env.NEXT_PUBLIC_TOKEN_DECIMALS ?? 9);
+const DEVNET_RPC_URL =
+  process.env.NEXT_PUBLIC_SOLANA_DEVNET_RPC_URL ?? 'https://api.devnet.solana.com';
+
+// ============================================================
+// Fake Data (فقط برای Fallback)
 // ============================================================
 const FAKE_PROFILE: UserProfile = {
   id: 1,
@@ -177,52 +194,6 @@ const FAKE_PROFILE: UserProfile = {
 };
 
 const FAKE_MESSAGES: Message[] = [];
-
-const FAKE_WALLET: WalletData = {
-  balance: 1000000,
-  transactions: [
-    {
-      id: 1,
-      amount: '500000',
-      type: 'deposit',
-      description: 'واریز اولیه به کیف پول',
-      status: 'completed',
-      created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
-    },
-    {
-      id: 2,
-      amount: '200000',
-      type: 'payment',
-      description: 'پرداخت برای خرید محصول شماره ۱۲',
-      status: 'completed',
-      created_at: new Date(Date.now() - 86400000 * 20).toISOString(),
-    },
-    {
-      id: 3,
-      amount: '100000',
-      type: 'refund',
-      description: 'بازگشت وجه از نیاز شماره ۵',
-      status: 'completed',
-      created_at: new Date(Date.now() - 86400000 * 10).toISOString(),
-    },
-    {
-      id: 4,
-      amount: '300000',
-      type: 'deposit',
-      description: 'واریز از طریق درگاه بانکی',
-      status: 'pending',
-      created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-    },
-    {
-      id: 5,
-      amount: '150000',
-      type: 'withdraw',
-      description: 'برداشت به حساب بانکی',
-      status: 'completed',
-      created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    },
-  ],
-};
 
 const FAKE_NEEDS: Need[] = [
   {
@@ -318,7 +289,6 @@ const FAKE_NEGOTIATIONS: Negotiation[] = [
   },
 ];
 
-// ===== داده‌های فیک برای علاقه‌مندی‌ها =====
 const FAKE_FAVORITES: Favorite[] = [
   {
     id: 1,
@@ -367,6 +337,20 @@ const FAKE_FAVORITES: Favorite[] = [
 ];
 
 // ============================================================
+// Helper Functions
+// ============================================================
+
+const formatCurrency = (amount: number): string => {
+  return new Intl.NumberFormat('fa-IR').format(amount) + ' TECH';
+};
+
+const formatSolanaTransaction = (tx: SolanaTransaction): string => {
+  if (tx.type === 'send') return 'ارسال توکن';
+  if (tx.type === 'receive') return 'دریافت توکن';
+  return 'تراکنش نامشخص';
+};
+
+// ============================================================
 // Main Component
 // ============================================================
 export default function ProfilePage() {
@@ -374,6 +358,11 @@ export default function ProfilePage() {
   const searchParams = useSearchParams();
   const { logout, updateUser } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+
+  // ===== Solana Wallet =====
+  const { publicKey, connected } = useWallet();
+  const { setVisible: setWalletModalVisible } = useWalletModal();
+
   const [mounted, setMounted] = useState(false);
 
   const initialTab = searchParams?.get('tab') || 'profile';
@@ -400,7 +389,15 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [wallet, setWallet] = useState<WalletData | null>(null);
+
+  // ===== Wallet State (Solana) =====
+  const [walletData, setWalletData] = useState<WalletData>({
+    balance: 0,
+    transactions: [],
+  });
+  const [walletLoading, setWalletLoading] = useState(true);
+  const [walletError, setWalletError] = useState<string | null>(null);
+
   const [myNeeds, setMyNeeds] = useState<Need[]>([]);
   const [mySupplies, setMySupplies] = useState<Supply[]>([]);
   const [myNegotiations, setMyNegotiations] = useState<Negotiation[]>([]);
@@ -411,6 +408,102 @@ export default function ProfilePage() {
   const [formData, setFormData] = useState<Partial<UserProfile>>({});
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [useFakeData, setUseFakeData] = useState(false);
+
+  // ============================================================
+  // Load Solana Wallet Data
+  // ============================================================
+
+  const loadSolanaWalletData = useCallback(async (walletPublicKey: PublicKey) => {
+    if (!IS_DEPLOYED) {
+      setWalletError('توکن TECH در شبکه سولانا مستقر نشده است.');
+      setWalletLoading(false);
+      return;
+    }
+
+    try {
+      setWalletLoading(true);
+      setWalletError(null);
+
+      const connection = new Connection(DEVNET_RPC_URL, 'confirmed');
+
+      // 1. Get user token account
+      const userTokenAccount = await getAssociatedTokenAddress(
+        TOKEN_MINT,
+        walletPublicKey
+      );
+
+      // 2. Get balance
+      let balance = 0;
+      try {
+        const account = await getAccount(connection, userTokenAccount);
+        balance = Number(account.amount) / 10 ** DECIMALS;
+      } catch {
+        // No token account yet
+        balance = 0;
+      }
+
+      // 3. Get transaction history (last 10 signatures)
+      const signatures = await connection.getSignaturesForAddress(
+        userTokenAccount,
+        { limit: 10 }
+      );
+
+      const transactions: SolanaTransaction[] = await Promise.all(
+        signatures.map(async (sig) => {
+          let amount = 0;
+          let type: 'send' | 'receive' | 'unknown' = 'unknown';
+
+          try {
+            const tx = await connection.getParsedTransaction(sig.signature, {
+              maxSupportedTransactionVersion: 0,
+            });
+
+            if (tx?.meta?.postTokenBalances && tx.meta.preTokenBalances) {
+              const pre = tx.meta.preTokenBalances.find(
+                (b) => b.owner === walletPublicKey.toString()
+              );
+              const post = tx.meta.postTokenBalances.find(
+                (b) => b.owner === walletPublicKey.toString()
+              );
+
+              if (pre && post) {
+                const preAmount = Number(pre.uiTokenAmount?.uiAmount || 0);
+                const postAmount = Number(post.uiTokenAmount?.uiAmount || 0);
+                amount = Math.abs(postAmount - preAmount);
+                type = postAmount > preAmount ? 'receive' : 'send';
+              }
+            }
+          } catch {
+            // ignore parsing errors
+          }
+
+          return {
+            signature: sig.signature,
+            slot: sig.slot,
+            blockTime: sig.blockTime || null,
+            amount,
+            type,
+            status: sig.confirmationStatus === 'finalized' ? 'finalized' : 'confirmed',
+          };
+        })
+      );
+
+      setWalletData({
+        balance,
+        transactions: transactions.filter((t) => t.amount > 0),
+      });
+    } catch (err) {
+      console.error('❌ Failed to load Solana wallet:', err);
+      setWalletError('خطا در دریافت اطلاعات کیف پول سولانا.');
+      setWalletData({ balance: 0, transactions: [] });
+    } finally {
+      setWalletLoading(false);
+    }
+  }, []);
+
+  // ============================================================
+  // Effects
+  // ============================================================
 
   useEffect(() => {
     setMounted(true);
@@ -425,17 +518,32 @@ export default function ProfilePage() {
       setProfile(FAKE_PROFILE);
       setFormData(FAKE_PROFILE);
       setMessages([]);
-      setWallet(FAKE_WALLET);
+      setWalletData({ balance: 0, transactions: [] });
       setMyNeeds(FAKE_NEEDS);
       setMySupplies(FAKE_SUPPLIES);
       setMyNegotiations(FAKE_NEGOTIATIONS);
       setFavorites(FAKE_FAVORITES);
       setLoading(false);
+      setWalletLoading(false);
       return;
     }
     console.log('✅ Token found, loading profile');
     fetchAllData(token);
   }, [mounted]);
+
+  // ===== Load Solana wallet when connected =====
+  useEffect(() => {
+    if (connected && publicKey) {
+      loadSolanaWalletData(publicKey);
+    } else {
+      setWalletData({ balance: 0, transactions: [] });
+      setWalletLoading(false);
+    }
+  }, [connected, publicKey, loadSolanaWalletData]);
+
+  // ============================================================
+  // Data Fetching
+  // ============================================================
 
   const fetchAllData = async (token?: string) => {
     setLoading(true);
@@ -450,7 +558,6 @@ export default function ProfilePage() {
         setProfile(FAKE_PROFILE);
         setFormData(FAKE_PROFILE);
         setMessages([]);
-        setWallet(FAKE_WALLET);
         setMyNeeds(FAKE_NEEDS);
         setMySupplies(FAKE_SUPPLIES);
         setMyNegotiations(FAKE_NEGOTIATIONS);
@@ -479,7 +586,6 @@ export default function ProfilePage() {
         setProfile(FAKE_PROFILE);
         setFormData(FAKE_PROFILE);
         setMessages([]);
-        setWallet(FAKE_WALLET);
         setMyNeeds(FAKE_NEEDS);
         setMySupplies(FAKE_SUPPLIES);
         setMyNegotiations(FAKE_NEGOTIATIONS);
@@ -525,25 +631,7 @@ export default function ProfilePage() {
         setMessages([]);
       }
 
-      // 3. Wallet
-      try {
-        const walletRes = await authenticatedFetch(`${apiUrl}/wallet/`, {
-          method: 'GET',
-        });
-
-        if (walletRes.ok) {
-          const walletData = await walletRes.json();
-          setWallet(walletData);
-        } else {
-          console.warn('⚠️ Wallet API failed, using fake data');
-          setWallet(FAKE_WALLET);
-        }
-      } catch (err) {
-        console.warn('⚠️ Error loading wallet, using fake data:', err);
-        setWallet(FAKE_WALLET);
-      }
-
-      // 4. Needs
+      // 3. Needs
       try {
         const needsRes = await authenticatedFetch(
           `${apiUrl}/needs/?buyer=${encodeURIComponent(mergedProfile.id)}`,
@@ -563,7 +651,7 @@ export default function ProfilePage() {
         setMyNeeds(FAKE_NEEDS);
       }
 
-      // 5. Supplies
+      // 4. Supplies
       try {
         const suppliesRes = await authenticatedFetch(
           `${apiUrl}/products/supplies/?seller=${encodeURIComponent(mergedProfile.id)}`,
@@ -585,7 +673,7 @@ export default function ProfilePage() {
         setMySupplies(FAKE_SUPPLIES);
       }
 
-      // 6. Negotiations
+      // 5. Negotiations
       try {
         const negRes = await authenticatedFetch(`${apiUrl}/negotiations/`, {
           method: 'GET',
@@ -605,7 +693,7 @@ export default function ProfilePage() {
         setMyNegotiations(FAKE_NEGOTIATIONS);
       }
 
-      // ===== 7. Favorites (علاقه‌مندی‌ها) =====
+      // 6. Favorites
       await loadFavorites();
 
     } catch (err: any) {
@@ -614,7 +702,6 @@ export default function ProfilePage() {
       setProfile(FAKE_PROFILE);
       setFormData(FAKE_PROFILE);
       setMessages([]);
-      setWallet(FAKE_WALLET);
       setMyNeeds(FAKE_NEEDS);
       setMySupplies(FAKE_SUPPLIES);
       setMyNegotiations(FAKE_NEGOTIATIONS);
@@ -624,7 +711,6 @@ export default function ProfilePage() {
     }
   };
 
-  // ===== تابع بارگذاری علاقه‌مندی‌ها =====
   const loadFavorites = async () => {
     try {
       setFavoritesLoading(true);
@@ -662,7 +748,6 @@ export default function ProfilePage() {
     }
   };
 
-  // ===== تابع حذف علاقه‌مندی =====
   const removeFavorite = async (favoriteId: number) => {
     try {
       const token = getAccessToken();
@@ -858,6 +943,10 @@ export default function ProfilePage() {
     router.push('/login');
   };
 
+  // ============================================================
+  // Render
+  // ============================================================
+
   if (!mounted || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50">
@@ -871,7 +960,6 @@ export default function ProfilePage() {
 
   const currentProfile = profile || FAKE_PROFILE;
   const currentMessages = messages.length > 0 ? messages : [];
-  const currentWallet = wallet || FAKE_WALLET;
   const currentNeeds = myNeeds.length > 0 ? myNeeds : FAKE_NEEDS;
   const currentSupplies = mySupplies.length > 0 ? mySupplies : FAKE_SUPPLIES;
   const currentNegotiations = myNegotiations.length > 0 ? myNegotiations : FAKE_NEGOTIATIONS;
@@ -1015,7 +1103,6 @@ export default function ProfilePage() {
                     setProfile(FAKE_PROFILE);
                     setFormData(FAKE_PROFILE);
                     setMessages([]);
-                    setWallet(FAKE_WALLET);
                     setMyNeeds(FAKE_NEEDS);
                     setMySupplies(FAKE_SUPPLIES);
                     setMyNegotiations(FAKE_NEGOTIATIONS);
@@ -1024,7 +1111,19 @@ export default function ProfilePage() {
                 }}
               />
             )}
-            {activeTab === 'wallet' && <WalletTab wallet={currentWallet} loading={loading} />}
+            {activeTab === 'wallet' && (
+              <WalletTab
+                walletData={walletData}
+                loading={walletLoading}
+                error={walletError}
+                isConnected={connected}
+                publicKey={publicKey?.toString() || null}
+                onConnect={() => setWalletModalVisible(true)}
+                onRefresh={() => {
+                  if (publicKey) loadSolanaWalletData(publicKey);
+                }}
+              />
+            )}
             {activeTab === 'myNeeds' && (
               <MyNeedsTab
                 needs={currentNeeds}
@@ -1076,7 +1175,7 @@ export default function ProfilePage() {
 }
 
 // ============================================================
-// Profile Tab
+// Profile Tab (بدون تغییر)
 // ============================================================
 function ProfileTab({
   profile,
@@ -1195,7 +1294,7 @@ function ProfileTab({
 }
 
 // ============================================================
-// Messages Tab
+// Messages Tab (بدون تغییر)
 // ============================================================
 function MessagesTab({
   messages,
@@ -1984,25 +2083,99 @@ function MessagesTab({
 }
 
 // ============================================================
-// Wallet Tab
+// Wallet Tab (Solana - Real)
 // ============================================================
-function WalletTab({ wallet, loading }: { wallet: WalletData | null; loading: boolean }) {
+function WalletTab({
+  walletData,
+  loading,
+  error,
+  isConnected,
+  publicKey,
+  onConnect,
+  onRefresh,
+}: {
+  walletData: WalletData;
+  loading: boolean;
+  error: string | null;
+  isConnected: boolean;
+  publicKey: string | null;
+  onConnect: () => void;
+  onRefresh: () => void;
+}) {
   const [showBalance, setShowBalance] = useState(true);
   const tokenLogoPath = '/techtokenlogo.jpg';
 
+  const { balance, transactions } = walletData;
+
   if (loading) {
-    return <div className="text-center py-8 text-slate-500">در حال بارگذاری کیف پول...</div>;
+    return (
+      <div className="text-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" />
+        <p className="mt-4 text-slate-500">در حال دریافت موجودی از شبکه سولانا...</p>
+      </div>
+    );
   }
 
-  const balance = wallet?.balance ?? 1000000;
-  const transactions = wallet?.transactions ?? [];
+  if (!isConnected) {
+    return (
+      <div>
+        <h2 className="text-xl font-bold text-slate-800 mb-6">کیف پول (بلاکچین سولانا)</h2>
+        <div className="bg-gradient-to-br from-blue-600 to-teal-500 rounded-2xl p-8 text-white text-center">
+          <div className="text-4xl mb-4">🔗</div>
+          <p className="text-sm opacity-90 mb-4">
+            برای مشاهده موجودی و انجام تراکنش‌های TECH، <strong>باید یک کیف پول سولانا (مثل فانتوم) را متصل کنید.</strong>
+          </p>
+          <button
+            onClick={onConnect}
+            className="px-6 py-3 bg-white text-blue-600 rounded-xl font-bold hover:bg-blue-50 transition"
+          >
+            🔗 اتصال کیف پول سولانا
+          </button>
+          <p className="text-xs opacity-70 mt-4">
+            کیف‌پول‌های پشتیبانی‌شده: فانتوم، سولفیر، بک‌پک و سایر کیف‌پول‌های استاندارد سولانا
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('fa-IR').format(amount) + ' تک توکن';
+  if (error) {
+    return (
+      <div>
+        <h2 className="text-xl font-bold text-slate-800 mb-6">کیف پول (بلاکچین سولانا)</h2>
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-red-700 text-center">
+          <AlertCircle className="w-12 h-12 mx-auto mb-3 text-red-500" />
+          <p>{error}</p>
+          <button
+            onClick={onRefresh}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+          >
+            تلاش مجدد
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-slate-800 mb-6">کیف پول</h2>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-bold text-slate-800">کیف پول (بلاکچین سولانا)</h2>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-400 bg-slate-100 px-3 py-1 rounded-full">
+            {publicKey ? `${publicKey.slice(0, 8)}...${publicKey.slice(-6)}` : ''}
+          </span>
+          <button
+            onClick={onRefresh}
+            disabled={loading}
+            className="p-2 rounded-lg hover:bg-slate-100 transition disabled:opacity-50"
+            title="به‌روزرسانی"
+          >
+            <History size={16} className="text-slate-400" />
+          </button>
+        </div>
+      </div>
+
       <div className="bg-gradient-to-br from-blue-600 to-teal-500 rounded-2xl p-6 text-white mb-6 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="flex-shrink-0">
@@ -2016,7 +2189,7 @@ function WalletTab({ wallet, loading }: { wallet: WalletData | null; loading: bo
             />
           </div>
           <div>
-            <p className="text-sm opacity-80">موجودی کل</p>
+            <p className="text-sm opacity-80">موجودی کل (روی بلاکچین)</p>
             <div className="flex items-center gap-3 mt-1">
               <p className="text-3xl font-bold">
                 {showBalance ? formatCurrency(balance) : '••••••••'}
@@ -2030,71 +2203,68 @@ function WalletTab({ wallet, loading }: { wallet: WalletData | null; loading: bo
             </div>
           </div>
         </div>
+        <div className="text-xs opacity-70 text-left">
+          <p>شبکه: سولانا</p>
+          <p>Devnet</p>
+        </div>
       </div>
+
       <div>
         <h3 className="font-semibold text-slate-700 mb-4">تاریخچه تراکنش‌ها</h3>
         {transactions.length === 0 ? (
           <div className="text-center py-8 text-slate-400">
             <History className="h-10 w-10 mx-auto mb-2" />
-            <p>هیچ تراکنشی ثبت نشده است</p>
+            <p>هیچ تراکنشی روی بلاکچین برای این کیف پول ثبت نشده است.</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {transactions.map((tx) => (
-              <div key={tx.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+            {transactions.map((tx, index) => (
+              <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
                 <div className="flex items-center gap-3">
                   <div
                     className={`p-2 rounded-full ${
-                      tx.type === 'deposit' || tx.type === 'refund'
-                        ? 'bg-green-100 text-green-600'
-                        : 'bg-red-100 text-red-600'
+                      tx.type === 'receive' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
                     }`}
                   >
-                    {tx.type === 'deposit' || tx.type === 'refund' ? (
-                      <ArrowDownRight size={16} />
-                    ) : (
-                      <ArrowUpRight size={16} />
-                    )}
+                    {tx.type === 'receive' ? <ArrowDownRight size={16} /> : <ArrowUpRight size={16} />}
                   </div>
                   <div>
                     <p className="font-medium text-slate-800">
-                      {tx.type === 'deposit'
-                        ? 'واریز'
-                        : tx.type === 'withdraw'
-                        ? 'برداشت'
-                        : tx.type === 'payment'
-                        ? 'پرداخت'
-                        : 'بازگشت وجه'}
+                      {formatSolanaTransaction(tx)}
                     </p>
-                    <p className="text-sm text-slate-500">{tx.description}</p>
+                    <p className="text-sm text-slate-500">
+                      {tx.signature.slice(0, 12)}...{tx.signature.slice(-8)}
+                    </p>
                     <span
                       className={`text-xs ${
-                        tx.status === 'completed'
+                        tx.status === 'finalized'
                           ? 'text-green-600'
-                          : tx.status === 'pending'
+                          : tx.status === 'confirmed'
                           ? 'text-yellow-600'
                           : 'text-red-600'
                       }`}
                     >
-                      {tx.status === 'completed'
-                        ? '✔ انجام شده'
-                        : tx.status === 'pending'
-                        ? '⏳ در انتظار'
-                        : '✖ شکست خورده'}
+                      {tx.status === 'finalized'
+                        ? '✔ نهایی شده'
+                        : tx.status === 'confirmed'
+                        ? '⏳ تأیید شده'
+                        : '✖ ناموفق'}
                     </span>
                   </div>
                 </div>
                 <div className="text-right">
                   <p
                     className={`font-bold ${
-                      tx.type === 'deposit' || tx.type === 'refund' ? 'text-green-600' : 'text-red-600'
+                      tx.type === 'receive' ? 'text-green-600' : 'text-red-600'
                     }`}
                   >
-                    {tx.type === 'deposit' || tx.type === 'refund' ? '+' : '-'}
-                    {formatCurrency(parseFloat(tx.amount))}
+                    {tx.type === 'receive' ? '+' : '-'}
+                    {formatCurrency(tx.amount)}
                   </p>
                   <p className="text-xs text-slate-400">
-                    {new Date(tx.created_at).toLocaleDateString('fa-IR')}
+                    {tx.blockTime
+                      ? new Date(tx.blockTime * 1000).toLocaleDateString('fa-IR')
+                      : 'تاریخ نامشخص'}
                   </p>
                 </div>
               </div>
@@ -2107,7 +2277,7 @@ function WalletTab({ wallet, loading }: { wallet: WalletData | null; loading: bo
 }
 
 // ============================================================
-// My Needs Tab
+// My Needs Tab (بدون تغییر)
 // ============================================================
 function MyNeedsTab({
   needs,
@@ -2296,7 +2466,7 @@ function MyNeedsTab({
 }
 
 // ============================================================
-// My Products Tab
+// My Products Tab (بدون تغییر)
 // ============================================================
 function MyProductsTab({ supplies, loading }: { supplies: Supply[]; loading: boolean }) {
   const statusMap: Record<string, { label: string; color: string }> = {
@@ -2372,7 +2542,7 @@ function MyProductsTab({ supplies, loading }: { supplies: Supply[]; loading: boo
 }
 
 // ============================================================
-// My Negotiations Tab
+// My Negotiations Tab (بدون تغییر)
 // ============================================================
 function MyNegotiationsTab({
   negotiations,
@@ -2544,7 +2714,7 @@ function MyNegotiationsTab({
 }
 
 // ============================================================
-// My Favorites Tab
+// My Favorites Tab (بدون تغییر)
 // ============================================================
 function MyFavoritesTab({
   favorites,
@@ -2699,7 +2869,6 @@ function MyFavoritesTab({
               key={favorite.id}
               className="group bg-white border border-slate-200 rounded-2xl overflow-hidden hover:shadow-lg hover:border-rose-200 transition-all duration-200"
             >
-              {/* تصویر */}
               <div className="relative h-40 bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden">
                 {image ? (
                   <img
@@ -2713,7 +2882,6 @@ function MyFavoritesTab({
                   </div>
                 )}
 
-                {/* برچسب نوع */}
                 <div className="absolute top-3 right-3">
                   <span
                     className={`text-xs px-2.5 py-1 rounded-full font-medium ${typeColor}`}
@@ -2722,7 +2890,6 @@ function MyFavoritesTab({
                   </span>
                 </div>
 
-                {/* دکمه حذف */}
                 <button
                   onClick={async (e) => {
                     e.stopPropagation();
@@ -2738,7 +2905,6 @@ function MyFavoritesTab({
                 </button>
               </div>
 
-              {/* محتوا */}
               <div className="p-4">
                 <div className="flex items-start justify-between gap-2">
                   <h3
