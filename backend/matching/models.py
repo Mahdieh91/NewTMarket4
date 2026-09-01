@@ -27,7 +27,6 @@ class MatchResult(models.Model):
         verbose_name='نیاز'
     )
     
-    # ← تغییر مهم: از Product به Supply
     product = models.ForeignKey(
         'products.Supply',
         on_delete=models.CASCADE,
@@ -106,7 +105,6 @@ class MatchResult(models.Model):
 
 
 class MatchingRequest(models.Model):
-    # بدون تغییر
     STATUS_CHOICES = [
         ('pending', 'در انتظار پردازش'),
         ('processing', 'در حال پردازش'),

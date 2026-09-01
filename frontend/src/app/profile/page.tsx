@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
-import Link from 'next/link'; //
+import Link from 'next/link';
 import {
   useAuthStore,
   authenticatedFetch,
@@ -1076,7 +1076,7 @@ export default function ProfilePage() {
 }
 
 // ============================================================
-// Profile Tab (بدون تغییر)
+// Profile Tab
 // ============================================================
 function ProfileTab({
   profile,
@@ -1195,7 +1195,7 @@ function ProfileTab({
 }
 
 // ============================================================
-// Messages Tab (بدون تغییر)
+// Messages Tab
 // ============================================================
 function MessagesTab({
   messages,
@@ -1984,7 +1984,7 @@ function MessagesTab({
 }
 
 // ============================================================
-// Wallet Tab (بدون تغییر)
+// Wallet Tab
 // ============================================================
 function WalletTab({ wallet, loading }: { wallet: WalletData | null; loading: boolean }) {
   const [showBalance, setShowBalance] = useState(true);
@@ -2107,7 +2107,7 @@ function WalletTab({ wallet, loading }: { wallet: WalletData | null; loading: bo
 }
 
 // ============================================================
-// My Needs Tab (بدون تغییر)
+// My Needs Tab
 // ============================================================
 function MyNeedsTab({
   needs,
@@ -2142,7 +2142,7 @@ function MyNeedsTab({
         return;
       }
       const res = await authenticatedFetch(
-        `${API_URL}/needs/${needId}/change_status/`,
+        `${API_URL}/needs/${needId}/change-status/`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2296,7 +2296,7 @@ function MyNeedsTab({
 }
 
 // ============================================================
-// My Products Tab (بدون تغییر)
+// My Products Tab
 // ============================================================
 function MyProductsTab({ supplies, loading }: { supplies: Supply[]; loading: boolean }) {
   const statusMap: Record<string, { label: string; color: string }> = {
@@ -2372,7 +2372,7 @@ function MyProductsTab({ supplies, loading }: { supplies: Supply[]; loading: boo
 }
 
 // ============================================================
-// My Negotiations Tab (بدون تغییر)
+// My Negotiations Tab
 // ============================================================
 function MyNegotiationsTab({
   negotiations,
@@ -2544,7 +2544,7 @@ function MyNegotiationsTab({
 }
 
 // ============================================================
-// My Favorites Tab (جدید)
+// My Favorites Tab
 // ============================================================
 function MyFavoritesTab({
   favorites,

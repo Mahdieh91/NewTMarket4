@@ -9,7 +9,7 @@ from .views import MatchResultViewSet, MatchingRequestViewSet, NeedMatchingViewS
 router = DefaultRouter()
 router.register(r'results', MatchResultViewSet, basename='match-result')
 router.register(r'requests', MatchingRequestViewSet, basename='matching-request')
-router.register(r'needs', NeedMatchingViewSet, basename='need-matching')  # جدید
+router.register(r'needs', NeedMatchingViewSet, basename='need-matching')
 
 urlpatterns = [
     path('', include(router.urls)),

@@ -91,6 +91,15 @@ const statusLabels: Record<string, string> = {
 };
 
 
+/**
+ * دریافت برچسب فارسی وضعیت
+ * در صورت نبودن، همان مقدار انگلیسی برگردانده می‌شود
+ */
+const getStatusLabel = (status: string): string => {
+  return statusLabels[status] || status;
+};
+
+
 const formatTime = (
   timestamp: string
 ): string => {
@@ -947,14 +956,12 @@ export default function NegotiationPage() {
 
                   <div className="flex flex-wrap items-center gap-2 mt-2">
 
+                    {/* ===== وضعیت مذاکره با برچسب فارسی ===== */}
                     <span className="bg-teal-400/40 px-3 py-1 rounded-full text-xs backdrop-blur-sm border border-teal-400/40 flex items-center gap-1">
 
                       <Clock className="w-3 h-3" />
 
-                      {statusLabels[
-                        negotiation.status
-                      ] ||
-                        negotiation.status}
+                      {getStatusLabel(negotiation.status)}
 
                     </span>
 

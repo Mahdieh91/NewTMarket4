@@ -1,7 +1,3 @@
-// ============================================================
-// FILE: C:\Users\Fardad\tmarket4\frontend\src\app\dashboard\page.tsx
-// ============================================================
-
 'use client';
 
 import {
@@ -1045,7 +1041,7 @@ export default function DashboardPage() {
 
                     {index === 3 && stats.successRate !== undefined && stats.successRate > 0 && (
                       <span className="text-xs bg-emerald-500/30 text-emerald-100 px-2 py-0.5 rounded-full">
-                        {stats.successRate}%
+                        {toPersianDigits(stats.successRate)}%
                       </span>
                     )}
 
@@ -1053,7 +1049,7 @@ export default function DashboardPage() {
 
 
                   <div className="text-3xl font-black mt-2">
-                    {item.value}
+                    {toPersianDigits(item.value)}
                   </div>
 
 
@@ -1152,7 +1148,7 @@ export default function DashboardPage() {
                     <TrendingUp className="w-4 h-4" />
 
                     <span className="text-sm font-bold">
-                      نرخ موفقیت {intelligence.successRate}٪
+                      نرخ موفقیت {toPersianDigits(intelligence.successRate)}٪
                     </span>
 
                   </div>
@@ -1182,7 +1178,7 @@ export default function DashboardPage() {
             </p>
 
             <p className="text-xl font-black text-slate-800 mt-1">
-              {intelligence.totalActivity}
+              {toPersianDigits(intelligence.totalActivity)}
             </p>
 
           </div>
@@ -1195,7 +1191,7 @@ export default function DashboardPage() {
             </p>
 
             <p className="text-xl font-black text-slate-800 mt-1">
-              {stats.totalProducts}
+              {toPersianDigits(stats.totalProducts)}
             </p>
 
           </div>
@@ -1208,7 +1204,7 @@ export default function DashboardPage() {
             </p>
 
             <p className="text-xl font-black text-slate-800 mt-1">
-              {stats.activeNeeds}
+              {toPersianDigits(stats.activeNeeds)}
             </p>
 
           </div>
@@ -1221,7 +1217,7 @@ export default function DashboardPage() {
             </p>
 
             <p className="text-xl font-black text-slate-800 mt-1">
-              {stats.ongoingNegotiations}
+              {toPersianDigits(stats.ongoingNegotiations)}
             </p>
 
           </div>
@@ -1234,7 +1230,7 @@ export default function DashboardPage() {
             </p>
 
             <p className="text-xl font-black text-slate-800 mt-1">
-              {stats.successfulDeals}
+              {toPersianDigits(stats.successfulDeals)}
             </p>
 
           </div>
@@ -1379,7 +1375,7 @@ export default function DashboardPage() {
 
               {data.monthlyDeals.length > 0 && (
                 <span className="text-xs text-slate-400">
-                  {data.monthlyDeals.reduce((sum, d) => sum + d.deals, 0).toLocaleString('fa-IR')} معامله
+                  {toPersianDigits(data.monthlyDeals.reduce((sum, d) => sum + d.deals, 0))} معامله
                 </span>
               )}
 
@@ -1464,7 +1460,6 @@ export default function DashboardPage() {
 
                   <Tooltip />
 
-
                   <Area
                     type="monotone"
                     dataKey="deals"
@@ -1538,7 +1533,6 @@ export default function DashboardPage() {
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
-                        {/* دکمه تطبیق هوشمند برای هر نیاز */}
                         <Link
                           href={`/matching/${need.id}`}
                           className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition"
@@ -1845,7 +1839,7 @@ export default function DashboardPage() {
 
 
                           <span className={`text-xs font-black ${textColor}`}>
-                            {item.match}٪
+                            {toPersianDigits(item.match)}٪
                           </span>
 
                         </div>
@@ -1926,7 +1920,7 @@ export default function DashboardPage() {
 
 
                           <span className="text-xs font-black text-[#1E3A8A]">
-                            {item.value}
+                            {toPersianDigits(item.value)}
                           </span>
 
                         </div>
@@ -2008,7 +2002,7 @@ export default function DashboardPage() {
                       <div className="flex items-center gap-3">
 
                         <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#1E3A8A] to-[#14B8A6] text-white flex items-center justify-center text-xs font-black">
-                          {index + 1}
+                          {toPersianDigits(index + 1)}
                         </div>
 
 
@@ -2027,7 +2021,7 @@ export default function DashboardPage() {
                             )}
 
                             <span className="text-[10px] text-slate-400">
-                              {supplier.deals} معامله
+                              {toPersianDigits(supplier.deals)} معامله
                             </span>
 
                           </div>
@@ -2041,7 +2035,7 @@ export default function DashboardPage() {
 
                         <span className="text-xs font-bold text-[#F59E0B] flex items-center gap-1">
                           <Star className="w-3 h-3 fill-[#F59E0B] text-[#F59E0B]" />
-                          {supplier.score}
+                          {toPersianDigits(supplier.score)}
                         </span>
 
                       )}
@@ -2203,4 +2197,26 @@ function formatActivityTime(
       day: '2-digit',
     },
   );
+}
+
+
+// ============================================================
+// Persian Number Helper
+// ============================================================
+
+function toPersianDigits(num: number | string): string {
+  const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
+  const englishDigits = '0123456789';
+  const str = String(num);
+  let result = '';
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i];
+    const index = englishDigits.indexOf(char);
+    if (index !== -1) {
+      result += persianDigits[index];
+    } else {
+      result += char;
+    }
+  }
+  return result;
 }
