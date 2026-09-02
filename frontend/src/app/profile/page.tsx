@@ -359,7 +359,7 @@ export default function ProfilePage() {
   const { logout, updateUser } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
 
-  // ===== Solana Wallet =====
+  // ===== Digital Wallet (Solana backend) =====
   const { publicKey, connected } = useWallet();
   const { setVisible: setWalletModalVisible } = useWalletModal();
 
@@ -386,11 +386,35 @@ export default function ProfilePage() {
     | 'myFavorites'
   >(defaultTab as any);
 
+  // تغییر تب همراه با URL انجام می‌شود تا دکمه Back مرورگر بدون گیر کردن
+  // کاربر را به تب/صفحه قبلی برگرداند.
+  const handleTabChange = useCallback((tab: string) => {
+    if (!validTabs.includes(tab)) return;
+    setActiveTab(tab as any);
+    const currentTab = searchParams?.get('tab') || 'profile';
+    if (currentTab === tab) return;
+
+    const url = new URL(window.location.href);
+    if (tab === 'profile') {
+      url.searchParams.delete('tab');
+    } else {
+      url.searchParams.set('tab', tab);
+    }
+    router.push(`${url.pathname}${url.search}${url.hash}`, { scroll: false });
+  }, [router, searchParams, validTabs]);
+
+  // وقتی کاربر با Back/Forward مرورگر جابه‌جا می‌شود، تب فعال نیز همگام شود.
+  useEffect(() => {
+    const tabFromUrl = searchParams?.get('tab') || 'profile';
+    const nextTab = validTabs.includes(tabFromUrl) ? tabFromUrl : 'profile';
+    setActiveTab(nextTab as any);
+  }, [searchParams, validTabs]);
+
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
 
-  // ===== Wallet State (Solana) =====
+  // ===== Digital Wallet State =====
   const [walletData, setWalletData] = useState<WalletData>({
     balance: 0,
     transactions: [],
@@ -410,12 +434,12 @@ export default function ProfilePage() {
   const [useFakeData, setUseFakeData] = useState(false);
 
   // ============================================================
-  // Load Solana Wallet Data
+  // Load Digital Wallet Data
   // ============================================================
 
   const loadSolanaWalletData = useCallback(async (walletPublicKey: PublicKey) => {
     if (!IS_DEPLOYED) {
-      setWalletError('توکن TECH در شبکه سولانا مستقر نشده است.');
+      setWalletError('توکن TECH هنوز در کیف پول دیجیتال فعال نشده است.');
       setWalletLoading(false);
       return;
     }
@@ -494,7 +518,7 @@ export default function ProfilePage() {
       });
     } catch (err) {
       console.error('❌ Failed to load Solana wallet:', err);
-      setWalletError('خطا در دریافت اطلاعات کیف پول سولانا.');
+      setWalletError('خطا در دریافت اطلاعات کیف پول دیجیتال.');
       setWalletData({ balance: 0, transactions: [] });
     } finally {
       setWalletLoading(false);
@@ -531,7 +555,7 @@ export default function ProfilePage() {
     fetchAllData(token);
   }, [mounted]);
 
-  // ===== Load Solana wallet when connected =====
+  // ===== Load digital wallet when connected =====
   useEffect(() => {
     if (connected && publicKey) {
       loadSolanaWalletData(publicKey);
@@ -982,7 +1006,7 @@ export default function ProfilePage() {
     { id: 'myProducts', label: 'محصولات من', icon: Package },
     { id: 'myNegotiations', label: 'مذاکرات من', icon: MessageCircle },
     { id: 'messages', label: 'صندوق پیام', icon: MessageSquare, badge: unreadCount },
-    { id: 'wallet', label: 'کیف پول', icon: Wallet },
+    { id: 'wallet', label: 'کیف پول دیجیتال', icon: Wallet },
   ];
 
   return (
@@ -990,10 +1014,10 @@ export default function ProfilePage() {
       dir="rtl"
       className="min-h-screen bg-gradient-to-br from-slate-50/80 via-white to-blue-50/80 p-4 sm:p-6"
     >
-      <div className="max-w-7xl mx-auto">
-        <div className="flex flex-row-reverse gap-6">
+      <div className="max-w-[1400px] mx-auto w-full">
+        <div className="flex flex-row gap-6 items-start">
           {/* سایدبار */}
-          <aside className="lg:w-72 flex-shrink-0">
+          <aside className="lg:w-72 xl:w-80 flex-shrink-0">
             <div className="sticky top-6 space-y-4">
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 transition-all hover:shadow-md">
                 <div className="flex items-center gap-4">
@@ -1029,7 +1053,7 @@ export default function ProfilePage() {
                   {sidebarItems.map((item) => (
                     <button
                       key={item.id}
-                      onClick={() => setActiveTab(item.id as any)}
+                      onClick={() => handleTabChange(item.id)}
                       className={`relative flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
                         activeTab === item.id
                           ? 'bg-gradient-to-r from-indigo-50 to-blue-50 text-indigo-700 shadow-sm'
@@ -1074,7 +1098,7 @@ export default function ProfilePage() {
           </aside>
 
           {/* محتوای اصلی */}
-          <main className="flex-1 min-w-0 bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+          <main className="flex-1 min-w-0 bg-white rounded-2xl shadow-sm border border-slate-100 p-6 sm:p-7 lg:p-8">
             {activeTab === 'profile' && (
               <ProfileTab
                 profile={currentProfile}
@@ -2083,7 +2107,7 @@ function MessagesTab({
 }
 
 // ============================================================
-// Wallet Tab (Solana - Real)
+// Wallet Tab (Digital Wallet - Real)
 // ============================================================
 function WalletTab({
   walletData,
@@ -2111,25 +2135,25 @@ function WalletTab({
     return (
       <div className="text-center py-12">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" />
-        <p className="mt-4 text-slate-500">در حال دریافت موجودی از شبکه سولانا...</p>
+        <p className="mt-4 text-slate-500">در حال دریافت موجودی کیف پول دیجیتال...</p>
       </div>
     );
   }
 
   if (!isConnected) {
     return (
-      <div>
-        <h2 className="text-xl font-bold text-slate-800 mb-6">کیف پول (بلاکچین سولانا)</h2>
-        <div className="bg-gradient-to-br from-blue-600 to-teal-500 rounded-2xl p-8 text-white text-center">
+      <div className="rounded-3xl bg-gradient-to-br from-blue-50 via-white to-teal-50 border border-slate-100 p-4 sm:p-6 lg:p-8">
+        <h2 className="text-xl font-bold text-slate-800 mb-6">کیف پول دیجیتال</h2>
+        <div className="bg-gradient-to-br from-blue-600 to-teal-500 rounded-2xl p-8 text-white text-center shadow-sm">
           <div className="text-4xl mb-4">🔗</div>
           <p className="text-sm opacity-90 mb-4">
-            برای مشاهده موجودی و انجام تراکنش‌های TECH، <strong>باید یک کیف پول سولانا (مثل فانتوم) را متصل کنید.</strong>
+            برای مشاهده موجودی و انجام تراکنش‌های TECH، <strong>باید کیف پول دیجیتال خود را متصل کنید.</strong>
           </p>
           <button
             onClick={onConnect}
             className="px-6 py-3 bg-white text-blue-600 rounded-xl font-bold hover:bg-blue-50 transition"
           >
-            🔗 اتصال کیف پول سولانا
+            🔗 اتصال کیف پول دیجیتال
           </button>
           <p className="text-xs opacity-70 mt-4">
             کیف‌پول‌های پشتیبانی‌شده: فانتوم، سولفیر، بک‌پک و سایر کیف‌پول‌های استاندارد سولانا
@@ -2141,8 +2165,8 @@ function WalletTab({
 
   if (error) {
     return (
-      <div>
-        <h2 className="text-xl font-bold text-slate-800 mb-6">کیف پول (بلاکچین سولانا)</h2>
+      <div className="rounded-3xl bg-gradient-to-br from-slate-50 via-white to-red-50 border border-slate-100 p-4 sm:p-6 lg:p-8">
+        <h2 className="text-xl font-bold text-slate-800 mb-6">کیف پول دیجیتال</h2>
         <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-red-700 text-center">
           <AlertCircle className="w-12 h-12 mx-auto mb-3 text-red-500" />
           <p>{error}</p>
@@ -2158,9 +2182,9 @@ function WalletTab({
   }
 
   return (
-    <div>
+    <div className="rounded-3xl bg-gradient-to-br from-blue-50/80 via-white to-teal-50/80 border border-slate-100 p-4 sm:p-6 lg:p-8">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-slate-800">کیف پول (بلاکچین سولانا)</h2>
+        <h2 className="text-xl font-bold text-slate-800">کیف پول دیجیتال</h2>
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-400 bg-slate-100 px-3 py-1 rounded-full">
             {publicKey ? `${publicKey.slice(0, 8)}...${publicKey.slice(-6)}` : ''}
@@ -2176,7 +2200,7 @@ function WalletTab({
         </div>
       </div>
 
-      <div className="bg-gradient-to-br from-blue-600 to-teal-500 rounded-2xl p-6 text-white mb-6 flex items-center justify-between">
+      <div className="bg-gradient-to-br from-blue-600 to-teal-500 rounded-2xl p-6 sm:p-7 text-white mb-6 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5 shadow-sm">
         <div className="flex items-center gap-4">
           <div className="flex-shrink-0">
             <Image
@@ -2204,12 +2228,12 @@ function WalletTab({
           </div>
         </div>
         <div className="text-xs opacity-70 text-left">
-          <p>شبکه: سولانا</p>
+          <p>شبکه بلاکچین</p>
           <p>Devnet</p>
         </div>
       </div>
 
-      <div>
+      <div className="bg-slate-50/70 rounded-2xl border border-slate-100 p-4 sm:p-5">
         <h3 className="font-semibold text-slate-700 mb-4">تاریخچه تراکنش‌ها</h3>
         {transactions.length === 0 ? (
           <div className="text-center py-8 text-slate-400">
