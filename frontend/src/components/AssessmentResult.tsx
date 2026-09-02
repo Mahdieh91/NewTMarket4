@@ -6,14 +6,15 @@ export default function AssessmentResult({
   result,
   title,
   returnUrl,
+  paramKey = 'trl',
 }: {
   result: AssessmentResultType | null;
   title: string;
   returnUrl?: string;
+  paramKey?: 'trl' | 'mrl';
 }) {
   const router = useRouter();
 
-  // فقط اگر result وجود نداشته باشد، چیزی نمایش نده
   if (!result) return null;
 
   const level = result.trl ?? result.mrl ?? 0;
@@ -25,19 +26,24 @@ export default function AssessmentResult({
     }
 
     try {
+      // دریافت مسیر و پارامترهای موجود
       const [path, existingQuery] = returnUrl.split('?');
       const params = new URLSearchParams(existingQuery || '');
-      params.set('trl', String(level));
-      params.set('trl_assessed', 'true');
 
+      // تنظیم پارامتر جدید (بدون حذف پارامترهای قبلی)
+      params.set(paramKey, String(level));
+      params.set(`${paramKey}_assessed`, 'true');
+
+      // خواندن شناسه ارزیابی از localStorage
       const assessmentId = typeof window !== 'undefined'
-        ? localStorage.getItem('last_trl_assessment_id')
+        ? localStorage.getItem(`last_${paramKey}_assessment_id`)
         : null;
       if (assessmentId) {
-        params.set('trl_assessment_id', assessmentId);
+        params.set(`${paramKey}_assessment_id`, assessmentId);
       }
 
       const finalUrl = path + '?' + params.toString();
+      console.log('🔗 بازگشت به:', finalUrl);
       router.push(finalUrl);
     } catch (error) {
       console.error('Error in handleGoBack:', error);
@@ -67,7 +73,6 @@ export default function AssessmentResult({
         </div>
       )}
 
-      {/* ===== دکمه بازگشت - همیشه نمایش داده می‌شود ===== */}
       <div style={{ 
         marginTop: '2rem', 
         textAlign: 'center',

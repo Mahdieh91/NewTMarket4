@@ -220,7 +220,10 @@ export default function TRLPage() {
       const quickResult = calculateTRL(answers);
       setResult(quickResult);
       localStorage.setItem('last_trl_assessment_id', String(data.assessment_id));
-      showToast(`ارزیابی با موفقیت ذخیره شد! TRL: ${data.trl}`, 'success');
+      
+      // ===== نمایش پیام موفقیت =====
+      showToast(` TRL: ${data.trl}`, 'success');
+      
     } catch (error: any) {
       showToast(error.message || 'خطا در ارتباط با سرور', 'error');
     } finally {
@@ -277,7 +280,6 @@ export default function TRLPage() {
             </div>
           </div>
 
-          {/* ===== جعبه تأیید با کادر قرمز در صورت عدم تأیید ===== */}
           <div className={`trl-confirmation-box ${!agreed ? 'border-red-500 border-2' : ''}`}>
             <label className="trl-confirmation-label">
               <input
@@ -295,10 +297,10 @@ export default function TRLPage() {
                     ۱. تمامی پاسخ‌های ثبت‌شده در این فرم، مبتنی بر <strong>وضعیت واقعی، کنونی و مستند</strong> فناوری است.
                   </span>
                   <span style={{ display: 'block' }}>
-                    ２. هیچ‌یک از پاسخ‌ها مبتنی بر پیش‌بینی، برنامه‌های آتی یا ادعای فاقد شواهد کافی نمی‌باشد.
+                    ۲. هیچ‌یک از پاسخ‌ها مبتنی بر پیش‌بینی، برنامه‌های آتی یا ادعای فاقد شواهد کافی نمی‌باشد.
                   </span>
                   <span style={{ display: 'block' }}>
-                    ３. در صورت درخواست، <strong>مدارک و شواهد</strong> پشتیبان هر پاسخ، قابل ارائه خواهد بود.
+                    ۳. در صورت درخواست، <strong>مدارک و شواهد</strong> پشتیبان هر پاسخ، قابل ارائه خواهد بود.
                   </span>
                   <span style={{ display: 'block', marginTop: '0.5rem', fontWeight: 'bold', color: '#dc2626' }}>
                     ⚠️ تخلف از هر یک از بندهای فوق، موجب بی‌اعتباری این ارزیابی و پیگرد قانونی وفق مقررات خواهد شد.

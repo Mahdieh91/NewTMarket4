@@ -273,7 +273,7 @@ export default function MRLPage() {
       const quickResult = calculateMRL(answers);
       setResult(quickResult);
       localStorage.setItem('last_mrl_assessment_id', String(data.assessment_id));
-      showToast(`ارزیابی با موفقیت ذخیره شد! MRL: ${data.mrl}`, 'success');
+      showToast(`MRL: ${data.mrl}`, 'success');
     } catch (error: any) {
       showToast(error.message || 'خطا در ارتباط با سرور', 'error');
     } finally {
@@ -330,7 +330,6 @@ export default function MRLPage() {
             </div>
           </div>
 
-          {/* ===== جعبه تأیید با کادر قرمز در صورت عدم تأیید ===== */}
           <div className={`trl-confirmation-box ${!agreed ? 'border-red-500 border-2' : ''}`}>
             <label className="trl-confirmation-label">
               <input
@@ -434,7 +433,8 @@ export default function MRLPage() {
           </button>
         </form>
 
-        <AssessmentResult result={result} title="MRL" returnUrl={returnUrl} />
+        {/* ===== اصلاح اصلی: اضافه کردن paramKey="mrl" ===== */}
+        <AssessmentResult result={result} title="MRL" returnUrl={returnUrl} paramKey="mrl" />
       </div>
     </div>
   );

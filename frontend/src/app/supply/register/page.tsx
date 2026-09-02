@@ -1,7 +1,8 @@
 // frontend/app/supply/register/page.tsx
 // ============================================================
 // اصلاح‌شده: TRL و MRL فقط از طریق ارزیابی خودکار قابل وارد شدن هستند
-// + حذف آیکون‌های دکمه‌های ارزیابی
+// + پردازش پارامترهای URL با حفظ مقادیر قبلی
+// + ذخیره پیش‌نویس فرم در sessionStorage برای جلوگیری از ریست شدن
 // ============================================================
 
 'use client';
@@ -156,6 +157,54 @@ const getInitialForm = (): SupplyFormData => ({
   documents: [],
 });
 
+// ===== ذخیره‌سازی پیش‌نویس در sessionStorage =====
+const FORM_STORAGE_KEY = 'supply-register-draft';
+
+const saveFormDraft = (formData: SupplyFormData) => {
+  try {
+    // File objectها قابل ذخیره‌سازی در sessionStorage نیستند
+    // بنابراین فقط اطلاعات متنی فرم را ذخیره می‌کنیم.
+    const draft = {
+      title: formData.title,
+      supply_type: formData.supply_type,
+      category: formData.category,
+      industry: formData.industry,
+      technology: formData.technology,
+      city: formData.city,
+      description: formData.description,
+      quantity: formData.quantity,
+      unit: formData.unit,
+      price: formData.price,
+      trl: formData.trl,
+      trl_assessed: formData.trl_assessed,
+      mrl: formData.mrl,
+      mrl_assessed: formData.mrl_assessed,
+    };
+
+    sessionStorage.setItem(
+      FORM_STORAGE_KEY,
+      JSON.stringify(draft)
+    );
+  } catch (error) {
+    console.error('❌ خطا در ذخیره پیش‌نویس فرم:', error);
+  }
+};
+
+const loadFormDraft = (): Partial<SupplyFormData> | null => {
+  try {
+    const saved = sessionStorage.getItem(FORM_STORAGE_KEY);
+
+    if (!saved) {
+      return null;
+    }
+
+    return JSON.parse(saved);
+  } catch (error) {
+    console.error('❌ خطا در بازیابی پیش‌نویس فرم:', error);
+    return null;
+  }
+};
+
 // ==================== Helper ====================
 
 const toPersianNumber = (num: number) => {
@@ -177,29 +226,31 @@ export default function SupplyRegisterPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [form, setForm] = useState<SupplyFormData>(getInitialForm);
   const [logoFailed, setLogoFailed] = useState(false);
-  const [paramsProcessed, setParamsProcessed] = useState(false);
 
   const { accessToken, isAuthenticated, logout } = useAuthStore();
 
-  // ===== ریست کامل فرم در هر بار لود =====
+  // ===== بازیابی پیش‌نویس فرم در صورت وجود =====
   useEffect(() => {
-    setForm(getInitialForm());
-    setStep(0);
-    setErrors([]);
-    setFieldErrors({});
-    setSubmitMessage('');
-    setParamsProcessed(false);
+    const savedDraft = loadFormDraft();
+
+    if (savedDraft) {
+      setForm((prev) => ({
+        ...prev,
+        ...savedDraft,
+      }));
+
+      console.log('✅ پیش‌نویس فرم بازیابی شد');
+    }
   }, []);
 
-  // ===== پردازش پارامترهای URL (فقط یک بار) =====
+  // ===== پردازش پارامترهای URL (با حفظ مقادیر قبلی) =====
   useEffect(() => {
-    if (paramsProcessed) return;
-
     const trlParam = searchParams.get('trl');
     const mrlParam = searchParams.get('mrl');
     const trlAssessed = searchParams.get('trl_assessed') === 'true';
     const mrlAssessed = searchParams.get('mrl_assessed') === 'true';
 
+    // اگر حداقل یکی از پارامترها وجود داشت، فرم را به‌روز کن
     if (trlParam || mrlParam || trlAssessed || mrlAssessed) {
       setForm((prev) => ({
         ...prev,
@@ -220,9 +271,7 @@ export default function SupplyRegisterPage() {
       // حذف پارامترها از URL بدون رفرش صفحه
       router.replace(window.location.pathname, { scroll: false });
     }
-
-    setParamsProcessed(true);
-  }, [searchParams, router, paramsProcessed]);
+  }, [searchParams, router]);
 
   useEffect(() => {
     setMounted(true);
@@ -538,6 +587,8 @@ export default function SupplyRegisterPage() {
 
       // ریست فرم پس از ثبت موفق
       setForm(getInitialForm());
+      // پس از ثبت موفق، پیش‌نویس را هم پاک می‌کنیم
+      sessionStorage.removeItem(FORM_STORAGE_KEY);
     } catch (error: any) {
       console.error('❌ [SUPPLY SUBMIT] خطا در ثبت عرضه:', error);
       setErrors([
@@ -877,10 +928,13 @@ export default function SupplyRegisterPage() {
                             type="button"
                             onClick={() => {
                               try {
+                                // ذخیره وضعیت فعلی فرم قبل از ترک صفحه
+                                saveFormDraft(form);
+
                                 const params = new URLSearchParams();
                                 params.set('return', '/supply/register');
                                 const url = `/trl?${params.toString()}`;
-                                console.log('🚀 رفتن به:', url);
+                                console.log('🚀 ذخیره فرم و رفتن به:', url);
                                 window.location.href = url;
                               } catch (error) {
                                 console.error('❌ خطا در navigation:', error);
@@ -916,10 +970,13 @@ export default function SupplyRegisterPage() {
                             type="button"
                             onClick={() => {
                               try {
+                                // ذخیره وضعیت فعلی فرم قبل از ترک صفحه
+                                saveFormDraft(form);
+
                                 const params = new URLSearchParams();
                                 params.set('return', '/supply/register');
                                 const url = `/mrl?${params.toString()}`;
-                                console.log('🏭 رفتن به:', url);
+                                console.log('🏭 ذخیره فرم و رفتن به:', url);
                                 window.location.href = url;
                               } catch (error) {
                                 console.error('❌ خطا در navigation:', error);
