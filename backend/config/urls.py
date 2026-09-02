@@ -1,4 +1,8 @@
 # config/urls.py
+# ============================================================
+# اضافه‌شده: مسیرهای ارزیابی TRL و MRL
+# ============================================================
+
 from django.contrib import admin
 from django.urls import include, path
 from django.conf import settings
@@ -40,19 +44,20 @@ favorites_router = DefaultRouter()
 favorites_router.register(r'', FavoriteViewSet, basename='favorite')
 
 urlpatterns = [
+    # ===== بخش مدیریت و خانه =====
     path("admin/", admin.site.urls),
     path("", home, name="home"),
 
-    # JWT with CAPTCHA
+    # ===== احراز هویت JWT با CAPTCHA =====
     path("api/users/token/", CaptchaTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/users/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/users/captcha/challenge/", CaptchaChallengeView.as_view(), name="captcha-challenge"),
 
-    # مستندات
+    # ===== مستندات API =====
     path("swagger/", schema_view.with_ui("swagger", cache_timeout=0), name="schema-swagger-ui"),
     path("redoc/", schema_view.with_ui("redoc", cache_timeout=0), name="schema-redoc"),
 
-    # اپ‌های پروژه
+    # ===== اپلیکیشن‌های اصلی پروژه (۲۰ ماژول) =====
     path("api/users/", include("users.urls")),
     path("api/industries/", include("industries.urls")),
     path("api/products/", include("products.urls")),
@@ -79,8 +84,15 @@ urlpatterns = [
 
     # ===== مسیر مستقیم برای favorites (رفع خطا) =====
     path("api/favorites/", include(favorites_router.urls)),
+
+    # ============================================================
+    # 🆕 مسیرهای جدید برای ارزیابی‌های TRL و MRL
+    # ============================================================
+    path("api/trl/", include("trl_assessment.urls")),
+    path("api/mrl/", include("mrl_assessment.urls")),
 ]
 
+# ===== تنظیمات DEBUG (ابزارهای توسعه و فایل‌های استاتیک) =====
 if settings.DEBUG:
     try:
         import debug_toolbar

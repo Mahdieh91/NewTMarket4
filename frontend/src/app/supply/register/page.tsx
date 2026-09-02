@@ -1,10 +1,13 @@
-// این فایل: صفحه ثبت عرضه محصول / خدمت در فرانت‌اند
-// اصلاح‌شده: ارسال فیلد supply_type به جای supplyType برای هماهنگی با بک‌اند
+// frontend/app/supply/register/page.tsx
+// ============================================================
+// اصلاح‌شده: TRL و MRL فقط از طریق ارزیابی خودکار قابل وارد شدن هستند
+// + حذف آیکون‌های دکمه‌های ارزیابی
+// ============================================================
 
 'use client';
 
 import { useRef, useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   Check,
@@ -29,7 +32,7 @@ import { useAuthStore } from '@/store/auth-store';
 
 type SupplyFormData = {
   title: string;
-  supply_type: string; // 'product' | 'service' — نام فیلد مطابق با بک‌اند
+  supply_type: string;
   category: string;
   industry: string;
   technology: string;
@@ -39,6 +42,9 @@ type SupplyFormData = {
   unit: string;
   price: string;
   trl: string;
+  trl_assessed: boolean;
+  mrl: string;
+  mrl_assessed: boolean;
   images: File[];
   documents: File[];
 };
@@ -128,7 +134,10 @@ const wizardSteps = [
   'تأیید و ارسال',
 ];
 
-const initialForm: SupplyFormData = {
+const MAX_IMAGES = 3;
+
+// ===== مقدار اولیه فرم (برای ریست) =====
+const getInitialForm = (): SupplyFormData => ({
   title: '',
   supply_type: 'product',
   category: '',
@@ -140,11 +149,12 @@ const initialForm: SupplyFormData = {
   unit: '',
   price: '',
   trl: '',
+  trl_assessed: false,
+  mrl: '',
+  mrl_assessed: false,
   images: [],
   documents: [],
-};
-
-const MAX_IMAGES = 3;
+});
 
 // ==================== Helper ====================
 
@@ -157,19 +167,62 @@ const toPersianNumber = (num: number) => {
 
 export default function SupplyRegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [step, setStep] = useState<number>(0);
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
   const [errors, setErrors] = useState<string[]>([]);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>(
-    {},
-  );
-  const [form, setForm] = useState<SupplyFormData>(initialForm);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [form, setForm] = useState<SupplyFormData>(getInitialForm);
   const [logoFailed, setLogoFailed] = useState(false);
+  const [paramsProcessed, setParamsProcessed] = useState(false);
 
   const { accessToken, isAuthenticated, logout } = useAuthStore();
+
+  // ===== ریست کامل فرم در هر بار لود =====
+  useEffect(() => {
+    setForm(getInitialForm());
+    setStep(0);
+    setErrors([]);
+    setFieldErrors({});
+    setSubmitMessage('');
+    setParamsProcessed(false);
+  }, []);
+
+  // ===== پردازش پارامترهای URL (فقط یک بار) =====
+  useEffect(() => {
+    if (paramsProcessed) return;
+
+    const trlParam = searchParams.get('trl');
+    const mrlParam = searchParams.get('mrl');
+    const trlAssessed = searchParams.get('trl_assessed') === 'true';
+    const mrlAssessed = searchParams.get('mrl_assessed') === 'true';
+
+    if (trlParam || mrlParam || trlAssessed || mrlAssessed) {
+      setForm((prev) => ({
+        ...prev,
+        trl: trlParam ?? prev.trl,
+        mrl: mrlParam ?? prev.mrl,
+        trl_assessed: trlAssessed || prev.trl_assessed,
+        mrl_assessed: mrlAssessed || prev.mrl_assessed,
+      }));
+
+      // اسکرول به بخش TRL/MRL
+      setTimeout(() => {
+        const element = document.getElementById('trl-mrl-section');
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 400);
+
+      // حذف پارامترها از URL بدون رفرش صفحه
+      router.replace(window.location.pathname, { scroll: false });
+    }
+
+    setParamsProcessed(true);
+  }, [searchParams, router, paramsProcessed]);
 
   useEffect(() => {
     setMounted(true);
@@ -210,10 +263,7 @@ export default function SupplyRegisterPage() {
     }));
   };
 
-  const removeFile = (
-    field: 'images' | 'documents',
-    index: number,
-  ) => {
+  const removeFile = (field: 'images' | 'documents', index: number) => {
     setForm((prev) => ({
       ...prev,
       [field]: prev[field].filter((_, i) => i !== index),
@@ -306,7 +356,6 @@ export default function SupplyRegisterPage() {
 
     if (!validateStep()) {
       console.log('❌ [SUPPLY SUBMIT] اعتبارسنجی فرم ناموفق بود');
-
       console.timeEnd('⏱️ TOTAL submit');
       return;
     }
@@ -324,9 +373,7 @@ export default function SupplyRegisterPage() {
 
     if (!isAuthenticated || !accessToken) {
       console.log('❌ [SUPPLY SUBMIT] کاربر احراز هویت نشده است');
-
       setErrors(['لطفاً ابتدا وارد حساب کاربری خود شوید.']);
-
       console.timeEnd('⏱️ TOTAL submit');
       return;
     }
@@ -336,15 +383,10 @@ export default function SupplyRegisterPage() {
     setErrors([]);
 
     try {
-      // ============================================================
-      // ساخت FormData
-      // ============================================================
-
       console.time('⏱️ FormData creation');
 
       const formData = new FormData();
 
-      // فیلدهای متنی — توجه: نام فیلد supply_type مطابق با بک‌اند
       const textFields: (keyof SupplyFormData)[] = [
         'title',
         'supply_type',
@@ -357,55 +399,34 @@ export default function SupplyRegisterPage() {
         'unit',
         'price',
         'trl',
+        'mrl',
       ];
 
       textFields.forEach((field) => {
         const value = form[field];
-
         if (value) {
           formData.append(field, String(value));
         }
       });
 
+      formData.append('trl_assessed', String(form.trl_assessed));
+      formData.append('mrl_assessed', String(form.mrl_assessed));
+
       console.log('📦 [SUPPLY SUBMIT] فیلدهای متنی اضافه شدند');
 
-      // تصاویر با کلید uploaded_images
       form.images.forEach((file) => {
         formData.append('uploaded_images', file);
       });
 
-      console.log(
-        `🖼️ [SUPPLY SUBMIT] تعداد تصاویر: ${form.images.length}`,
-      );
+      console.log(`🖼️ [SUPPLY SUBMIT] تعداد تصاویر: ${form.images.length}`);
 
-      // مستندات با کلید uploaded_documents
       form.documents.forEach((file) => {
         formData.append('uploaded_documents', file);
       });
 
-      console.log(
-        `📄 [SUPPLY SUBMIT] تعداد مستندات: ${form.documents.length}`,
-      );
-
-      console.log(
-        '📦 [SUPPLY SUBMIT] حجم تقریبی فایل‌ها:',
-        {
-          images: form.images.reduce(
-            (sum, file) => sum + file.size,
-            0,
-          ),
-          documents: form.documents.reduce(
-            (sum, file) => sum + file.size,
-            0,
-          ),
-        },
-      );
+      console.log(`📄 [SUPPLY SUBMIT] تعداد مستندات: ${form.documents.length}`);
 
       console.timeEnd('⏱️ FormData creation');
-
-      // ============================================================
-      // API URL
-      // ============================================================
 
       const API_URL =
         process.env.NEXT_PUBLIC_API_URL ||
@@ -414,10 +435,6 @@ export default function SupplyRegisterPage() {
       const endpoint = `${API_URL}/products/supplies/`;
 
       console.log('🌐 [SUPPLY SUBMIT] API URL:', endpoint);
-
-      // ============================================================
-      // ارسال درخواست
-      // ============================================================
 
       console.log('📤 [SUPPLY SUBMIT] درخواست POST ارسال شد');
 
@@ -437,11 +454,7 @@ export default function SupplyRegisterPage() {
 
       console.timeEnd('⏱️ FETCH request');
 
-      console.log(
-        `⏱️ [SUPPLY SUBMIT] زمان دریافت response: ${fetchDuration.toFixed(
-          2,
-        )} ms`,
-      );
+      console.log(`⏱️ [SUPPLY SUBMIT] زمان دریافت response: ${fetchDuration.toFixed(2)} ms`);
 
       console.log('📥 [SUPPLY SUBMIT] response:', {
         status: response.status,
@@ -449,18 +462,11 @@ export default function SupplyRegisterPage() {
         ok: response.ok,
       });
 
-      // ============================================================
-      // خواندن پاسخ
-      // ============================================================
-
       console.time('⏱️ Response text parsing');
 
       const textResponse = await response.text();
 
-      console.log(
-        '📥 [SUPPLY SUBMIT] طول پاسخ:',
-        textResponse.length,
-      );
+      console.log('📥 [SUPPLY SUBMIT] طول پاسخ:', textResponse.length);
 
       let data: any = null;
       let parseError = false;
@@ -475,51 +481,30 @@ export default function SupplyRegisterPage() {
 
       console.log('📥 [SUPPLY SUBMIT] داده پاسخ:', data);
 
-      // ============================================================
-      // خطای HTTP
-      // ============================================================
-
       if (!response.ok) {
-        console.error(
-          '❌ [SUPPLY SUBMIT] پاسخ ناموفق:',
-          {
-            status: response.status,
-            statusText: response.statusText,
-            data,
-          },
-        );
+        console.error('❌ [SUPPLY SUBMIT] پاسخ ناموفق:', {
+          status: response.status,
+          statusText: response.statusText,
+          data,
+        });
 
         if (response.status === 401) {
-          console.log(
-            '🔐 [SUPPLY SUBMIT] نشست منقضی شده؛ logout انجام می‌شود.',
-          );
-
+          console.log('🔐 [SUPPLY SUBMIT] نشست منقضی شده؛ logout انجام می‌شود.');
           logout();
           router.push('/login?session_expired=true');
-
-          throw new Error(
-            'نشست شما منقضی شده است. لطفاً دوباره وارد شوید.',
-          );
+          throw new Error('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.');
         }
 
         let errorMsg = 'خطا در ثبت عرضه.';
 
         if (!parseError && data) {
-          if (
-            data?.errors &&
-            typeof data.errors === 'object'
-          ) {
+          if (data?.errors && typeof data.errors === 'object') {
             const fieldErrors = Object.entries(data.errors)
               .map(
                 ([f, msgs]) =>
-                  `${f}: ${
-                    Array.isArray(msgs)
-                      ? msgs.join(', ')
-                      : msgs
-                  }`,
+                  `${f}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`,
               )
               .join('; ');
-
             errorMsg = `خطاهای اعتبارسنجی: ${fieldErrors}`;
           } else if (data?.detail) {
             errorMsg = data.detail;
@@ -539,55 +524,31 @@ export default function SupplyRegisterPage() {
         throw new Error(errorMsg);
       }
 
-      // ============================================================
-      // پاسخ موفق
-      // ============================================================
-
       if (parseError) {
-        console.error(
-          '❌ [SUPPLY SUBMIT] پاسخ JSON معتبر نبود:',
-          textResponse,
-        );
-
+        console.error('❌ [SUPPLY SUBMIT] پاسخ JSON معتبر نبود:', textResponse);
         throw new Error('پاسخ سرور نامعتبر است.');
       }
 
-      console.log(
-        '✅ [SUPPLY SUBMIT] عرضه با موفقیت در سرور ثبت شد.',
-      );
-
-      console.log(
-        '📦 [SUPPLY SUBMIT] response data:',
-        data,
-      );
+      console.log('✅ [SUPPLY SUBMIT] عرضه با موفقیت در سرور ثبت شد.');
+      console.log('📦 [SUPPLY SUBMIT] response data:', data);
 
       setSubmitMessage(
         '✅ عرضه شما با موفقیت ثبت شد و برای بررسی کارشناس ارسال گردید.',
       );
-    } catch (error: any) {
-      console.error(
-        '❌ [SUPPLY SUBMIT] خطا در ثبت عرضه:',
-        error,
-      );
 
+      // ریست فرم پس از ثبت موفق
+      setForm(getInitialForm());
+    } catch (error: any) {
+      console.error('❌ [SUPPLY SUBMIT] خطا در ثبت عرضه:', error);
       setErrors([
-        error?.message ||
-          'خطا در ثبت عرضه. لطفاً دوباره تلاش کنید.',
+        error?.message || 'خطا در ثبت عرضه. لطفاً دوباره تلاش کنید.',
       ]);
     } finally {
       setLoading(false);
-
       console.timeEnd('⏱️ TOTAL submit');
-
-      console.log(
-        '========================================',
-      );
-      console.log(
-        '🏁 [SUPPLY SUBMIT] پایان عملیات ثبت عرضه',
-      );
-      console.log(
-        '========================================',
-      );
+      console.log('========================================');
+      console.log('🏁 [SUPPLY SUBMIT] پایان عملیات ثبت عرضه');
+      console.log('========================================');
     }
   };
 
@@ -609,9 +570,7 @@ export default function SupplyRegisterPage() {
                   onError={() => setLogoFailed(true)}
                 />
               ) : (
-                <span className="text-[#1E3A8A] font-black text-5xl">
-                  ب ت
-                </span>
+                <span className="text-[#1E3A8A] font-black text-5xl">ب ت</span>
               )}
             </div>
           </div>
@@ -720,8 +679,8 @@ export default function SupplyRegisterPage() {
                         isActive
                           ? 'scale-110 text-white shadow-lg'
                           : isDone
-                            ? 'text-white'
-                            : 'bg-slate-200 text-slate-500'
+                          ? 'text-white'
+                          : 'bg-slate-200 text-slate-500'
                       }`}
                       style={{
                         background:
@@ -738,8 +697,8 @@ export default function SupplyRegisterPage() {
                         isActive
                           ? 'text-slate-900 font-extrabold'
                           : isDone
-                            ? 'text-teal-700'
-                            : 'text-slate-400'
+                          ? 'text-teal-700'
+                          : 'text-slate-400'
                       }`}
                     >
                       {label}
@@ -749,9 +708,7 @@ export default function SupplyRegisterPage() {
                   {index < wizardSteps.length - 1 && (
                     <div
                       className={`h-0.5 w-4 sm:w-6 ${
-                        step > index
-                          ? 'bg-teal-500'
-                          : 'bg-slate-200'
+                        step > index ? 'bg-teal-500' : 'bg-slate-200'
                       }`}
                     />
                   )}
@@ -806,7 +763,7 @@ export default function SupplyRegisterPage() {
 
         {!submitMessage && (
           <>
-            {/* ===== Step 0 ===== */}
+            {/* ===== Step 0: اطلاعات پایه (شامل TRL و MRL) ===== */}
 
             {step === 0 && (
               <div className="space-y-6">
@@ -816,7 +773,7 @@ export default function SupplyRegisterPage() {
                   </h2>
 
                   <p className="mt-1 text-sm text-slate-500">
-                    عنوان، نوع عرضه، دسته‌بندی، صنعت، فناوری و شهر را مشخص کنید.
+                    عنوان، نوع عرضه، دسته‌بندی، صنعت، فناوری، شهر و سطوح آمادگی را مشخص کنید.
                   </p>
                 </div>
 
@@ -830,7 +787,6 @@ export default function SupplyRegisterPage() {
                     placeholder="مثال: سامانه مدیریت انرژی"
                   />
 
-                  {/* ===== انتخاب نوع عرضه (محصول / خدمت) ===== */}
                   <div className="col-span-1">
                     <label className="mb-2 block text-sm font-bold text-slate-700">
                       نوع عرضه
@@ -900,11 +856,94 @@ export default function SupplyRegisterPage() {
                     icon={<MapPin size={18} />}
                     placeholder="انتخاب شهر"
                   />
+
+                  {/* ===== بخش TRL و MRL (فقط از طریق ارزیابی) ===== */}
+                  <div id="trl-mrl-section" className="col-span-1 md:col-span-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* TRL */}
+                      <div>
+                        <label className="mb-2 block text-sm font-bold text-slate-700">
+                          سطح آمادگی فناوری (TRL)
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="text"
+                            value={form.trl}
+                            readOnly
+                            placeholder="از طریق ارزیابی تعیین می‌شود"
+                            className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none cursor-not-allowed"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              try {
+                                const params = new URLSearchParams();
+                                params.set('return', '/supply/register');
+                                const url = `/trl?${params.toString()}`;
+                                console.log('🚀 رفتن به:', url);
+                                window.location.href = url;
+                              } catch (error) {
+                                console.error('❌ خطا در navigation:', error);
+                                alert('خطا در هدایت به صفحه ارزیابی. لطفاً دوباره تلاش کنید.');
+                              }
+                            }}
+                            className="whitespace-nowrap rounded-2xl bg-[#14B8A6] px-4 py-3 text-sm font-bold text-white shadow-md hover:bg-[#0d9488] transition"
+                          >
+                            ارزیابی خودکار TRL
+                          </button>
+                        </div>
+                        {form.trl_assessed && (
+                          <p className="mt-1 text-xs text-emerald-600">
+                            ✅ این TRL از طریق ارزیابی رسمی تأیید شده است (امتیاز اعتبار بالاتر)
+                          </p>
+                        )}
+                      </div>
+
+                      {/* MRL */}
+                      <div>
+                        <label className="mb-2 block text-sm font-bold text-slate-700">
+                          سطح آمادگی تولید (MRL)
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="text"
+                            value={form.mrl}
+                            readOnly
+                            placeholder="از طریق ارزیابی تعیین می‌شود"
+                            className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none cursor-not-allowed"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              try {
+                                const params = new URLSearchParams();
+                                params.set('return', '/supply/register');
+                                const url = `/mrl?${params.toString()}`;
+                                console.log('🏭 رفتن به:', url);
+                                window.location.href = url;
+                              } catch (error) {
+                                console.error('❌ خطا در navigation:', error);
+                                alert('خطا در هدایت به صفحه ارزیابی. لطفاً دوباره تلاش کنید.');
+                              }
+                            }}
+                            className="whitespace-nowrap rounded-2xl bg-[#14B8A6] px-4 py-3 text-sm font-bold text-white shadow-md hover:bg-[#0d9488] transition"
+                          >
+                            ارزیابی خودکار MRL
+                          </button>
+                        </div>
+                        {form.mrl_assessed && (
+                          <p className="mt-1 text-xs text-emerald-600">
+                            ✅ این MRL از طریق ارزیابی رسمی تأیید شده است (امتیاز اعتبار بالاتر)
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* ===== Step 1 ===== */}
+            {/* ===== Step 1: جزئیات عرضه ===== */}
 
             {step === 1 && (
               <div className="space-y-6">
@@ -914,7 +953,7 @@ export default function SupplyRegisterPage() {
                   </h2>
 
                   <p className="mt-1 text-sm text-slate-500">
-                    توضیحات، مقدار، قیمت و سطح آمادگی فناوری را وارد کنید.
+                    توضیحات، مقدار و قیمت را وارد کنید.
                   </p>
                 </div>
 
@@ -972,20 +1011,11 @@ export default function SupplyRegisterPage() {
                     inputMode="numeric"
                     placeholder="مثلاً ۵۰۰۰۰۰۰۰"
                   />
-
-                  <InputField
-                    label="سطح آمادگی فناوری (TRL)"
-                    value={form.trl}
-                    onChange={(v) => updateForm('trl', v)}
-                    icon={<Cpu size={18} />}
-                    inputMode="numeric"
-                    placeholder="۱ تا ۹"
-                  />
                 </div>
               </div>
             )}
 
-            {/* ===== Step 2 ===== */}
+            {/* ===== Step 2: مستندات ===== */}
 
             {step === 2 && (
               <div className="space-y-6">
@@ -1034,7 +1064,7 @@ export default function SupplyRegisterPage() {
               </div>
             )}
 
-            {/* ===== Step 3 ===== */}
+            {/* ===== Step 3: تأیید و ارسال ===== */}
 
             {step === 3 && (
               <div className="space-y-6">
@@ -1050,53 +1080,30 @@ export default function SupplyRegisterPage() {
 
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                   <SummaryCard title="اطلاعات پایه">
-                    <SummaryRow
-                      label="عنوان"
-                      value={form.title}
-                    />
+                    <SummaryRow label="عنوان" value={form.title} />
                     <SummaryRow
                       label="نوع عرضه"
                       value={form.supply_type === 'product' ? 'محصول' : 'خدمت'}
                     />
-                    <SummaryRow
-                      label="دسته‌بندی"
-                      value={form.category}
-                    />
-                    <SummaryRow
-                      label="صنعت"
-                      value={form.industry || '-'}
-                    />
-                    <SummaryRow
-                      label="فناوری"
-                      value={form.technology || '-'}
-                    />
-                    <SummaryRow
-                      label="شهر"
-                      value={form.city || '-'}
-                    />
+                    <SummaryRow label="دسته‌بندی" value={form.category} />
+                    <SummaryRow label="صنعت" value={form.industry || '-'} />
+                    <SummaryRow label="فناوری" value={form.technology || '-'} />
+                    <SummaryRow label="شهر" value={form.city || '-'} />
+                    <SummaryRow label="TRL" value={form.trl || '-'} />
+                    {form.trl_assessed && (
+                      <SummaryRow label="وضعیت TRL" value="✅ تأیید شده با ارزیابی" />
+                    )}
+                    <SummaryRow label="MRL" value={form.mrl || '-'} />
+                    {form.mrl_assessed && (
+                      <SummaryRow label="وضعیت MRL" value="✅ تأیید شده با ارزیابی" />
+                    )}
                   </SummaryCard>
 
                   <SummaryCard title="جزئیات عرضه">
-                    <SummaryRow
-                      label="توضیحات"
-                      value={form.description}
-                    />
-                    <SummaryRow
-                      label="مقدار"
-                      value={form.quantity}
-                    />
-                    <SummaryRow
-                      label="واحد"
-                      value={form.unit}
-                    />
-                    <SummaryRow
-                      label="قیمت"
-                      value={`${form.price} تومان`}
-                    />
-                    <SummaryRow
-                      label="TRL"
-                      value={form.trl || '-'}
-                    />
+                    <SummaryRow label="توضیحات" value={form.description} />
+                    <SummaryRow label="مقدار" value={form.quantity} />
+                    <SummaryRow label="واحد" value={form.unit} />
+                    <SummaryRow label="قیمت" value={`${form.price} تومان`} />
                   </SummaryCard>
 
                   <SummaryCard title="مستندات">
@@ -1225,9 +1232,7 @@ function InputField({
       </div>
 
       {error && (
-        <p className="mt-1 text-xs text-red-500">
-          {error}
-        </p>
+        <p className="mt-1 text-xs text-red-500">{error}</p>
       )}
     </div>
   );
@@ -1287,9 +1292,7 @@ function SelectField({
       </div>
 
       {error && (
-        <p className="mt-1 text-xs text-red-500">
-          {error}
-        </p>
+        <p className="mt-1 text-xs text-red-500">{error}</p>
       )}
     </div>
   );
@@ -1372,9 +1375,7 @@ function FileUploadCard({
         type="button"
         onClick={() => fileInputRef.current?.click()}
         className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white shadow-md transition ${
-          isFull
-            ? 'opacity-50 cursor-not-allowed'
-            : 'hover:scale-[1.01]'
+          isFull ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.01]'
         }`}
         style={{
           background: isFull
@@ -1417,13 +1418,7 @@ function SummaryCard({
   );
 }
 
-function SummaryRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1 border-b border-slate-200 pb-2 last:border-b-0 last:pb-0">
       <span className="text-xs font-bold text-slate-500">

@@ -21,7 +21,8 @@ export function WalletContextProvider({ children }: { children: React.ReactNode 
 
   return (
     <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect>
+      {/* ✅ اصلاح: autoConnect را به false تغییر دهید یا حذف کنید */}
+      <WalletProvider wallets={wallets} autoConnect={false}>
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>

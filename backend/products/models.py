@@ -1,7 +1,6 @@
-# ============================================================
 # products/models.py
 # ============================================================
-# اصلاح‌شده: اضافه شدن فیلد view_count به مدل Supply
+# اصلاح‌شده: اضافه شدن فیلدهای mrl, mrl_assessed, trl_assessed
 # ============================================================
 
 from django.db import models
@@ -204,7 +203,7 @@ class Product(models.Model):
 
 
 # ============================================================
-# Supply
+# Supply (ویرایش‌شده با فیلدهای جدید ارزیابی)
 # ============================================================
 
 class Supply(models.Model):
@@ -289,11 +288,29 @@ class Supply(models.Model):
         verbose_name='قیمت (تومان)'
     )
 
+    # ===== فیلدهای مرتبط با ارزیابی (جدید) =====
     trl = models.CharField(
         max_length=10,
         blank=True,
-        verbose_name='سطح آمادگی فناوری'
+        verbose_name='سطح آمادگی فناوری (TRL)'
     )
+
+    trl_assessed = models.BooleanField(
+        default=False,
+        verbose_name='TRL تأیید شده با ارزیابی'
+    )
+
+    mrl = models.CharField(
+        max_length=10,
+        blank=True,
+        verbose_name='سطح آمادگی تولید (MRL)'
+    )
+
+    mrl_assessed = models.BooleanField(
+        default=False,
+        verbose_name='MRL تأیید شده با ارزیابی'
+    )
+    # ============================================
 
     documents = models.JSONField(
         default=list,
@@ -308,7 +325,6 @@ class Supply(models.Model):
         verbose_name='وضعیت'
     )
 
-    # ===== فیلد جدید: تعداد بازدید =====
     view_count = models.IntegerField(
         default=0,
         verbose_name='تعداد بازدید'
@@ -385,12 +401,10 @@ class SupplyImage(models.Model):
 
 
 # ============================================================
-# products/models.py (ادامه)
+# Favorite
 # ============================================================
+
 class Favorite(models.Model):
-    """
-    مدل علاقه‌مندی کاربران برای محصولات و عرضه‌ها
-    """
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -446,6 +460,7 @@ class Favorite(models.Model):
         return f"{self.user.email} ❤️ (نامشخص)"
 
     def clean(self):
+        from django.core.exceptions import ValidationError
         if not self.product and not self.supply:
             raise ValidationError('حداقل یکی از فیلدهای product یا supply باید مقدار داشته باشد.')
         if self.product and self.supply:

@@ -24,3 +24,631 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ===== استایل‌های صفحه TRL ===== */
+
+.trl-page-container {
+  font-family: 'Vazirmatn', sans-serif;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f0f4ff 0%, #e8edf5 100%);
+  padding: 2rem 1rem;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.trl-card {
+  max-width: 900px;
+  width: 100%;
+  background: #ffffff;
+  border-radius: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
+  padding: 2.5rem;
+  margin: 0 auto;
+}
+
+.trl-header {
+  text-align: center;
+  margin-bottom: 2rem;
+  border-bottom: 2px solid #eef2f7;
+  padding-bottom: 1.5rem;
+}
+
+.trl-title {
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: #1a2332;
+  margin-bottom: 0.5rem;
+}
+
+.trl-subtitle {
+  font-size: 1rem;
+  color: #6b7a8f;
+}
+
+.trl-intro {
+  margin-bottom: 2rem;
+}
+
+.trl-intro-box {
+  background: #f8faff;
+  border-radius: 16px;
+  padding: 1.5rem;
+  border-right: 4px solid #2563eb;
+  margin-bottom: 1.5rem;
+}
+
+.trl-intro-box h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1a2332;
+  margin-bottom: 0.75rem;
+}
+
+.trl-intro-box p {
+  font-size: 0.95rem;
+  line-height: 1.8;
+  color: #334155;
+  margin-bottom: 0.5rem;
+}
+
+.trl-responsibility {
+  background: #fef3c7;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  color: #92400e;
+  margin-top: 0.75rem;
+}
+
+.trl-confirmation-box {
+  background: #f1f5f9;
+  border-radius: 16px;
+  padding: 1.25rem;
+  border: 2px solid #e2e8f0;
+  transition: border-color 0.3s;
+}
+
+.trl-confirmation-box:has(input:checked) {
+  border-color: #2563eb;
+  background: #f0f7ff;
+}
+
+.trl-confirmation-label {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.trl-confirmation-checkbox {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  accent-color: #2563eb;
+  flex-shrink: 0;
+}
+
+.trl-confirmation-text {
+  font-size: 0.9rem;
+  line-height: 1.7;
+  color: #334155;
+}
+
+.trl-form {
+  margin-top: 1.5rem;
+}
+
+.trl-level-card {
+  background: #fafcff;
+  border: 1px solid #e9edf4;
+  border-radius: 16px;
+  margin-bottom: 1rem;
+  overflow: hidden;
+  transition: box-shadow 0.2s;
+}
+
+.trl-level-card:hover {
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.06);
+}
+
+.trl-level-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  cursor: pointer;
+  background: #ffffff;
+  transition: background 0.2s;
+  user-select: none;
+}
+
+.trl-level-header:hover {
+  background: #f8faff;
+}
+
+.trl-level-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.trl-level-number {
+  font-weight: 800;
+  font-size: 1rem;
+  color: #2563eb;
+  background: #e8f0fe;
+  padding: 0.2rem 0.8rem;
+  border-radius: 20px;
+}
+
+.trl-level-label {
+  font-weight: 600;
+  font-size: 1rem;
+  color: #1a2332;
+}
+
+.trl-level-stats {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.trl-level-status {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.15rem 0.6rem;
+  border-radius: 12px;
+  background: #e9edf4;
+  color: #6b7a8f;
+}
+
+.trl-level-status.complete {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.trl-level-status.incomplete {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.trl-level-toggle {
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  font-weight: 300;
+  color: #94a3b8;
+  cursor: pointer;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.trl-level-toggle:hover {
+  background: #e9edf4;
+}
+
+.trl-level-content {
+  padding: 0 1.5rem 1.5rem 1.5rem;
+  border-top: 1px solid #e9edf4;
+}
+
+.trl-bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0 1.25rem 0;
+  padding: 0.75rem;
+  background: #f8faff;
+  border-radius: 12px;
+  border: 1px dashed #dbe1ed;
+}
+
+.trl-bulk-btn {
+  padding: 0.35rem 0.9rem;
+  border: none;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'Vazirmatn', sans-serif;
+}
+
+.trl-bulk-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.trl-bulk-yes {
+  background: #dcfce7;
+  color: #166534;
+}
+.trl-bulk-yes:hover {
+  background: #bbf7d0;
+}
+
+.trl-bulk-no {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.trl-bulk-no:hover {
+  background: #fecaca;
+}
+
+.trl-bulk-partial {
+  background: #fef3c7;
+  color: #92400e;
+}
+.trl-bulk-partial:hover {
+  background: #fde68a;
+}
+
+.trl-bulk-unknown {
+  background: #e5e7eb;
+  color: #4b5563;
+}
+.trl-bulk-unknown:hover {
+  background: #d1d5db;
+}
+
+.trl-questions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.trl-question {
+  background: #ffffff;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1px solid #eef2f7;
+  transition: border-color 0.2s;
+}
+
+.trl-question:hover {
+  border-color: #cbd5e1;
+}
+
+.trl-question-text {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #1a2332;
+  margin-bottom: 0.5rem;
+  line-height: 1.6;
+}
+
+.trl-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.trl-option {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: #334155;
+  cursor: pointer;
+  padding: 0.2rem 0.5rem;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+
+.trl-option:hover {
+  background: #f1f5f9;
+}
+
+.trl-option input[type="radio"] {
+  accent-color: #2563eb;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.trl-evidence {
+  margin-top: 0.5rem;
+}
+
+.trl-evidence-input {
+  width: 100%;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-family: 'Vazirmatn', sans-serif;
+  background: #fafcff;
+  transition: border-color 0.2s;
+  outline: none;
+}
+
+.trl-evidence-input:focus {
+  border-color: #2563eb;
+}
+
+.trl-submit-btn {
+  width: 100%;
+  padding: 1rem;
+  margin-top: 2rem;
+  border: none;
+  border-radius: 16px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-family: 'Vazirmatn', sans-serif;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
+}
+
+.trl-submit-btn:hover:not(.disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.35);
+}
+
+.trl-submit-btn.disabled {
+  background: #94a3b8;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.trl-result-container {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 16px;
+}
+
+.trl-badge {
+  background: #15803d;
+  color: white;
+  padding: 1rem;
+  border-radius: 12px;
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.trl-number {
+  font-size: 2.5rem;
+  font-weight: 800;
+  display: block;
+}
+
+.trl-next-level {
+  margin-top: 1rem;
+}
+
+.trl-next-level ul {
+  list-style: disc;
+  padding-right: 1.5rem;
+  margin: 0.5rem 0;
+}
+
+.trl-achieved {
+  margin-top: 1rem;
+}
+
+.trl-achieved ul {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+}
+
+.trl-achieved li {
+  padding: 0.3rem 0;
+  border-bottom: 1px solid #e9edf4;
+}
+
+@media (max-width: 640px) {
+  .trl-card {
+    padding: 1.25rem;
+  }
+  .trl-title {
+    font-size: 1.6rem;
+  }
+  .trl-level-header {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .trl-level-info {
+    flex-wrap: wrap;
+  }
+  .trl-bulk-actions {
+    justify-content: center;
+  }
+  .trl-options {
+    gap: 0.4rem;
+  }
+  .trl-option {
+    font-size: 0.8rem;
+  }
+}
+/* ===== استایل‌های اضافی برای بهبود UI ===== */
+
+/* Toast / Notification */
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-slide-down {
+  animation: slide-down 0.3s ease-out;
+}
+
+/* نشانگرهای سطح */
+.trl-badge-info {
+  display: inline-block;
+  background: #eff6ff;
+  color: #2563eb;
+  padding: 0.4rem 1.2rem;
+  border-radius: 30px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-top: 0.5rem;
+}
+
+.trl-intro-icon {
+  font-size: 2rem;
+  margin-left: 1rem;
+  flex-shrink: 0;
+}
+
+.trl-intro-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.trl-required-badge {
+  background: #fee2e2;
+  color: #dc2626;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.15rem 0.6rem;
+  border-radius: 12px;
+}
+
+.trl-complete-badge {
+  background: #dcfce7;
+  color: #166534;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.15rem 0.6rem;
+  border-radius: 12px;
+}
+
+/* نوار پیشرفت */
+.trl-progress-bar {
+  width: 60px;
+  height: 4px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.trl-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2563eb, #14b8a6);
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+
+/* کارت سطح */
+.trl-level-card {
+  transition: all 0.3s ease;
+  border: 2px solid #e9edf4;
+}
+
+.trl-level-card.complete {
+  border-color: #bbf7d0;
+  background: #fafffe;
+}
+
+.trl-level-card.required {
+  border-color: #fef3c7;
+}
+
+.trl-level-card.required.complete {
+  border-color: #bbf7d0;
+}
+
+/* استایل سوالات */
+.trl-question {
+  transition: all 0.2s ease;
+  border: 1px solid #f1f5f9;
+}
+
+.trl-question:has(input[type="radio"]:checked[value="yes"]) {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.trl-question:has(input[type="radio"]:checked[value="no"]) {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
+.trl-question:has(input[type="radio"]:checked[value="partial"]) {
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+
+.trl-question:has(input[type="radio"]:checked[value="unknown"]) {
+  border-color: #d1d5db;
+  background: #f9fafb;
+}
+
+/* اسپینر بارگذاری */
+.trl-spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+/* به src/app/globals.css اضافه کنید اگر وجود ندارند */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.trl-auth-warning {
+  background: #fef3c7;
+  color: #92400e;
+  padding: 0.7rem 1.2rem;
+  border-radius: 12px;
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  display: inline-block;
+}
+
+.trl-login-link {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.trl-login-link:hover {
+  color: #1d4ed8;
+}
+
+.trl-back-btn {
+  padding: 0.75rem 2rem;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
+}
+
+.trl-back-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.35);
+}
