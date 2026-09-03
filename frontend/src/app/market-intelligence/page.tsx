@@ -1,5 +1,8 @@
-// analytics/page.tsx
-// نسخه نهایی با قابلیت انتخاب محصول توسط کاربر + بررسی احراز هویت
+// ============================================================
+// FILE: frontend/src/app/market-intelligence/page.tsx
+// ============================================================
+// نسخه نهایی - نقشه حرارتی حرفه‌ای (ماتریسی) و قیف تعاملی با recharts
+// ============================================================
 
 'use client';
 
@@ -32,6 +35,17 @@ import {
   ChevronDown,
   ChevronUp,
   Award,
+  Shield,
+  MapPin,
+  Scale,
+  MessageCircle,
+  Heart,
+  ShoppingCart,
+  Wrench,
+  Grid3X3,
+  List,
+  SlidersHorizontal,
+  X,
 } from 'lucide-react';
 
 import {
@@ -50,6 +64,13 @@ import {
   Cell,
   BarChart as ReBarChart,
   Bar,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  Funnel,
+  FunnelChart,
 } from 'recharts';
 
 import { authenticatedFetch, useAuthStore } from '@/store/auth-store';
@@ -70,7 +91,7 @@ const COLORS = [
 ];
 
 // ============================================================
-// Types (بدون تغییر)
+// Types
 // ============================================================
 
 interface TrendPoint {
@@ -91,7 +112,6 @@ interface HeatmapItem {
   trend: 'up' | 'stable' | 'down';
 }
 
-// نوع رقیب از بک‌اند (بر اساس analize_competitors_for_product)
 interface CompetitorFromAPI {
   rank: number;
   seller_id: number;
@@ -315,7 +335,67 @@ interface MarketIntelligenceData {
 }
 
 // ============================================================
-// API Helpers (بدون تغییر)
+// Helper: Normalize String
+// ============================================================
+
+const normalizeString = (str?: string | null): string => {
+  if (!str) return '';
+  return str.trim().toLowerCase();
+};
+
+// ============================================================
+// Helper: Normalize Category Name (فقط محصول و خدمت)
+// ============================================================
+
+function normalizeCategoryName(category: string): string {
+  if (!category) return 'خدمت';
+  const lower = category.toLowerCase().trim();
+  if (
+    lower.includes('محصول') ||
+    lower.includes('product') ||
+    lower === 'product' ||
+    lower === 'goods' ||
+    lower === 'physical' ||
+    lower === 'asset' ||
+    lower === 'equipment' ||
+    lower === 'hardware' ||
+    lower === 'data' ||
+    lower === 'ai'
+  ) {
+    return 'محصول';
+  }
+  return 'خدمت';
+}
+
+// ============================================================
+// Helper: Supply -> TopItem (برای محصولات برتر)
+// ============================================================
+
+interface SupplyApi {
+  id: number;
+  title: string;
+  category?: string;
+  industry?: string | null;
+  technology?: string | null;
+  city?: string | null;
+  view_count?: number;
+  quality_indicator?: number;
+  seller_name?: string | null;
+  created_at?: string | null;
+}
+
+function supplyToTopItem(supply: SupplyApi): TopItem {
+  return {
+    title: supply.title,
+    views: supply.view_count ?? 0,
+    rating: supply.quality_indicator ? Math.round((supply.quality_indicator / 100) * 5 * 10) / 10 : 0,
+    industry: supply.industry || 'کل بازار',
+    tech: supply.technology || '—',
+  };
+}
+
+// ============================================================
+// API Helpers
 // ============================================================
 
 function getApiBaseUrl(): string {
@@ -379,7 +459,7 @@ async function extractApiError(response: Response): Promise<string> {
 }
 
 // ============================================================
-// Normalize Market Intelligence (بدون تغییر)
+// Normalize Market Intelligence
 // ============================================================
 
 function normalizeMarketIntelligence(raw: any): MarketIntelligenceData {
@@ -440,23 +520,50 @@ function normalizeMarketIntelligence(raw: any): MarketIntelligenceData {
     trend: Number(item.percentage) >= 20 ? 'up' : 'stable',
   }));
 
-  const categoryNameMap: Record<string, string> = {
-    product: 'محصول',
-    service: 'خدمت',
-  };
+  // ---------- اصلاح: سهم بازار فقط دو دسته محصول و خدمت ----------
+  const marketShareMap: Record<string, number> = {};
+  categories.forEach((item) => {
+    const normalized = normalizeCategoryName(item.category);
+    const percentage = Number(item.percentage) || 0;
+    marketShareMap[normalized] = (marketShareMap[normalized] || 0) + percentage;
+  });
 
-  const marketShare: MarketShareItem[] = categories.map((item) => ({
-    name: categoryNameMap[item.category] || item.category,
-    value: Number(item.percentage) || 0,
-  }));
+  if (Object.keys(marketShareMap).length === 0) {
+    const total = Number(summary.total_products) || 0;
+    const services = Number(summary.total_services) || 0;
+    const products = total - services;
+    if (total > 0) {
+      if (products > 0) marketShareMap['محصول'] = (products / total) * 100;
+      if (services > 0) marketShareMap['خدمت'] = (services / total) * 100;
+    }
+  }
 
-  const topProducts: TopItem[] = topProductsRaw.slice(0, 10).map((p) => ({
-    title: p.title,
-    views: p.view_count || 0,
-    rating: p.quality_indicator ? Math.round((p.quality_indicator / 100) * 5 * 10) / 10 : 0,
-    industry: p.industry || 'کل بازار',
-    tech: '—',
-  }));
+  if (Object.keys(marketShareMap).length === 0) {
+    marketShareMap['محصول'] = 60;
+    marketShareMap['خدمت'] = 40;
+  }
+
+  const finalMarketShare: MarketShareItem[] = [];
+  if (marketShareMap['محصول'] !== undefined) {
+    finalMarketShare.push({ name: 'محصول', value: Math.round(marketShareMap['محصول'] * 100) / 100 });
+  }
+  if (marketShareMap['خدمت'] !== undefined) {
+    finalMarketShare.push({ name: 'خدمت', value: Math.round(marketShareMap['خدمت'] * 100) / 100 });
+  }
+  if (finalMarketShare.length === 1) {
+    const existing = finalMarketShare[0];
+    const otherName = existing.name === 'محصول' ? 'خدمت' : 'محصول';
+    finalMarketShare.push({ name: otherName, value: Math.round((100 - existing.value) * 100) / 100 });
+  }
+  if (finalMarketShare.length === 0) {
+    finalMarketShare.push({ name: 'محصول', value: 60 });
+    finalMarketShare.push({ name: 'خدمت', value: 40 });
+  }
+
+  const marketShare = finalMarketShare;
+
+  // NOTE: topProducts بعداً از داده‌های واقعی بازار بازسازی خواهد شد
+  const topProducts: TopItem[] = [];
 
   const topNeeds: TopItem[] = [
     {
@@ -574,7 +681,134 @@ function normalizeMarketIntelligence(raw: any): MarketIntelligenceData {
 }
 
 // ============================================================
-// Competitor Card Component (بدون تغییر)
+// Heatmap Professional (ماتریسی با گرادیان و Tooltip)
+// ============================================================
+
+const HeatmapMatrix = ({ data }: { data: HeatmapItem[] }) => {
+  // مرتب‌سازی بر اساس رشد تقاضا
+  const sorted = [...data].sort((a, b) => b.demandGrowth - a.demandGrowth);
+  const maxDemand = Math.max(...sorted.map(d => d.demandGrowth), 0);
+  const maxSupply = Math.max(...sorted.map(d => d.supplyCount), 0);
+
+  // تابع رنگ‌آمیزی با گرادیان از آبی به قرمز (شبیه matplotlib)
+  const getColor = (value: number, max: number) => {
+    if (max === 0) return '#E2E8F0';
+    const ratio = Math.min(value / max, 1);
+    // تبدیل به RGB (از آبی روشن به قرمز تند)
+    const r = Math.round(30 + 225 * ratio);
+    const g = Math.round(180 - 160 * ratio);
+    const b = Math.round(140 - 120 * ratio);
+    return `rgb(${r}, ${g}, ${b})`;
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-slate-50 border-b border-slate-200">
+              <th className="p-3 text-right text-xs font-bold text-slate-600">صنعت</th>
+              <th className="p-3 text-center text-xs font-bold text-slate-600">رشد تقاضا (%)</th>
+              <th className="p-3 text-center text-xs font-bold text-slate-600">تعداد عرضه</th>
+              <th className="p-3 text-center text-xs font-bold text-slate-600">وضعیت</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((item) => (
+              <tr key={item.industry} className="border-b border-slate-100 hover:bg-slate-50/70 transition-colors">
+                <td className="p-3 text-right text-sm font-medium text-slate-700">{item.industry}</td>
+                <td
+                  className="p-3 text-center text-sm font-bold text-white"
+                  style={{ backgroundColor: getColor(item.demandGrowth, maxDemand) }}
+                  title={`رشد تقاضا: ${item.demandGrowth.toFixed(1)}%`}
+                >
+                  {item.demandGrowth.toFixed(1)}%
+                </td>
+                <td
+                  className="p-3 text-center text-sm font-bold text-white"
+                  style={{ backgroundColor: getColor(item.supplyCount, maxSupply) }}
+                  title={`تعداد عرضه: ${item.supplyCount}`}
+                >
+                  {item.supplyCount}
+                </td>
+                <td className="p-3 text-center">
+                  <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-bold border ${
+                    item.activityLevel === 'hot'
+                      ? 'bg-red-50 text-red-600 border-red-200'
+                      : item.activityLevel === 'warm'
+                      ? 'bg-amber-50 text-amber-600 border-amber-200'
+                      : 'bg-blue-50 text-blue-600 border-blue-200'
+                  }`}>
+                    {item.activityLevel === 'hot' ? '🔥' : item.activityLevel === 'warm' ? '🌤️' : '❄️'}
+                    {item.activityLevel === 'hot' ? 'داغ' : item.activityLevel === 'warm' ? 'گرم' : 'سرد'}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {/* مقیاس رنگ */}
+      <div className="flex items-center justify-between px-4 py-2 bg-slate-50 border-t border-slate-200 text-xs text-slate-500">
+        <div className="flex items-center gap-2">
+          <span>کم</span>
+          <div className="w-32 h-2 rounded-full bg-gradient-to-r from-blue-400 via-green-400 to-red-500" />
+          <span>زیاد</span>
+        </div>
+        <span>مقدار بالاتر = تقاضای بیشتر</span>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================
+// Funnel Chart Component (قیف نیازها)
+// ============================================================
+
+const NeedsFunnel = ({ needs }: { needs: { total: number; receiving_proposals: number; matched: number; evaluating: number } }) => {
+  const data = [
+    { name: 'کل نیازها', value: needs.total || 0 },
+    { name: 'در حال دریافت پیشنهاد', value: needs.receiving_proposals || 0 },
+    { name: 'Match شده', value: needs.matched || 0 },
+    { name: 'در حال ارزیابی', value: needs.evaluating || 0 },
+  ];
+
+  // رنگ‌های متناسب با مراحل قیف
+  const funnelColors = ['#1E3A8A', '#3B82F6', '#14B8A6', '#D4A547'];
+
+  return (
+    <div className="w-full h-64">
+      <ResponsiveContainer width="100%" height="100%">
+        <FunnelChart>
+          <Tooltip formatter={(value) => `${value.toLocaleString('fa-IR')}`} />
+          <Funnel
+            data={data}
+            dataKey="value"
+            nameKey="name"
+            fill="#1E3A8A"
+            stroke="#1E3A8A"
+            strokeWidth={1}
+          >
+            {data.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={funnelColors[index % funnelColors.length]} />
+            ))}
+          </Funnel>
+        </FunnelChart>
+      </ResponsiveContainer>
+      <div className="flex justify-center gap-4 mt-2 text-xs text-slate-500 flex-wrap">
+        {data.map((item, i) => (
+          <span key={i} className="flex items-center gap-1">
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: funnelColors[i % funnelColors.length] }} />
+            {item.name}: {item.value.toLocaleString('fa-IR')}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ============================================================
+// Competitor Card Component
 // ============================================================
 
 const CompetitorCard = ({ competitor, isTop }: { competitor: CompetitorFromAPI; isTop: boolean }) => {
@@ -690,7 +924,7 @@ const CompetitorCard = ({ competitor, isTop }: { competitor: CompetitorFromAPI; 
 };
 
 // ============================================================
-// Empty State (بدون تغییر)
+// Empty State
 // ============================================================
 
 const EmptyState = ({ message, subMessage }: { message: string; subMessage?: string }) => (
@@ -708,7 +942,7 @@ const EmptyState = ({ message, subMessage }: { message: string; subMessage?: str
 // ============================================================
 
 export default function MarketIntelligencePage() {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const { isAuthenticated, isLoading: authLoading, accessToken } = useAuthStore();
 
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -725,6 +959,9 @@ export default function MarketIntelligencePage() {
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
   const [productOptions, setProductOptions] = useState<{ id: number; title: string }[]>([]);
 
+  // State برای محصولات برتر از داده‌های واقعی بازار
+  const [realTopProducts, setRealTopProducts] = useState<TopItem[]>([]);
+
   const [selectedIndustry, setSelectedIndustry] = useState('all');
   const [selectedRegion, setSelectedRegion] = useState('all');
   const [selectedTech, setSelectedTech] = useState('all');
@@ -733,11 +970,53 @@ export default function MarketIntelligencePage() {
   const [toast, setToast] = useState<string | null>(null);
 
   // ==========================================================
+  // Fetch Real Supplies (برای محصولات برتر)
+  // ==========================================================
+
+  const fetchRealSupplies = useCallback(async () => {
+    if (!accessToken || !isAuthenticated) return;
+
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/products/supplies/`, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        console.warn('Failed to fetch supplies for top products');
+        return;
+      }
+
+      const rawData = await response.json();
+      const supplies: SupplyApi[] = Array.isArray(rawData) ? rawData : Array.isArray(rawData?.results) ? rawData.results : [];
+
+      const sorted = supplies
+        .filter((s) => s.view_count !== undefined && s.view_count !== null)
+        .sort((a, b) => (b.view_count || 0) - (a.view_count || 0))
+        .slice(0, 10);
+
+      const topItems = sorted.map(supplyToTopItem);
+
+      if (topItems.length < 5) {
+        const fallback = supplies
+          .filter((s) => s.view_count === undefined || s.view_count === null || s.view_count === 0)
+          .slice(0, 10 - topItems.length)
+          .map(supplyToTopItem);
+        topItems.push(...fallback);
+      }
+
+      setRealTopProducts(topItems);
+    } catch (err) {
+      console.error('Error fetching supplies for top products:', err);
+    }
+  }, [accessToken, isAuthenticated]);
+
+  // ==========================================================
   // Fetch Competitor Data
   // ==========================================================
 
   const fetchCompetitorData = useCallback(async (productId: number | null = null) => {
-    // اگر احراز هویت نشده، بارگذاری نکن
     if (!isAuthenticated) {
       setCompetitorLoading(false);
       return;
@@ -754,7 +1033,6 @@ export default function MarketIntelligencePage() {
         url += `&product=${productId}`;
       }
 
-      // اضافه کردن فیلترهای صنعت و دسته در صورت نیاز
       if (selectedIndustry !== 'all') {
         url += `&industry=${selectedIndustry}`;
       }
@@ -813,7 +1091,6 @@ export default function MarketIntelligencePage() {
 
   const fetchMarketData = useCallback(
     async (showLoading = true) => {
-      // اگر احراز هویت نشده، بارگذاری نکن
       if (!isAuthenticated) {
         setLoading(false);
         setRefreshing(false);
@@ -901,7 +1178,6 @@ export default function MarketIntelligencePage() {
           setError(null);
           console.log('✅ Normalized Market Intelligence:', normalizedData);
 
-          // ساخت لیست محصولات برای dropdown
           if (normalizedData.top_products && normalizedData.top_products.length > 0) {
             const options = normalizedData.top_products.map((p) => ({
               id: p.product_id,
@@ -909,20 +1185,19 @@ export default function MarketIntelligencePage() {
             }));
             setProductOptions(options);
 
-            // اگر محصولی انتخاب نشده بود، اولین محصول را به عنوان پیش‌فرض انتخاب کن
             if (selectedProductId === null && options.length > 0) {
               setSelectedProductId(options[0].id);
               await fetchCompetitorData(options[0].id);
             } else if (selectedProductId !== null) {
-              // اگر محصولی انتخاب شده، داده‌های رقبا را برای همان محصول بگیر
               await fetchCompetitorData(selectedProductId);
             }
           } else {
-            // اگر محصولی وجود نداشت، حالت کلی بازار را نمایش بده
             setProductOptions([]);
             setSelectedProductId(null);
             await fetchCompetitorData(null);
           }
+
+          await fetchRealSupplies();
 
           return;
         } catch (normalizeError) {
@@ -945,7 +1220,7 @@ export default function MarketIntelligencePage() {
         setRefreshing(false);
       }
     },
-    [selectedIndustry, selectedRegion, selectedTech, selectedTimeRange, selectedProductId, fetchCompetitorData, isAuthenticated]
+    [selectedIndustry, selectedRegion, selectedTech, selectedTimeRange, selectedProductId, fetchCompetitorData, fetchRealSupplies, isAuthenticated]
   );
 
   // ==========================================================
@@ -1010,7 +1285,7 @@ export default function MarketIntelligencePage() {
 
   const filteredEmergingTechs = useMemo(() => data?.emergingTechs || [], [data?.emergingTechs]);
   const filteredTopNeeds = useMemo(() => data?.topNeeds || [], [data?.topNeeds]);
-  const filteredTopProducts = useMemo(() => data?.topProducts || [], [data?.topProducts]);
+  const filteredTopProducts = useMemo(() => realTopProducts.length > 0 ? realTopProducts : data?.topProducts || [], [realTopProducts, data?.topProducts]);
   const filteredGapData = useMemo(() => data?.gapAnalysis || [], [data?.gapAnalysis]);
 
   // ==========================================================
@@ -1091,7 +1366,7 @@ export default function MarketIntelligencePage() {
             برای مشاهده تحلیل بازار، باید وارد حساب کاربری خود شوید.
           </p>
           <Link
-            href="/login?next=/analytics"
+            href="/login?next=/market-intelligence"
             className="inline-flex items-center justify-center w-full py-3 px-6 rounded-xl bg-gradient-to-r from-[#1E3A8A] to-[#14B8A6] text-white font-bold shadow-lg hover:shadow-xl transition"
           >
             ورود به حساب کاربری
@@ -1145,7 +1420,7 @@ export default function MarketIntelligencePage() {
   }
 
   // ==========================================================
-  // Render (بدون تغییر)
+  // Render
   // ==========================================================
 
   return (
@@ -1425,60 +1700,27 @@ export default function MarketIntelligencePage() {
                   <Thermometer size={20} className="text-[#14B8A6]" /> نقشه حرارتی صنایع
                 </h2>
                 {filteredHeatmap.length > 0 ? (
-                  <div className="space-y-3 max-h-[500px] overflow-y-auto">
-                    {filteredHeatmap.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition border border-transparent hover:border-slate-200">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-3 h-3 rounded-full ${item.activityLevel === 'hot' ? 'bg-red-500' : item.activityLevel === 'warm' ? 'bg-amber-500' : 'bg-blue-500'}`} />
-                          <div>
-                            <p className="text-sm font-bold text-slate-800">{item.industry}</p>
-                            <p className="text-xs text-slate-500">{item.supplyCount} محصول | {Number(item.dealValue || 0).toLocaleString()} میلیون تومان</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <p className="text-sm font-bold text-emerald-600">+{item.demandGrowth}٪</p>
-                            <p className="text-xs text-slate-400">رشد تقاضا</p>
-                          </div>
-                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getActivityColor(item.activityLevel)}`}>
-                            {getTrendIcon(item.trend)}
-                            {getActivityLabel(item.activityLevel)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <HeatmapMatrix data={filteredHeatmap} />
                 ) : (
                   <EmptyState message="هیچ داده‌ای برای نقشه حرارتی وجود ندارد" subMessage="فیلترهای خود را تغییر دهید" />
                 )}
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-white p-6">
-                <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center justify-between mb-3">
                   <div>
                     <p className="text-xs text-slate-400">وضعیت تقاضای بازار</p>
                     <h2 className="text-base font-black text-slate-900 mt-1">قیف نیازها</h2>
                   </div>
-                  <div className="p-3 rounded-xl bg-amber-50 text-amber-700"><Target size={20} /></div>
+                  <div className="p-2 rounded-xl bg-amber-50 text-amber-700">
+                    <Target size={18} />
+                  </div>
                 </div>
-                <div className="space-y-4">
-                  {[
-                    { label: 'کل نیازها', value: data?.needs?.total ?? 0, width: 100, className: 'bg-slate-700' },
-                    { label: 'در حال دریافت پیشنهاد', value: data?.needs?.receiving_proposals ?? 0, width: data?.needs?.total ? ((data.needs.receiving_proposals / data.needs.total) * 100) : 0, className: 'bg-blue-600' },
-                    { label: 'Match شده', value: data?.needs?.matched ?? 0, width: data?.needs?.total ? ((data.needs.matched / data.needs.total) * 100) : 0, className: 'bg-emerald-600' },
-                    { label: 'در حال ارزیابی', value: data?.needs?.evaluating ?? 0, width: data?.needs?.total ? ((data.needs.evaluating / data.needs.total) * 100) : 0, className: 'bg-amber-500' },
-                  ].map((item) => (
-                    <div key={item.label}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-slate-500">{item.label}</span>
-                        <strong className="text-xs text-slate-700">{Number(item.value).toLocaleString('fa-IR')}</strong>
-                      </div>
-                      <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-                        <div className={`h-full rounded-full ${item.className}`} style={{ width: `${Math.min(100, Math.max(0, item.width))}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                {data?.needs ? (
+                  <NeedsFunnel needs={data.needs} />
+                ) : (
+                  <div className="text-center py-4 text-slate-400 text-sm">داده‌ای برای نمایش وجود ندارد</div>
+                )}
               </div>
             </div>
 
@@ -1488,7 +1730,7 @@ export default function MarketIntelligencePage() {
                   <PieChart size={20} className="text-[#1E3A8A]" /> سهم بازار بر اساس دسته‌بندی
                 </h2>
                 {data?.marketShare && data.marketShare.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={280}>
+                  <ResponsiveContainer width="100%" height={300}>
                     <RePieChart>
                       <Pie
                         data={data.marketShare}
@@ -1496,13 +1738,15 @@ export default function MarketIntelligencePage() {
                         cy="50%"
                         outerRadius={100}
                         dataKey="value"
-                        label={({ name, value }) => `${name} (${value}%)`}
+                        labelLine={true}
+                        label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
                       >
                         {data.marketShare.map((_, i) => (
                           <Cell key={i} fill={COLORS[i % COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip />
+                      <Tooltip formatter={(value) => `${value}%`} />
+                      <Legend />
                     </RePieChart>
                   </ResponsiveContainer>
                 ) : (
@@ -1543,6 +1787,7 @@ export default function MarketIntelligencePage() {
               </div>
             </div>
 
+            {/* ===== محصولات برتر با داده‌های واقعی ===== */}
             <div className="rounded-2xl border border-slate-200 bg-white p-6">
               <h2 className="text-base font-extrabold text-slate-900 mb-4 flex items-center gap-2">
                 <Eye size={20} className="text-[#1E3A8A]" /> محصولات برتر بازار
@@ -1551,11 +1796,12 @@ export default function MarketIntelligencePage() {
                 <div className="space-y-3">
                   {filteredTopProducts.slice(0, 5).map((product, i) => (
                     <div key={i} className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition">
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-bold text-slate-400 w-6">{i + 1}</span>
-                        <span className="text-sm font-medium text-slate-700">{product.title}</span>
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <span className="text-sm font-bold text-slate-400 w-6 flex-shrink-0">{i + 1}</span>
+                        <span className="text-sm font-medium text-slate-700 truncate">{product.title}</span>
+                        <span className="text-xs text-slate-400 mr-2 flex-shrink-0">{product.industry}</span>
                       </div>
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-4 flex-shrink-0">
                         <span className="text-xs text-slate-500">{product.views || 0} بازدید</span>
                         {product.rating && product.rating > 0 && (
                           <div className="flex items-center gap-0.5">
@@ -1566,9 +1812,14 @@ export default function MarketIntelligencePage() {
                       </div>
                     </div>
                   ))}
+                  {filteredTopProducts.length > 5 && (
+                    <div className="text-center text-xs text-slate-400 pt-2">
+                      و {filteredTopProducts.length - 5} مورد دیگر
+                    </div>
+                  )}
                 </div>
               ) : (
-                <EmptyState message="هیچ محصولی یافت نشد" />
+                <EmptyState message="هیچ محصولی یافت نشد" subMessage="هنوز عرضه‌ای ثبت نشده است" />
               )}
             </div>
           </div>
@@ -1597,10 +1848,9 @@ export default function MarketIntelligencePage() {
           </div>
         )}
 
-        {/* Competitors Tab - با انتخاب محصول توسط کاربر */}
+        {/* Competitors Tab */}
         {activeTab === 'competitors' && (
           <div className="space-y-6">
-            {/* Dropdown انتخاب محصول */}
             <div className="rounded-2xl border border-slate-200 bg-white p-4 flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-2">
                 <Target size={18} className="text-[#1E3A8A]" />
@@ -1625,7 +1875,6 @@ export default function MarketIntelligencePage() {
               )}
             </div>
 
-            {/* خلاصه رقبا */}
             {competitorData && competitorData.summary && competitorData.summary.total_competitors > 0 && (
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div className="rounded-2xl border border-slate-200 bg-white p-4 text-center">
@@ -1653,7 +1902,6 @@ export default function MarketIntelligencePage() {
               </div>
             )}
 
-            {/* اطلاعات محصول هدف (فقط در حالت محصول-محور) */}
             {competitorData && competitorData.target_product && competitorData.filters?.analysis_type === 'product_centric' && (
               <div className="rounded-2xl border-2 border-[#1E3A8A] bg-gradient-to-r from-[#1E3A8A05] to-white p-5">
                 <div className="flex items-center gap-2 mb-2">
@@ -1689,7 +1937,6 @@ export default function MarketIntelligencePage() {
               </div>
             )}
 
-            {/* Gap Analysis (فقط در حالت محصول-محور) */}
             {competitorData && competitorData.gap_analysis && competitorData.gap_analysis.length > 0 && (
               <div className="rounded-2xl border border-slate-200 bg-white p-5">
                 <h3 className="text-sm font-extrabold text-slate-900 mb-3 flex items-center gap-2">
@@ -1713,7 +1960,6 @@ export default function MarketIntelligencePage() {
               </div>
             )}
 
-            {/* لیست رقبا */}
             {competitorLoading ? (
               <div className="text-center py-12">
                 <div className="w-12 h-12 mx-auto mb-3 rounded-full border-4 border-[#1E3A8A] border-t-transparent animate-spin" />
@@ -1745,7 +1991,6 @@ export default function MarketIntelligencePage() {
               />
             )}
 
-            {/* تحلیل LLM */}
             {competitorData && competitorData.llm_analysis && competitorData.llm_analysis.summary && (
               <div className="rounded-2xl border-2 border-[#D4A547] bg-gradient-to-r from-[#D4A54705] to-[#D4A54710] p-6">
                 <div className="flex items-start gap-4">
@@ -1874,7 +2119,6 @@ export default function MarketIntelligencePage() {
 
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-6 mt-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <p className="text-xs text-slate-400">مرکز هوشمند تحلیل بازار تحول — داده‌ها بر اساس آخرین فعالیت‌های پلتفرم به‌روزرسانی می‌شوند</p>

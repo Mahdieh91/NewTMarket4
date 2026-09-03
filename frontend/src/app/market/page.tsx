@@ -1,7 +1,8 @@
 // ============================================================
 // FILE: frontend/src/app/market/page.tsx
 // ============================================================
-// اصلاح‌شده: تشخیص بهتر نوع عرضه (محصول/خدمت) با لاگ برای دیباگ
+// نسخه نهایی و کامل - اصلاح فیلترهای صنعت، فناوری و استان با نرمال‌سازی
+// کاملاً سازگار با بقیه بخش‌ها - بدون تغییر در logic اصلی
 // ============================================================
 
 'use client';
@@ -48,6 +49,12 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
+// ==================== Helper: Normalize String ====================
+const normalizeString = (str?: string | null): string => {
+  if (!str) return '';
+  return str.trim().toLowerCase();
+};
+
 // ==================== Constants ====================
 
 const industries = [
@@ -62,6 +69,7 @@ const industries = [
   'انرژی',
   'فناوری اطلاعات',
   'محیط زیست',
+  'سایر', // پوشش داده‌های بدون صنعت
 ];
 
 const technologies = [
@@ -72,6 +80,7 @@ const technologies = [
   'رباتیک',
   'بلاکچین',
   'داده‌کاوی',
+  'سایر', // پوشش داده‌های بدون فناوری
 ];
 
 const trlLevels = [
@@ -112,6 +121,7 @@ const provinces = [
   'اهواز',
   'رشت',
   'کرمان',
+  'نامشخص', // پوشش داده‌های بدون استان
 ];
 
 // ==================== API ====================
@@ -127,8 +137,8 @@ const API_ORIGIN = API_URL.replace(/\/api\/?$/, '');
 type SupplyApi = {
   id: number | string;
   title: string;
-  supply_type?: 'product' | 'service' | string; // ← فیلد اصلی برای تشخیص نوع
-  category: string; // ← دسته‌بندی انتخابی (برای fallback)
+  supply_type?: 'product' | 'service' | string;
+  category: string;
   industry?: string | null;
   technology?: string | null;
   city?: string | null;
@@ -159,29 +169,21 @@ function resolveMediaUrl(url?: string | null): string {
   return `${API_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
-/**
- * تشخیص نوع عرضه از روی دسته‌بندی (fallback)
- * اگر دسته‌بندی شامل کلمه "خدمت" یا در لیست دسته‌بندی‌های خدماتی باشد
- */
 function inferCategoryFromCategoryField(category?: string): 'product' | 'service' {
   if (!category) return 'product';
   const cat = category.trim();
-  // لیست دسته‌بندی‌هایی که در فرم ثبت عرضه به عنوان خدمت شناخته می‌شوند
   const serviceCategoryKeywords = [
     'خدمات مشاوره',
     'خدمات فنی و مهندسی',
     'سرویس',
     'خدمت',
   ];
-  // اگر خود کلمه "خدمت" در آن باشد یا یکی از کلیدواژه‌ها باشد
   if (
     cat.includes('خدمت') ||
     serviceCategoryKeywords.some(kw => cat.includes(kw))
   ) {
     return 'service';
   }
-  // همچنین اگر دسته‌بندی از نوع "نرم‌افزار" باشد، معمولاً محصول محسوب می‌شود
-  // ولی اگر کاربر صراحتاً service انتخاب کرده باشد، supply_type اولویت دارد
   return 'product';
 }
 
@@ -227,37 +229,32 @@ function supplyToMarketplaceProduct(supply: SupplyApi): MarketplaceProduct {
   const priceInMillionToman = Number.isFinite(priceToman) ? priceToman / 1_000_000 : 0;
   const images = (supply.images || []).map((item) => resolveMediaUrl(item.image)).filter(Boolean);
 
-  // === تشخیص نوع عرضه ===
+  // تشخیص نوع عرضه
   let category: 'product' | 'service' = 'product';
-
-  // ۱. اولویت با supply_type (مقدار واقعی از سرور)
   if (supply.supply_type) {
     category = supply.supply_type === 'service' ? 'service' : 'product';
   } else {
-    // ۲. در صورت نبود supply_type، از دسته‌بندی推断 کن
     category = inferCategoryFromCategoryField(supply.category);
-    // لاگ برای دیباگ (در کنسول مرورگر)
-    console.warn(
-      `⚠️ عرضه "${supply.title}" فاقد supply_type است. بر اساس دسته‌بندی "${supply.category}" => ${category}`
-    );
+    // فقط در محیط توسعه لاگ شود
+    if (process.env.NODE_ENV === 'development') {
+      console.warn(
+        `⚠️ عرضه "${supply.title}" فاقد supply_type است. بر اساس دسته‌بندی "${supply.category}" => ${category}`
+      );
+    }
   }
 
-  // لاگ برای بررسی همه فیلدها (می‌توانید بعد از تست حذف کنید)
-  console.log('📦 عرضه دریافتی:', {
-    id: supply.id,
-    title: supply.title,
-    supply_type: supply.supply_type,
-    category: supply.category,
-    detected_category: category,
-  });
+  // نرمال‌سازی فیلدهای کلیدی برای فیلترها
+  const industry = supply.industry?.trim() || 'سایر';
+  const technology = supply.technology?.trim() || 'سایر';
+  const city = supply.city?.trim() || 'نامشخص';
 
   return {
     id: `supply-${supply.id}`,
     supplyId: Number(supply.id),
     title: supply.title,
     category,
-    industry: supply.industry || 'سایر',
-    technology: supply.technology || 'سایر',
+    industry,
+    technology,
     shortDescription: supply.description || 'عرضه ثبت‌شده در بازار تحول',
     trl: Number.isFinite(trlNumber) && trlNumber >= 1 && trlNumber <= 9 ? trlNumber : 1,
     mrl: 0,
@@ -268,7 +265,7 @@ function supplyToMarketplaceProduct(supply: SupplyApi): MarketplaceProduct {
     tags: [supply.category, supply.unit, supply.quantity ? `مقدار: ${supply.quantity}` : ''].filter(Boolean),
     seller: {
       name: supply.seller_name || 'فروشنده',
-      location: supply.city || 'نامشخص',
+      location: city,
       rating: 0,
       verified: supply.status === 'approved' || supply.status === 'published',
     },
@@ -404,7 +401,6 @@ export default function MarketplacePage() {
       const data = await res.json();
       const items = Array.isArray(data) ? data : data.results || [];
 
-      // استخراج supplyId از اشیاء nested
       const supplyIds = items
         .map((item: any) => {
           if (item.supply && typeof item.supply === 'object' && item.supply.id) {
@@ -730,11 +726,12 @@ export default function MarketplacePage() {
     selectedRisk !== 'all',
   ].filter(Boolean).length;
 
-  // ==================== Filtered Products ====================
+  // ==================== Filtered Products (اصلاح شده با نرمال‌سازی) ====================
 
   const filteredProducts = useMemo(() => {
     let result = [...realProducts];
 
+    // فیلتر جستجو
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter(
@@ -746,23 +743,65 @@ export default function MarketplacePage() {
       );
     }
 
-    if (selectedIndustry !== 'همه') result = result.filter((p) => p.industry === selectedIndustry);
-    if (selectedTechnology !== 'همه') result = result.filter((p) => p.technology === selectedTechnology);
-    if (selectedCategory !== 'all') result = result.filter((p) => p.category === selectedCategory);
-    if (selectedTRL > 0) result = result.filter((p) => p.trl >= selectedTRL);
-    if (selectedMRL > 0) result = result.filter((p) => p.mrl >= selectedMRL);
+    // فیلتر صنعت با نرمال‌سازی
+    if (selectedIndustry !== 'همه') {
+      const normalizedIndustry = normalizeString(selectedIndustry);
+      result = result.filter((p) => normalizeString(p.industry) === normalizedIndustry);
+    }
+
+    // فیلتر فناوری با نرمال‌سازی
+    if (selectedTechnology !== 'همه') {
+      const normalizedTech = normalizeString(selectedTechnology);
+      result = result.filter((p) => normalizeString(p.technology) === normalizedTech);
+    }
+
+    // فیلتر نوع (محصول/خدمت)
+    if (selectedCategory !== 'all') {
+      result = result.filter((p) => p.category === selectedCategory);
+    }
+
+    // فیلتر TRL
+    if (selectedTRL > 0) {
+      result = result.filter((p) => p.trl >= selectedTRL);
+    }
+
+    // فیلتر MRL
+    if (selectedMRL > 0) {
+      result = result.filter((p) => p.mrl >= selectedMRL);
+    }
+
+    // فیلتر قیمت
     result = result.filter((p) => {
       const effectivePrice = p.priceType === 'range' && p.priceRange ? p.priceRange.min : p.price;
       return effectivePrice <= maxPrice;
     });
-    if (selectedProvince !== 'همه') result = result.filter((p) => p.seller.location === selectedProvince);
-    if (selectedCertification !== 'all') {
-      if (selectedCertification === 'has') result = result.filter((p) => p.certifications.length > 0);
-      if (selectedCertification === 'none') result = result.filter((p) => p.certifications.length === 0);
-    }
-    if (minRating > 0) result = result.filter((p) => p.seller.rating >= minRating);
-    if (selectedRisk !== 'all') result = result.filter((p) => p.riskLevel === selectedRisk);
 
+    // فیلتر استان با نرمال‌سازی
+    if (selectedProvince !== 'همه') {
+      const normalizedProvince = normalizeString(selectedProvince);
+      result = result.filter((p) => normalizeString(p.seller.location) === normalizedProvince);
+    }
+
+    // فیلتر گواهینامه
+    if (selectedCertification !== 'all') {
+      if (selectedCertification === 'has') {
+        result = result.filter((p) => p.certifications.length > 0);
+      } else if (selectedCertification === 'none') {
+        result = result.filter((p) => p.certifications.length === 0);
+      }
+    }
+
+    // فیلتر امتیاز فروشنده
+    if (minRating > 0) {
+      result = result.filter((p) => p.seller.rating >= minRating);
+    }
+
+    // فیلتر ریسک
+    if (selectedRisk !== 'all') {
+      result = result.filter((p) => p.riskLevel === selectedRisk);
+    }
+
+    // مرتب‌سازی
     switch (sortBy) {
       case 'newest':
         result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -783,6 +822,8 @@ export default function MarketplacePage() {
           const priceB = b.priceType === 'range' && b.priceRange ? b.priceRange.min : b.price;
           return priceB - priceA;
         });
+        break;
+      default:
         break;
     }
 

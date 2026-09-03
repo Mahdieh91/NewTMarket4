@@ -21,11 +21,15 @@ class TRLAssessment(models.Model):
         null=True,
         blank=True
     )
-    answers = models.JSONField(default=dict)  # {question_id: {'value': 'yes', 'evidence': '...'}}
-    trl = models.PositiveSmallIntegerField()  # عدد 1 تا 9
+    answers = models.JSONField(default=dict)
+    trl = models.PositiveSmallIntegerField()
     status = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "ارزیابی TRL"
+        verbose_name_plural = "ارزیابی‌های TRL"
 
     def __str__(self):
         supply_info = f"Supply #{self.supply_id}" if self.supply else "بدون عرضه"

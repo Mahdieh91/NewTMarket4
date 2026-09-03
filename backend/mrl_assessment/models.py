@@ -21,11 +21,15 @@ class MRLAssessment(models.Model):
         null=True,
         blank=True
     )
-    answers = models.JSONField(default=dict)  # {question_id: {'value': 'yes', 'evidence': '...'}}
-    mrl = models.PositiveSmallIntegerField()  # عدد 1 تا 10
+    answers = models.JSONField(default=dict)
+    mrl = models.PositiveSmallIntegerField()
     status = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "ارزیابی MRL"
+        verbose_name_plural = "ارزیابی‌های MRL"
 
     def __str__(self):
         supply_info = f"Supply #{self.supply_id}" if self.supply else "بدون عرضه"

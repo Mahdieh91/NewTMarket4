@@ -137,7 +137,7 @@ export default function AIAssistant() {
         ) : (
           <div className="relative w-8 h-8">
             <Image
-              src="/logo-icon.png"
+              src="/AIicon.png"
               alt="دستیار بازار"
               width={32}
               height={32}
