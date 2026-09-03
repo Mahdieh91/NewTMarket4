@@ -1,10 +1,11 @@
 # ============================================================
-# settings.py (فایل کامل)
+# settings.py (فایل کامل با اصلاحات CORS)
 # ============================================================
 import os
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
+from corsheaders.defaults import default_headers  # 🔥 اضافه شد
 
 load_dotenv()
 
@@ -17,7 +18,7 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 # اپ‌های نصب‌شده
 # ============================================================
 INSTALLED_APPS = [
-    'daphne',  # 🔴 اضافه شد (باید اولین اپ باشد)
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -43,8 +44,7 @@ INSTALLED_APPS = [
     'django_celery_results',
     'storages',
     'whitenoise',
-    'channels',  # 🔴 اضافه شد (برای WebSocket)
-    
+    'channels',
     # اپ‌های پروژه (۲۰ ماژول)
     'users', 'industries', 'products', 'needs', 'evaluations',
     'readiness', 'matching', 'search', 'negotiations', 'proposals',
@@ -147,10 +147,21 @@ SIMPLE_JWT = {
 }
 
 # ============================================================
-# تنظیمات CORS
+# ✅ تنظیمات CORS (اصلاح‌شده نهایی) 🔥
 # ============================================================
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = False
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
 CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_HEADERS = (
+    *default_headers,
+    'cache-control',   # 🔥 اضافه شده برای جلوگیری از خطای preflight
+)
 
 CORS_ALLOW_METHODS = [
     'DELETE',
@@ -159,18 +170,6 @@ CORS_ALLOW_METHODS = [
     'PATCH',
     'POST',
     'PUT',
-]
-
-CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
 ]
 
 # ============================================================
@@ -184,7 +183,7 @@ CSRF_TRUSTED_ORIGINS = [
 # ============================================================
 # تنظیمات کوکی
 # ============================================================
-SESSION_COOKIE_HTTPONLY = False   # اجازه دسترسی به کوکی از جاوااسکریپت
+SESSION_COOKIE_HTTPONLY = False
 SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SAMESITE = 'Lax'
@@ -229,7 +228,6 @@ CKEDITOR_CONFIGS = {
 CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
 CRISPY_TEMPLATE_PACK = "bootstrap5"
 
-
 # ============================================================
 # تنظیمات Celery
 # ============================================================
@@ -247,22 +245,10 @@ CELERY_TASK_ALWAYS_EAGER = os.getenv('CELERY_ALWAYS_EAGER', 'False') == 'True'
 # ============================================================
 CACHES = {
     'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',  # برای توسعه
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'captcha-cache',
     }
 }
-
-# اگر Redis در دسترس است، می‌توانید از تنظیمات زیر استفاده کنید:
-# CACHES = {
-#     'default': {
-#         'BACKEND': 'django_redis.cache.RedisCache',
-#         'LOCATION': CELERY_BROKER_URL,
-#         'OPTIONS': {
-#             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-#         }
-#     }
-# }
-
 
 # ============================================================
 # تنظیمات Session (برای کپچا)
@@ -276,14 +262,12 @@ SESSION_COOKIE_SECURE = False  # در تولید True کنید
 # مدت زمان اعتبار کپچا (ثانیه)
 CAPTCHA_TIMEOUT = 120
 
-
 # ============================================================
 # ابزارهای جانبی
 # ============================================================
 INTERNAL_IPS = ['127.0.0.1', 'localhost']
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
-
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.backends.console.EmailBackend')
 
 # ============================================================
 # لاگ‌گیری
@@ -314,7 +298,6 @@ LOGGING = {
     },
 }
 
-
 # ============================================================
 # تنظیمات امنیتی تولید
 # ============================================================
@@ -325,7 +308,6 @@ if not DEBUG:
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-
 
 # ============================================================
 # تنظیمات OpenRouter (برای LLM)

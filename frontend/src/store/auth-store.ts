@@ -1,6 +1,6 @@
 // ============================================================
 // src/store/auth-store.ts
-// نسخه نهایی - ارسال captcha_id به بک‌اند
+// نسخه نهایی - ارسال captcha_id به بک‌اند (اختیاری)
 // ============================================================
 
 import { create } from 'zustand';
@@ -226,7 +226,6 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           const body: any = { username, password, captcha_answer };
-          // ===== ارسال captcha_id به بک‌اند =====
           if (captcha_id) {
             body.captcha_id = captcha_id;
           }
