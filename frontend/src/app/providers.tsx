@@ -3,13 +3,20 @@
 
 import { ReactNode, useMemo } from 'react';
 
-// Solana Wallet Adapters
-import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
+import {
+  ConnectionProvider,
+  WalletProvider,
+} from '@solana/wallet-adapter-react';
+
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import { PhantomWalletAdapter, SolflareWalletAdapter } from '@solana/wallet-adapter-wallets';
+
+import {
+  PhantomWalletAdapter,
+  SolflareWalletAdapter,
+} from '@solana/wallet-adapter-wallets';
+
 import { clusterApiUrl } from '@solana/web3.js';
 
-// استایل مودال (اجباری)
 import '@solana/wallet-adapter-react-ui/styles.css';
 
 interface ProvidersProps {
@@ -18,7 +25,9 @@ interface ProvidersProps {
 
 export function Providers({ children }: ProvidersProps) {
   const endpoint = useMemo(
-    () => process.env.NEXT_PUBLIC_SOLANA_DEVNET_RPC_URL || clusterApiUrl('devnet'),
+    () =>
+      process.env.NEXT_PUBLIC_SOLANA_DEVNET_RPC_URL ||
+      clusterApiUrl('devnet'),
     []
   );
 
@@ -26,14 +35,13 @@ export function Providers({ children }: ProvidersProps) {
     () => [
       new PhantomWalletAdapter(),
       new SolflareWalletAdapter(),
-      // در صورت تمایل می‌توانید سایر آداپتورها را نیز اضافه کنید
     ],
     []
   );
 
   return (
     <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect>
+      <WalletProvider wallets={wallets} autoConnect={false}>
         <WalletModalProvider>
           {children}
         </WalletModalProvider>
