@@ -1046,7 +1046,11 @@ export default function ProfilePage() {
               <nav className="bg-white rounded-2xl shadow-sm border border-slate-100 p-3 transition-all hover:shadow-md">
                 <div className="flex items-center gap-2 px-3 py-2 mb-2 border-b border-slate-100">
                   <LayoutDashboard className="w-5 h-5 text-indigo-500" />
-                  <span className="font-bold text-slate-700 text-sm">داشبورد</span>
+                 <Link href="/dashboard">
+  <span className="font-bold text-slate-700 text-sm cursor-pointer">
+    داشبورد
+  </span>
+</Link>
                 </div>
 
                 <div className="space-y-1">
