@@ -1,5 +1,6 @@
-# ============================================================
 # matching/services.py
+# ============================================================
+# نسخه به‌روز شده با دیکشنری صنایع جامع و اولویت عنوان
 # ============================================================
 
 from __future__ import annotations
@@ -13,9 +14,14 @@ from collections import Counter
 
 from django.conf import settings
 
+# ===== جایگزینی dictionary با industry_concepts =====
 from .dictionary import (
-    get_petrochemical_concepts,
-    normalize_petrochemical_text,
+    get_industry_concepts,
+    normalize_industry_text,
+    build_weighted_text,
+    extract_keywords,
+    calculate_combined_risk,
+    get_risk_signals,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,10 +31,11 @@ logger = logging.getLogger(__name__)
 # Configuration
 # ============================================================
 
-MATCH_WEIGHTS = {
-    "industry": 0.25,
-    "concept": 0.25,
-    "text": 0.20,
+# وزن‌های پایه (با وزن‌دهی پویا تنظیم می‌شوند)
+DEFAULT_WEIGHTS = {
+    "industry": 0.20,
+    "concept": 0.20,
+    "text": 0.20,      # این شامل عنوان نیز می‌شود
     "budget": 0.15,
     "trl": 0.10,
     "availability": 0.05,
@@ -52,8 +59,11 @@ def safe_text(value: Any) -> str:
         return ""
     return str(value).strip()
 
-def normalize(value: Any) -> str:
-    return normalize_petrochemical_text(safe_text(value))
+
+def normalize(value: str) -> str:
+    """نرمال‌سازی متن با استفاده از تابع جدید industry_concepts"""
+    return normalize_industry_text(safe_text(value))
+
 
 def clamp(value: float, minimum: float = 0.0, maximum: float = 100.0) -> float:
     try:
@@ -61,6 +71,7 @@ def clamp(value: float, minimum: float = 0.0, maximum: float = 100.0) -> float:
     except (TypeError, ValueError):
         return minimum
     return max(minimum, min(maximum, value))
+
 
 def decimal_value(value: Any) -> Optional[Decimal]:
     if value is None:
@@ -72,6 +83,7 @@ def decimal_value(value: Any) -> Optional[Decimal]:
     except (InvalidOperation, ValueError, TypeError):
         return None
 
+
 def safe_int(value: Any) -> Optional[int]:
     try:
         if value is None:
@@ -80,6 +92,7 @@ def safe_int(value: Any) -> Optional[int]:
     except (TypeError, ValueError):
         return None
 
+
 def get_industry_name(obj) -> str:
     industry = getattr(obj, "industry", None)
     if industry is None:
@@ -87,6 +100,7 @@ def get_industry_name(obj) -> str:
     if hasattr(industry, "name"):
         return safe_text(industry.name)
     return safe_text(industry)
+
 
 def get_description(obj) -> str:
     description = getattr(obj, "description", None)
@@ -101,8 +115,10 @@ def get_description(obj) -> str:
     ]
     return " ".join(safe_text(value) for value in fields if safe_text(value))
 
+
 def get_category(obj) -> str:
     return safe_text(getattr(obj, "category", ""))
+
 
 def get_trl(obj) -> Optional[int]:
     value = getattr(obj, "trl", None)
@@ -172,7 +188,9 @@ class OpenRouterLLM:
             logger.exception("OpenRouter request failed: %s", exc)
             return None
 
+
 _llm_client = None
+
 
 def get_llm_client():
     global _llm_client
@@ -182,12 +200,15 @@ def get_llm_client():
 
 
 # ============================================================
-# Build Texts
+# Build Texts با اولویت عنوان
 # ============================================================
 
 def build_need_text(need) -> str:
+    """
+    ساخت متن نیاز با اولویت عنوان (عنوان ۳ بار تکرار می‌شود)
+    """
+    title = safe_text(getattr(need, "title", ""))
     fields = [
-        getattr(need, "title", ""),
         getattr(need, "description", ""),
         getattr(need, "current_status", ""),
         getattr(need, "expected_outcome", ""),
@@ -198,11 +219,17 @@ def build_need_text(need) -> str:
     industry = get_industry_name(need)
     if industry:
         fields.append(industry)
-    return " ".join(safe_text(value) for value in fields if safe_text(value))
+
+    full_text = " ".join(safe_text(value) for value in fields if safe_text(value))
+    return build_weighted_text(title, full_text, repeat_title=3)
+
 
 def build_supply_text(product) -> str:
+    """
+    ساخت متن محصول با اولویت عنوان (عنوان ۳ بار تکرار می‌شود)
+    """
+    title = safe_text(getattr(product, "title", ""))
     fields = [
-        getattr(product, "title", ""),
         get_category(product),
         get_industry_name(product),
         getattr(product, "technology", ""),
@@ -214,7 +241,8 @@ def build_supply_text(product) -> str:
         getattr(product, "collaboration_terms", ""),
         getattr(product, "ip_status", ""),
     ]
-    return " ".join(safe_text(value) for value in fields if safe_text(value))
+    full_text = " ".join(safe_text(value) for value in fields if safe_text(value))
+    return build_weighted_text(title, full_text, repeat_title=3)
 
 
 # ============================================================
@@ -222,30 +250,47 @@ def build_supply_text(product) -> str:
 # ============================================================
 
 def calculate_industry_score(need, product) -> float:
+    """
+    محاسبه امتیاز تطابق صنعت
+    """
     need_industry = normalize(get_industry_name(need))
     product_industry = normalize(get_industry_name(product))
+
     if not need_industry or not product_industry:
         return 50.0
+
     if need_industry == product_industry:
         return 100.0
+
     need_words = set(need_industry.split())
     product_words = set(product_industry.split())
+
     if need_words.issubset(product_words) or product_words.issubset(need_words):
         return 80.0
+
     overlap = need_words.intersection(product_words)
     if overlap:
         return 60.0
+
     return 30.0
 
+
 def calculate_budget_score(need, product) -> float:
+    """
+    محاسبه امتیاز تطابق بودجه
+    """
     budget = decimal_value(getattr(need, "budget", None))
     price = decimal_value(getattr(product, "price", None))
+
     if budget is None or price is None:
         return 50.0
+
     if budget <= 0:
         return 50.0
+
     if price <= budget:
         return 100.0
+
     excess = float((price - budget) / budget)
     if excess <= 0.10:
         return 85.0
@@ -257,10 +302,15 @@ def calculate_budget_score(need, product) -> float:
         return 20.0
     return 5.0
 
+
 def calculate_trl_score(product) -> float:
+    """
+    محاسبه امتیاز TRL
+    """
     trl = get_trl(product)
     if trl is None:
         return 50.0
+
     if trl >= 9:
         return 100.0
     if trl >= 8:
@@ -277,34 +327,55 @@ def calculate_trl_score(product) -> float:
         return 20.0
     return 10.0
 
+
 def calculate_availability_score(product) -> float:
+    """
+    محاسبه امتیاز وضعیت در دسترس بودن
+    """
     status = normalize(getattr(product, "status", ""))
+
     if not status:
         return 50.0
-    available_terms = ["available", "published", "approved", "active", "موجود", "فعال", "منتشر", "تایید شده", "تأیید شده", "آماده"]
+
+    available_terms = [
+        "available", "published", "approved", "active",
+        "موجود", "فعال", "منتشر", "تایید شده", "تأیید شده", "آماده"
+    ]
     for term in available_terms:
         if normalize(term) in status:
             return 100.0
-    unavailable_terms = ["unavailable", "inactive", "draft", "rejected", "suspended", "ناموجود", "غیرفعال", "پیش نویس", "رد شده", "تعلیق"]
+
+    unavailable_terms = [
+        "unavailable", "inactive", "draft", "rejected", "suspended",
+        "ناموجود", "غیرفعال", "پیش نویس", "رد شده", "تعلیق"
+    ]
     for term in unavailable_terms:
         if normalize(term) in status:
             return 10.0
+
     return 50.0
 
+
 def calculate_text_score(need_text: str, product_text: str) -> float:
+    """
+    محاسبه امتیاز تشابه متنی با وزن‌دهی به کلمات خاص
+    """
     need_words = normalize(need_text).split()
     product_words = normalize(product_text).split()
+
     if not need_words or not product_words:
         return 0.0
 
-    # لیست سیاه کلمات عمومی و بی‌معنی
+    # لیست سیاه کلمات عمومی
     stop_words = {
         "و", "با", "از", "به", "برای", "در", "را", "این", "آن", "یک", "دو",
         "ها", "های", "شده", "می", "است", "که", "نه", "بر", "هم", "چون",
         "بسیار", "خیلی", "بیشتر", "کمتر", "نسبت", "مثل", "مانند", "طبق",
         "جهت", "بابت", "بعد", "قبل", "حین", "زمان", "حال", "چه", "هر",
         "سامانه", "سیستم", "راهکار", "محصول", "خدمات", "نیاز", "کاربر",
+        "هست", "هستند", "بود", "بودند", "شود", "شوند", "گشت", "می‌شود",
     }
+
     need_words = [w for w in need_words if len(w) > 2 and w not in stop_words]
     product_words = [w for w in product_words if len(w) > 2 and w not in stop_words]
 
@@ -320,10 +391,13 @@ def calculate_text_score(need_text: str, product_text: str) -> float:
 
     # وزن‌دهی بر اساس طول کلمه (کلمات بلندتر خاص‌ترند)
     def word_weight(word: str) -> float:
-        return len(word) ** 1.5  # توان ۱.۵ برای تاکید روی کلمات بلند
+        return len(word) ** 1.5
 
     total_need_weight = sum(need_counter[w] * word_weight(w) for w in need_counter)
     total_product_weight = sum(product_counter[w] * word_weight(w) for w in product_counter)
+
+    if total_need_weight == 0 or total_product_weight == 0:
+        return 40.0
 
     common_weight = 0.0
     for word in common_words:
@@ -334,14 +408,29 @@ def calculate_text_score(need_text: str, product_text: str) -> float:
     score = min(100, common_weight * 100)
     return clamp(score)
 
-def calculate_concept_score(need_text: str, product_text: str) -> float:
-    need_concepts = set(get_petrochemical_concepts(need_text))
-    product_concepts = set(get_petrochemical_concepts(product_text))
+
+def calculate_concept_score(need_text: str, product_text: str, need_industry: str = None) -> float:
+    """
+    محاسبه امتیاز تطابق مفاهیم با استفاده از دیکشنری جامع صنایع.
+    اگر need_industry مشخص باشد، فقط مفاهیم آن صنعت در نظر گرفته می‌شود.
+    """
+    # استخراج مفاهیم از نیاز و محصول با صنعت مشخص
+    need_concepts = set(get_industry_concepts(need_text, need_industry))
+    product_concepts = set(get_industry_concepts(product_text, need_industry))
+
+    # اگر هیچ مفهومی یافت نشد، از دیکشنری کلی (همه صنایع) استفاده کن
+    if not need_concepts:
+        need_concepts = set(get_industry_concepts(need_text, None))
+    if not product_concepts:
+        product_concepts = set(get_industry_concepts(product_text, None))
+
     if not need_concepts or not product_concepts:
         return 40.0
+
     common = need_concepts.intersection(product_concepts)
     if not common:
         return 10.0
+
     ratio = len(common) / max(len(need_concepts), 1)
     return clamp(ratio * 100)
 
@@ -357,7 +446,7 @@ Analyze compatibility between a BUYER NEED and a PRODUCT/SUPPLY.
 Your task is to determine how well the product/supply meets the buyer's need.
 Return a JSON with:
 - "score": 0-100 (higher = better match)
-- "reason": a short, specific Persian explanation (max 100 characters) that clearly explains WHY this product is suitable or not suitable for THIS NEED. Mention specific terms from both the need and the product.
+- "reason": a short, specific Persian explanation (max 150 characters) that clearly explains WHY this product is suitable or not suitable for THIS NEED. Mention specific terms from both the need and the product.
 
 Example reasons:
 - "نیاز به سیستم مدیریت انرژی با راهکار هوشمند پتروشیمی همخوانی دارد و فناوری آن با نیاز مطابقت دارد."
@@ -374,22 +463,27 @@ Product/Supply:
 Return JSON only.
 """
 
+
 def extract_json(response: str) -> Optional[dict]:
     if not response:
         return None
+
     text = response.strip()
     text = re.sub(r"```(?:json)?", "", text, flags=re.IGNORECASE)
     text = text.replace("```", "").strip()
+
     try:
         data = json.loads(text)
         if isinstance(data, dict):
             return data
     except json.JSONDecodeError:
         pass
+
     start = text.find("{")
     end = text.rfind("}")
     if start == -1 or end == -1:
         return None
+
     candidate = text[start:end+1]
     try:
         data = json.loads(candidate)
@@ -397,6 +491,7 @@ def extract_json(response: str) -> Optional[dict]:
             return data
     except json.JSONDecodeError:
         pass
+
     candidate = re.sub(r",\s*([}\]])", r"\1", candidate)
     try:
         data = json.loads(candidate)
@@ -404,23 +499,29 @@ def extract_json(response: str) -> Optional[dict]:
             return data
     except json.JSONDecodeError:
         return None
+
     return None
+
 
 def llm_analyze_match(need_text: str, product_text: str) -> Optional[dict]:
     client = get_llm_client()
     if not client.is_available():
         logger.warning("LLM unavailable.")
         return None
+
     prompt = build_llm_prompt(need_text, product_text)
-    logger.info(f"Sending matching request to OpenRouter.")
+    logger.info("Sending matching request to OpenRouter.")
     response = client.generate(prompt)
+
     if not response:
         logger.warning("LLM returned no response.")
         return None
+
     data = extract_json(response)
     if not data:
         logger.warning("Could not parse LLM JSON.")
         return None
+
     return {
         "score": clamp(data.get("score", 50)),
         "reason": safe_text(data.get("reason", "دلیل خاصی از سمت مدل ارائه نشد.")),
@@ -431,27 +532,7 @@ def llm_analyze_match(need_text: str, product_text: str) -> Optional[dict]:
 # Generate Specific Reason (Rule-Based + هوشمند)
 # ============================================================
 
-def extract_keywords(text: str, top_n: int = 5) -> list:
-    """استخراج کلمات کلیدی با وزن (تکرار و طول کلمه)"""
-    words = normalize(text).split()
-    stopwords = {
-        "و", "با", "از", "به", "برای", "در", "را", "این", "آن", "یک", "دو",
-        "ها", "های", "شده", "می", "است", "که", "نه", "بر", "هم", "چون",
-        "بسیار", "خیلی", "بیشتر", "کمتر", "نسبت", "مثل", "مانند", "طبق",
-        "جهت", "بابت", "بعد", "قبل", "حین", "زمان", "حال", "چه", "هر",
-        "سامانه", "سیستم", "راهکار", "محصول", "خدمات", "نیاز", "کاربر",
-    }
-    filtered = [w for w in words if len(w) > 2 and w not in stopwords]
-    if not filtered:
-        return []
-    # وزن‌دهی با طول کلمه
-    weighted = Counter()
-    for w in filtered:
-        weighted[w] += len(w)  # کلمات بلندتر وزن بیشتری می‌گیرن
-    most_common = weighted.most_common(top_n)
-    return [word for word, _ in most_common]
-
-def generate_specific_reason(need, product, scores: dict) -> str:
+def generate_specific_reason(need, product, scores: dict, weights: dict = None) -> str:
     """
     تولید دلیل اختصاصی و هوشمند با استفاده از کلمات کلیدی وزنی و امتیازها.
     فقط در صورت وجود اطلاعات معتبر به موارد اشاره می‌کند.
@@ -468,7 +549,14 @@ def generate_specific_reason(need, product, scores: dict) -> str:
 
     parts = []
 
-    # ۱. صنعت (فقط اگر مقدار معتبر داشته باشه)
+    # ۱. عنوان (بیشترین اهمیت)
+    if need_title and product_title:
+        if any(word in product_title for word in need_keywords[:2]):
+            parts.append(f"عنوان محصول با نیاز همخوانی دارد: «{product_title}»")
+        else:
+            parts.append(f"عنوان نیاز «{need_title}» با عنوان محصول «{product_title}» تطابق دارد.")
+
+    # ۲. صنعت
     industry_score = scores.get("industry", 0)
     need_industry = get_industry_name(need)
     product_industry = get_industry_name(product)
@@ -480,7 +568,7 @@ def generate_specific_reason(need, product, scores: dict) -> str:
         elif industry_score < 40:
             parts.append(f"صنعت نیاز ({need_industry}) با صنعت محصول ({product_industry}) تفاوت دارد")
 
-    # ۲. بودجه (فقط اگر هر دو مقدار معتبر داشته باشن)
+    # ۳. بودجه
     budget_score = scores.get("budget", 0)
     budget = decimal_value(getattr(need, "budget", None))
     price = decimal_value(getattr(product, "price", None))
@@ -494,7 +582,7 @@ def generate_specific_reason(need, product, scores: dict) -> str:
         elif budget_score < 40:
             parts.append("قیمت بسیار بالاتر از بودجه است")
 
-    # ۳. TRL (فقط اگر محصول TRL داشته باشه)
+    # ۴. TRL
     trl_score = scores.get("trl", 0)
     product_trl = get_trl(product)
     if product_trl is not None:
@@ -505,13 +593,20 @@ def generate_specific_reason(need, product, scores: dict) -> str:
         elif trl_score < 40:
             parts.append(f"سطح آمادگی فناوری پایین (TRL {product_trl})")
 
-    # ۴. کلمات کلیدی مشترک (فقط اگر کلمات خاص و معنادار باشن)
+    # ۵. کلمات کلیدی مشترک
     if common_keywords:
-        # فیلتر کلمات بسیار کوتاه (کمتر از ۳ حرف) که قبلاً حذف شدن
         top_words = common_keywords[:3]
         parts.append(f"کلمات کلیدی مشترک: {', '.join(top_words)}")
 
-    # ۵. اگر هیچ بخشی پر نشد، از امتیاز متنی استفاده کن
+    # ۶. مفاهیم صنعتی مشترک
+    need_concepts = set(get_industry_concepts(need_title + " " + need_desc, need_industry))
+    product_concepts = set(get_industry_concepts(product_title + " " + product_desc, need_industry))
+    common_concepts = need_concepts.intersection(product_concepts)
+    if common_concepts:
+        top_concepts = list(common_concepts)[:2]
+        parts.append(f"مفاهیم صنعتی مشترک: {', '.join(top_concepts)}")
+
+    # ۷. اگر هیچ بخشی پر نشد، از امتیاز متنی استفاده کن
     if not parts:
         text_score = scores.get("text", 0)
         if text_score >= 70:
@@ -521,7 +616,45 @@ def generate_specific_reason(need, product, scores: dict) -> str:
         else:
             parts.append("تطابق محتوایی کمی بین نیاز و محصول وجود دارد")
 
-    return " - ".join(parts[:4])
+    return " - ".join(parts[:5])  # حداکثر ۵ بخش
+
+
+# ============================================================
+# Dynamic Weights
+# ============================================================
+
+def get_dynamic_weights(need) -> dict:
+    """
+    تولید وزن‌های پویا بر اساس ویژگی‌های نیاز.
+    """
+    weights = DEFAULT_WEIGHTS.copy()
+
+    # اگر بودجه مشخص است، وزن budget را افزایش بده
+    budget = decimal_value(getattr(need, "budget", None))
+    if budget is not None and budget > 0:
+        weights["budget"] += 0.10
+        weights["text"] -= 0.05
+        weights["concept"] -= 0.05
+
+    # اگر صنعت خیلی خاص است، وزن industry را افزایش بده
+    industry = get_industry_name(need)
+    if industry and len(industry) > 3:
+        weights["industry"] += 0.05
+        weights["text"] -= 0.025
+        weights["concept"] -= 0.025
+
+    # اگر نیاز فوری است، وزن availability را افزایش بده
+    timeline = safe_text(getattr(need, "timeline", ""))
+    if "فوری" in timeline or "کمتر از" in timeline:
+        weights["availability"] += 0.05
+        weights["trl"] -= 0.025
+        weights["budget"] -= 0.025
+
+    # نرمال‌سازی مجدد
+    total = sum(weights.values())
+    if total > 0:
+        return {k: v / total for k, v in weights.items()}
+    return weights
 
 
 # ============================================================
@@ -529,15 +662,26 @@ def generate_specific_reason(need, product, scores: dict) -> str:
 # ============================================================
 
 def calculate_match(need, product) -> dict:
+    """
+    محاسبه امتیاز تطبیق بین نیاز و محصول با استفاده از
+    دیکشنری صنایع جامع و اولویت عنوان.
+    """
     need_text = build_need_text(need)
     product_text = build_supply_text(product)
 
+    # وزن‌های پویا
+    weights = get_dynamic_weights(need)
+
+    # محاسبه امتیازات
     industry_score = calculate_industry_score(need, product)
     budget_score = calculate_budget_score(need, product)
     trl_score = calculate_trl_score(product)
     availability_score = calculate_availability_score(product)
     text_score = calculate_text_score(need_text, product_text)
-    concept_score = calculate_concept_score(need_text, product_text)
+
+    # مفهوم‌ها با صنعت نیاز
+    need_industry = get_industry_name(need)
+    concept_score = calculate_concept_score(need_text, product_text, need_industry)
 
     rule_scores = {
         "industry": industry_score,
@@ -548,23 +692,15 @@ def calculate_match(need, product) -> dict:
         "availability": availability_score,
     }
 
+    # محاسبه امتیاز وزنی
     weighted_score = 0.0
-    for name, weight in MATCH_WEIGHTS.items():
-        weighted_score += rule_scores.get(name, 50.0) * weight
+    for name, weight in weights.items():
+        if name in rule_scores:
+            weighted_score += rule_scores[name] * weight
 
-    if weighted_score < 40:
-        return {
-            "match_percentage": round(clamp(weighted_score), 2),
-            "match_reason": "نیاز و عرضه تطابق قابل توجهی ندارند. پیشنهاد می‌شود نیاز یا جستجو را اصلاح کنید.",
-            "risk_level": "high",
-            "risk_reasons": ["تطابق کلی بسیار پایین است"],
-            "recommended_actions": [],
-            "llm_used": False,
-            "scores": rule_scores,
-        }
-
+    # آستانه استفاده از LLM را به ۲۰ کاهش می‌دهیم
     llm_data = None
-    if len(need_text) >= 20 and len(product_text) >= 20:
+    if len(need_text) >= 20 and len(product_text) >= 20 and weighted_score >= 20:
         try:
             llm_data = llm_analyze_match(need_text, product_text)
         except Exception:
@@ -578,11 +714,13 @@ def calculate_match(need, product) -> dict:
         llm_used = True
     else:
         final_score = round(clamp(weighted_score), 2)
-        match_reason = generate_specific_reason(need, product, rule_scores)
+        match_reason = generate_specific_reason(need, product, rule_scores, weights)
         llm_used = False
 
+    # تشخیص ریسک
     risk_level = "low" if final_score >= 80 else "medium" if final_score >= 55 else "high"
     risk_reasons = []
+
     if final_score < 55:
         risk_reasons.append("تطابق کلی پایین است")
     if rule_scores.get("industry", 0) < 40:
@@ -595,14 +733,12 @@ def calculate_match(need, product) -> dict:
     if not risk_reasons and final_score >= 80:
         risk_reasons.append("ریسک قابل توجهی شناسایی نشد")
 
-    recommended_actions = []  # غیرفعال
-
     return {
         "match_percentage": final_score,
         "match_reason": match_reason,
         "risk_level": risk_level,
         "risk_reasons": risk_reasons,
-        "recommended_actions": recommended_actions,
+        "recommended_actions": [],
         "llm_used": llm_used,
         "scores": rule_scores,
         "llm_confidence": llm_data.get("score") if llm_data else None,
@@ -619,7 +755,10 @@ def match_need_with_supplies(
     limit: int = 20,
     petrochemical_only: bool = False,
 ) -> list[dict]:
-
+    """
+    تطبیق یک نیاز با لیستی از عرضه‌ها.
+    petrochemical_only: برای سازگاری با نسخه قبلی نگه داشته شده است.
+    """
     results = []
 
     try:

@@ -1,7 +1,7 @@
 // ============================================================
 // FILE: frontend/src/app/compare/page.tsx
 // ============================================================
-// اصلاح‌شده: حذف کادر فوتر
+// اصلاح‌شده: مدیریت پایدار localStorage + هماهنگی با کلید 'compareList'
 // ============================================================
 
 'use client';
@@ -255,9 +255,10 @@ export default function ComparePage() {
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 
   // ==========================================================
-  // Mount + localStorage
+  // مدیریت localStorage با دو useEffect مجزا و پایدار
   // ==========================================================
 
+  // ۱) خواندن از localStorage هنگام mount
   useEffect(() => {
     setMounted(true);
 
@@ -278,6 +279,7 @@ export default function ComparePage() {
         .filter((id) => Number.isInteger(id) && id > 0)
         .slice(0, MAX_COMPARE_ITEMS);
       setCompareIds(ids);
+      // اگر تعداد آیتم‌ها تغییر کرده، دوباره ذخیره کن
       if (ids.length !== parsed.length) {
         localStorage.setItem(COMPARE_STORAGE_KEY, JSON.stringify(ids));
       }
@@ -288,8 +290,18 @@ export default function ComparePage() {
     }
   }, []);
 
+  // ۲) ذخیره‌سازی در localStorage هر بار که compareIds تغییر کند (فقط پس از mount)
+  useEffect(() => {
+    if (!mounted) return;
+    try {
+      localStorage.setItem(COMPARE_STORAGE_KEY, JSON.stringify(compareIds));
+    } catch (storageError) {
+      console.error('❌ خطا در ذخیره compareList:', storageError);
+    }
+  }, [compareIds, mounted]);
+
   // ==========================================================
-  // Load Supplies از API
+  // بارگذاری عرضه‌ها از API
   // ==========================================================
 
   useEffect(() => {
@@ -310,6 +322,10 @@ export default function ComparePage() {
       try {
         setIsLoading(true);
         setError(null);
+
+        // پیشنهاد: اگر API از فیلتر با ids پشتیبانی می‌کند، از آن استفاده کنید
+        // const idsParam = compareIds.join(',');
+        // const response = await fetch(buildApiUrl(`/products/supplies/?ids=${idsParam}`), ...);
 
         const response = await fetch(buildApiUrl('/products/supplies/'), {
           method: 'GET',
@@ -401,24 +417,13 @@ export default function ComparePage() {
 
   const removeItem = useCallback(
     (productId: number) => {
-      const newIds = compareIds.filter((id) => id !== productId);
-      setCompareIds(newIds);
-      try {
-        localStorage.setItem(COMPARE_STORAGE_KEY, JSON.stringify(newIds));
-      } catch (storageError) {
-        console.error('❌ خطا در ذخیره compareList:', storageError);
-      }
+      setCompareIds((prev) => prev.filter((id) => id !== productId));
     },
-    [compareIds]
+    []
   );
 
   const clearAll = useCallback(() => {
     setCompareIds([]);
-    try {
-      localStorage.removeItem(COMPARE_STORAGE_KEY);
-    } catch (storageError) {
-      console.error('❌ خطا در حذف compareList:', storageError);
-    }
   }, []);
 
   const toggleRow = (key: string) => {
