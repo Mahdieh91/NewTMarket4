@@ -1,11 +1,10 @@
 // src/app/layout.tsx
-
 import type { Metadata } from 'next';
 import { Vazirmatn } from 'next/font/google';
 import './globals.css';
 import Navbar from '@/components/Navbar';
 import AIAssistant from '@/components/AIAssistant/AIAssistant';
-import { Providers } from './providers'; // ← اضافه شد
+import { Providers } from './providers'; // ← همان فایل به‌روزشده
 
 const vazir = Vazirmatn({
   subsets: ['arabic'],
